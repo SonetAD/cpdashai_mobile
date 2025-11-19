@@ -885,21 +885,21 @@ export const api = createApi({
           // Parse JSON fields if they're strings
           const profile = response.data.myCandidateProfile;
           if (typeof profile.education === 'string') {
-            profile.education = JSON.parse(profile.education);
+            profile.education = profile.education.trim() ? JSON.parse(profile.education) : [];
             console.log('Parsed education data:', profile.education);
           }
           if (typeof profile.experience === 'string') {
-            profile.experience = JSON.parse(profile.experience);
+            profile.experience = profile.experience.trim() ? JSON.parse(profile.experience) : [];
             console.log('Parsed experience data:', profile.experience);
           }
           if (typeof profile.skills === 'string') {
-            profile.skills = JSON.parse(profile.skills);
+            profile.skills = profile.skills.trim() ? JSON.parse(profile.skills) : [];
           }
           if (typeof profile.hobbies === 'string') {
-            profile.hobbies = JSON.parse(profile.hobbies);
+            profile.hobbies = profile.hobbies.trim() ? JSON.parse(profile.hobbies) : [];
           }
           if (typeof profile.preferredLocationsList === 'string') {
-            profile.preferredLocationsList = JSON.parse(profile.preferredLocationsList);
+            profile.preferredLocationsList = profile.preferredLocationsList.trim() ? JSON.parse(profile.preferredLocationsList) : [];
           }
           console.log('Transformed profile data:', {
             educationCount: profile.education?.length || 0,
