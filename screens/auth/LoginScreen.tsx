@@ -54,7 +54,7 @@ const LinkedInIcon = () => (
 
 // Validation schema
 const loginSchema = z.object({
-  email: z.string().email('Invalid email address'),
+  emailOrPhone: z.string().min(1, 'Email or phone number is required'),
   password: z.string().min(1, 'Password is required'),
   rememberMe: z.boolean(),
 });
@@ -77,7 +77,7 @@ export default function LoginScreen({ onBack, onForgotPassword, onSignUp, onLogi
   const { control, handleSubmit, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      email: '',
+      emailOrPhone: '',
       password: '',
       rememberMe: false,
     },
@@ -85,10 +85,13 @@ export default function LoginScreen({ onBack, onForgotPassword, onSignUp, onLogi
 
   const onSubmit = async (data: FormData) => {
     try {
-      const result = await login({
-        email: data.email,
-        password: data.password,
-      }).unwrap();
+      // Detect if input is email or phone
+      const isEmail = data.emailOrPhone.includes('@');
+      const loginInput = isEmail
+        ? { email: data.emailOrPhone, password: data.password }
+        : { phoneNumber: data.emailOrPhone, password: data.password };
+
+      const result = await login(loginInput).unwrap();
 
       const response = result.login;
 
@@ -106,10 +109,10 @@ export default function LoginScreen({ onBack, onForgotPassword, onSignUp, onLogi
         dispatch(setCredentials({
           user: {
             id: response.user.id,
-            email: response.user.email || data.email,
+            email: response.user.email || (isEmail ? data.emailOrPhone : ''),
             firstName: response.user.firstName,
             lastName: response.user.lastName,
-            phoneNumber: response.user.phoneNumber,
+            phoneNumber: response.user.phoneNumber || (!isEmail ? data.emailOrPhone : ''),
             role: normalizedRole,
             isVerified: response.user.isVerified,
           },
@@ -152,19 +155,18 @@ export default function LoginScreen({ onBack, onForgotPassword, onSignUp, onLogi
           Log in to access your personalized AI dashboard
         </Text>
 
-        {/* Email Input */}
+        {/* Email or Phone Input */}
         <Controller
           control={control}
-          name="email"
+          name="emailOrPhone"
           render={({ field: { onChange, value } }) => (
             <Input
               leftIcon={<MailIcon />}
-              placeholder="Enter your E-mail"
+              placeholder="Enter your E-mail or Phone Number"
               value={value}
               onChangeText={onChange}
-              keyboardType="email-address"
               autoCapitalize="none"
-              error={errors.email?.message}
+              error={errors.emailOrPhone?.message}
               containerClassName="mb-4"
             />
           )}

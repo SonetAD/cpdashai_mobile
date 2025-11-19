@@ -7,10 +7,11 @@ console.log('Environment:', process.env.EXPO_PUBLIC_API_URL);
 
 // Define types for the API
 export interface RegisterCandidateInput {
-  email: string;
+  email?: string;
   password: string;
   passwordConfirm: string;
-  phoneNumber: string;
+  phoneNumber?: string;
+  firstName?: string;
 }
 
 export interface SuccessType {
@@ -30,10 +31,11 @@ export interface RegisterCandidateResponse {
 }
 
 export interface RegisterRecruiterInput {
-  email: string;
+  email?: string;
   password: string;
   passwordConfirm: string;
-  phoneNumber: string;
+  phoneNumber?: string;
+  firstName?: string;
 }
 
 export interface RegisterRecruiterResponse {
@@ -41,7 +43,8 @@ export interface RegisterRecruiterResponse {
 }
 
 export interface LoginInput {
-  email: string;
+  email?: string;
+  phoneNumber?: string;
   password: string;
 }
 

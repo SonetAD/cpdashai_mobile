@@ -8,6 +8,7 @@ import Svg, { Path, Rect } from 'react-native-svg';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { Checkbox } from '../../components/ui/Checkbox';
+import { Select } from '../../components/ui/Select';
 import SuccessPopup from '../../components/SuccessPopup';
 import { useRegisterCandidateMutation, useRegisterRecruiterMutation } from '../../services/api';
 
@@ -22,15 +23,42 @@ import EyeIcon from '../../assets/images/eye.svg';
 
 // Validation schema
 const registerSchema = z.object({
+  registrationType: z.enum(['email', 'phone', 'both']),
   username: z.string().min(3, 'Username must be at least 3 characters'),
-  email: z.string().email('Invalid email address'),
+  email: z.string().optional(),
   password: z.string().min(8, 'Password must be at least 8 characters'),
   confirmPassword: z.string(),
-  phoneNumber: z.string().min(10, 'Invalid phone number'),
+  phoneNumber: z.string().optional(),
   agreedToTerms: z.boolean().refine((val) => val === true, 'You must agree to terms'),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ['confirmPassword'],
+}).refine((data) => {
+  // Email is required when registrationType is 'email' or 'both'
+  if ((data.registrationType === 'email' || data.registrationType === 'both') && !data.email) {
+    return false;
+  }
+  // Email must be valid if provided
+  if (data.email && !z.string().email().safeParse(data.email).success) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Valid email is required",
+  path: ['email'],
+}).refine((data) => {
+  // Phone is required when registrationType is 'phone' or 'both'
+  if ((data.registrationType === 'phone' || data.registrationType === 'both') && !data.phoneNumber) {
+    return false;
+  }
+  // Phone must be at least 10 characters if provided
+  if (data.phoneNumber && data.phoneNumber.length < 10) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Valid phone number is required (min 10 digits)",
+  path: ['phoneNumber'],
 });
 
 const GoogleIcon = () => (
@@ -81,9 +109,10 @@ export default function RegisterScreen({ role, onBack, onLogin }: RegisterScreen
 
   const isLoading = isCandidateLoading || isRecruiterLoading;
 
-  const { control, handleSubmit, formState: { errors } } = useForm<FormData>({
+  const { control, handleSubmit, formState: { errors }, watch } = useForm<FormData>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
+      registrationType: 'email',
       username: '',
       email: '',
       password: '',
@@ -93,14 +122,25 @@ export default function RegisterScreen({ role, onBack, onLogin }: RegisterScreen
     },
   });
 
+  const registrationType = watch('registrationType');
+
   const onSubmit = async (data: FormData) => {
     try {
-      const registrationData = {
-        email: data.email,
+      const registrationData: any = {
         password: data.password,
         passwordConfirm: data.confirmPassword,
-        phoneNumber: data.phoneNumber,
+        firstName: data.username,
       };
+
+      // Add email if provided
+      if (data.email) {
+        registrationData.email = data.email;
+      }
+
+      // Add phone if provided
+      if (data.phoneNumber) {
+        registrationData.phoneNumber = data.phoneNumber;
+      }
 
       if (role === 'recruiter') {
         const result = await registerRecruiter(registrationData).unwrap();
@@ -148,9 +188,66 @@ export default function RegisterScreen({ role, onBack, onLogin }: RegisterScreen
         <Text className="text-3xl font-bold text-gray-900 mb-2">
           Create your account
         </Text>
-        <Text className="text-sm text-gray-500 mb-8">
+        <Text className="text-sm text-gray-500 mb-6">
           Register Your Account Building, Improving, Showcasing Your Career
         </Text>
+
+        {/* Registration Type Selector - Segmented Control */}
+        <Controller
+          control={control}
+          name="registrationType"
+          render={({ field: { onChange, value } }) => (
+            <View className="mb-6">
+              <Text className="text-sm font-medium text-gray-700 mb-3">Register with</Text>
+              <View className="flex-row bg-gray-100 rounded-xl p-1">
+                <TouchableOpacity
+                  className={`flex-1 py-3 rounded-lg ${
+                    value === 'email' ? 'bg-primary-blue' : 'bg-transparent'
+                  }`}
+                  onPress={() => onChange('email')}
+                >
+                  <Text
+                    className={`text-center font-semibold ${
+                      value === 'email' ? 'text-white' : 'text-gray-600'
+                    }`}
+                  >
+                    Email
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  className={`flex-1 py-3 rounded-lg mx-1 ${
+                    value === 'phone' ? 'bg-primary-blue' : 'bg-transparent'
+                  }`}
+                  onPress={() => onChange('phone')}
+                >
+                  <Text
+                    className={`text-center font-semibold ${
+                      value === 'phone' ? 'text-white' : 'text-gray-600'
+                    }`}
+                  >
+                    Phone
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  className={`flex-1 py-3 rounded-lg ${
+                    value === 'both' ? 'bg-primary-blue' : 'bg-transparent'
+                  }`}
+                  onPress={() => onChange('both')}
+                >
+                  <Text
+                    className={`text-center font-semibold ${
+                      value === 'both' ? 'text-white' : 'text-gray-600'
+                    }`}
+                  >
+                    Both
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        />
 
         {/* Form Fields */}
         <Controller
@@ -168,22 +265,25 @@ export default function RegisterScreen({ role, onBack, onLogin }: RegisterScreen
           )}
         />
 
-        <Controller
-          control={control}
-          name="email"
-          render={({ field: { onChange, value } }) => (
-            <Input
-              leftIcon={<MailIcon />}
-              placeholder="Enter your E-mail"
-              value={value}
-              onChangeText={onChange}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              error={errors.email?.message}
-              containerClassName="mb-4"
-            />
-          )}
-        />
+        {/* Email Input - Only show if registrationType is 'email' or 'both' */}
+        {(registrationType === 'email' || registrationType === 'both') && (
+          <Controller
+            control={control}
+            name="email"
+            render={({ field: { onChange, value } }) => (
+              <Input
+                leftIcon={<MailIcon />}
+                placeholder="Enter your E-mail"
+                value={value}
+                onChangeText={onChange}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                error={errors.email?.message}
+                containerClassName="mb-4"
+              />
+            )}
+          />
+        )}
 
         <Controller
           control={control}
@@ -221,21 +321,24 @@ export default function RegisterScreen({ role, onBack, onLogin }: RegisterScreen
           )}
         />
 
-        <Controller
-          control={control}
-          name="phoneNumber"
-          render={({ field: { onChange, value } }) => (
-            <Input
-              leftIcon={<CallIcon />}
-              placeholder="Enter your Phone Number"
-              value={value}
-              onChangeText={onChange}
-              keyboardType="phone-pad"
-              error={errors.phoneNumber?.message}
-              containerClassName="mb-4"
-            />
-          )}
-        />
+        {/* Phone Number Input - Only show if registrationType is 'phone' or 'both' */}
+        {(registrationType === 'phone' || registrationType === 'both') && (
+          <Controller
+            control={control}
+            name="phoneNumber"
+            render={({ field: { onChange, value } }) => (
+              <Input
+                leftIcon={<CallIcon />}
+                placeholder="Enter your Phone Number (e.g., +1234567890)"
+                value={value}
+                onChangeText={onChange}
+                keyboardType="phone-pad"
+                error={errors.phoneNumber?.message}
+                containerClassName="mb-4"
+              />
+            )}
+          />
+        )}
 
         {/* Terms and Conditions */}
         <Controller
