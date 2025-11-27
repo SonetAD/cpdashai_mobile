@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, TextInput, Alert, Platform, Modal, TouchableWithoutFeedback, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, Platform, Modal, TouchableWithoutFeedback, ScrollView } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { EditIcon, DeleteIcon, ChevronDownIcon } from '../../../../components/profile/Icons';
 import {
@@ -7,6 +7,7 @@ import {
   useUpdateExperienceMutation,
   useDeleteExperienceMutation,
 } from '../../../../services/api';
+import { useAlert } from '../../../../contexts/AlertContext';
 
 interface ExperienceEntry {
   id: string;
@@ -68,6 +69,7 @@ export const ExperienceTab: React.FC<ExperienceTabProps> = ({ experienceList, se
   const [addExperience, { isLoading: isAddingExperience }] = useAddExperienceMutation();
   const [updateExperience, { isLoading: isUpdatingExperience }] = useUpdateExperienceMutation();
   const [deleteExperience, { isLoading: isDeletingExperience }] = useDeleteExperienceMutation();
+  const { showAlert } = useAlert();
 
   const handleSaveExperience = async () => {
     if (!newExperience.current && newExperience.startDate && newExperience.endDate) {
@@ -75,7 +77,12 @@ export const ExperienceTab: React.FC<ExperienceTabProps> = ({ experienceList, se
       const end = new Date(newExperience.endDate);
 
       if (end <= start) {
-        Alert.alert('Invalid Dates', 'End date must be after start date.');
+        showAlert({
+          type: 'error',
+          title: 'Invalid Dates',
+          message: 'End date must be after start date.',
+          buttons: [{ text: 'OK', style: 'default' }],
+        });
         return;
       }
     }
@@ -105,9 +112,19 @@ export const ExperienceTab: React.FC<ExperienceTabProps> = ({ experienceList, se
             )
           );
           resetForm();
-          Alert.alert('Success', result.updateExperience.message);
+          showAlert({
+            type: 'success',
+            title: 'Success',
+            message: result.updateExperience.message,
+            buttons: [{ text: 'OK', style: 'default' }],
+          });
         } else {
-          Alert.alert('Error', result.updateExperience.message);
+          showAlert({
+            type: 'error',
+            title: 'Error',
+            message: result.updateExperience.message,
+            buttons: [{ text: 'OK', style: 'default' }],
+          });
         }
       } else {
         // Add new experience
@@ -132,14 +149,29 @@ export const ExperienceTab: React.FC<ExperienceTabProps> = ({ experienceList, se
           const updatedList = [...experienceList, experience];
           setExperienceList(updatedList);
           resetForm();
-          Alert.alert('Success', result.addExperience.message);
+          showAlert({
+            type: 'success',
+            title: 'Success',
+            message: result.addExperience.message,
+            buttons: [{ text: 'OK', style: 'default' }],
+          });
         } else {
-          Alert.alert('Error', result.addExperience.message);
+          showAlert({
+            type: 'error',
+            title: 'Error',
+            message: result.addExperience.message,
+            buttons: [{ text: 'OK', style: 'default' }],
+          });
         }
       }
     } catch (error) {
       console.error('Failed to save experience:', error);
-      Alert.alert('Error', 'Failed to save experience. Please try again.');
+      showAlert({
+        type: 'error',
+        title: 'Error',
+        message: 'Failed to save experience. Please try again.',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
     }
   };
 
@@ -166,10 +198,11 @@ export const ExperienceTab: React.FC<ExperienceTabProps> = ({ experienceList, se
   };
 
   const handleDeleteExperience = async (index: number) => {
-    Alert.alert(
-      'Delete Experience',
-      'Are you sure you want to delete this experience?',
-      [
+    showAlert({
+      type: 'warning',
+      title: 'Delete Experience',
+      message: 'Are you sure you want to delete this experience?',
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
@@ -180,18 +213,33 @@ export const ExperienceTab: React.FC<ExperienceTabProps> = ({ experienceList, se
 
               if (result.deleteExperience.__typename === 'SuccessType') {
                 setExperienceList(experienceList.filter((exp) => exp.index !== index));
-                Alert.alert('Success', result.deleteExperience.message);
+                showAlert({
+                  type: 'success',
+                  title: 'Success',
+                  message: result.deleteExperience.message,
+                  buttons: [{ text: 'OK', style: 'default' }],
+                });
               } else {
-                Alert.alert('Error', result.deleteExperience.message);
+                showAlert({
+                  type: 'error',
+                  title: 'Error',
+                  message: result.deleteExperience.message,
+                  buttons: [{ text: 'OK', style: 'default' }],
+                });
               }
             } catch (error) {
               console.error('Failed to delete experience:', error);
-              Alert.alert('Error', 'Failed to delete experience. Please try again.');
+              showAlert({
+                type: 'error',
+                title: 'Error',
+                message: 'Failed to delete experience. Please try again.',
+                buttons: [{ text: 'OK', style: 'default' }],
+              });
             }
           },
         },
-      ]
-    );
+      ],
+    });
   };
 
   const resetForm = () => {
@@ -227,7 +275,12 @@ export const ExperienceTab: React.FC<ExperienceTabProps> = ({ experienceList, se
       if (newExperience.startDate) {
         const start = new Date(newExperience.startDate);
         if (selectedDate <= start) {
-          Alert.alert('Invalid Date', 'End date must be after start date.');
+          showAlert({
+            type: 'error',
+            title: 'Invalid Date',
+            message: 'End date must be after start date.',
+            buttons: [{ text: 'OK', style: 'default' }],
+          });
           return;
         }
       }

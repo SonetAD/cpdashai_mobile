@@ -7,7 +7,7 @@ import { PersistGate } from 'redux-persist/integration/react';
 import { store, persistor, RootState } from './store/store';
 import { useAppDispatch } from './store/hooks';
 import { logout as logoutAction, updateTokens } from './store/slices/authSlice';
-import { useVerifyTokenQuery, useRefreshTokenMutation, useLogoutMutation } from './services/api';
+import { api, useVerifyTokenQuery, useRefreshTokenMutation, useLogoutMutation } from './services/api';
 import { getAccessToken, getRefreshToken, clearTokens, storeTokens } from './utils/authUtils';
 import SplashScreen from './screens/SplashScreen';
 import OnboardingScreen from './screens/OnboardingScreen';
@@ -18,6 +18,7 @@ import ForgotPasswordScreen from './screens/auth/ForgotPasswordScreen';
 import CandidateDashboard from './screens/candidate/dashboard/dashboard';
 import RecruiterDashboard from './screens/recruiter/dashboard/dashboard';
 import { SkeletonLoader } from './components/SkeletonLoader';
+import { AlertProvider } from './contexts/AlertContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -166,7 +167,7 @@ function AppContent() {
               }
             }
           } catch (error) {
-            console.error('Token verification failed:', error);
+            // Silently handle token verification failure
             // Try refresh as fallback
             try {
               const refreshResult = await refreshToken({
@@ -191,7 +192,7 @@ function AppContent() {
                 dispatch(logoutAction());
               }
             } catch (refreshError) {
-              console.error('Token refresh failed:', refreshError);
+              // Silently handle token refresh failure - user will be logged out
               dispatch(logoutAction());
             }
             setIsVerifying(false);
@@ -201,7 +202,7 @@ function AppContent() {
           setIsVerifying(false);
         }
       } catch (error) {
-        console.error('Auth verification error:', error);
+        // Silently handle any auth verification errors
         setIsVerifying(false);
       }
     };
@@ -307,6 +308,8 @@ function AppContent() {
   };
 
   const handleLoginSuccess = () => {
+    // Clear RTK Query cache to ensure fresh data for the newly logged in user
+    dispatch(api.util.resetApiState());
     handleScreenChange('dashboard');
   };
 
@@ -326,6 +329,9 @@ function AppContent() {
 
     // Clear Redux state
     dispatch(logoutAction());
+
+    // Clear RTK Query cache to ensure fresh data for next user
+    dispatch(api.util.resetApiState());
 
     // Navigate to create account screen
     handleScreenChange('createAccount', true);
@@ -384,6 +390,7 @@ function AppContent() {
             role={selectedRole}
             onBack={handleBackToCreateAccount}
             onLogin={handleGoToLogin}
+            onRegisterSuccess={handleLoginSuccess}
           />
         );
         break;
@@ -419,7 +426,9 @@ export default function App() {
             console.log('Redux Persist: Rehydration complete');
           }}
         >
-          <AppContent />
+          <AlertProvider>
+            <AppContent />
+          </AlertProvider>
         </PersistGate>
       </Provider>
     </SafeAreaProvider>

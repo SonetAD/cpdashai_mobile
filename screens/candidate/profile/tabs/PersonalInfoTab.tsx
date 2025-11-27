@@ -1,42 +1,101 @@
 import React from 'react';
-import { View, TouchableOpacity, Text } from 'react-native';
-import { ProfileFieldDisplay } from '../../../../components/profile/ProfileFieldDisplay';
-import { User } from '../../../../services/api';
+import { View, Text } from 'react-native';
+import { GetCandidateProfileSuccessType } from '../../../../services/api';
 
 interface PersonalInfoTabProps {
-  user: User | null;
-  getFullName: () => string;
+  candidateProfile: GetCandidateProfileSuccessType | null;
 }
 
-export const PersonalInfoTab: React.FC<PersonalInfoTabProps> = ({ user, getFullName }) => {
+export const PersonalInfoTab: React.FC<PersonalInfoTabProps> = ({ candidateProfile }) => {
+  if (!candidateProfile) {
+    return (
+      <View className="bg-white rounded-xl p-6 mb-4">
+        <Text className="text-gray-500 text-sm text-center">
+          No profile data available
+        </Text>
+      </View>
+    );
+  }
+
+  const { user } = candidateProfile;
+
   return (
     <View>
-      <ProfileFieldDisplay
-        label="Full Name"
-        value={getFullName()}
-      />
-      <ProfileFieldDisplay
-        label="E-mail"
-        value={user?.email || ''}
-      />
-      <ProfileFieldDisplay
-        label="Phone Number (Optional)"
-        value={user?.phoneNumber || ''}
-      />
-      <ProfileFieldDisplay
-        label="Current Company Role"
-        value="Not provided"
-        showActions
-        onEdit={() => console.log('Edit role')}
-      />
+      {/* Basic Information */}
+      <View className="bg-white rounded-xl p-5 mb-4 border border-gray-100">
+        <Text className="text-gray-900 font-bold text-lg mb-4">Basic Information</Text>
 
-      {/* Update Button */}
-      <TouchableOpacity
-        className="bg-primary-blue rounded-xl py-4 mt-2 items-center"
-        activeOpacity={0.8}
-      >
-        <Text className="text-white text-base font-semibold">Update</Text>
-      </TouchableOpacity>
+        <View className="mb-3">
+          <Text className="text-gray-600 text-xs mb-1">Full Name</Text>
+          <Text className="text-gray-900 text-base">
+            {user.fullName || `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Not provided'}
+          </Text>
+        </View>
+
+        <View className="mb-3">
+          <Text className="text-gray-600 text-xs mb-1">Email</Text>
+          <Text className="text-gray-900 text-base">{user.email || 'Not provided'}</Text>
+        </View>
+
+        <View className="mb-3">
+          <Text className="text-gray-600 text-xs mb-1">Phone Number</Text>
+          <Text className="text-gray-900 text-base">{user.phoneNumber || 'Not provided'}</Text>
+        </View>
+
+        {user.bio && (
+          <View className="mb-3">
+            <Text className="text-gray-600 text-xs mb-1">Bio</Text>
+            <Text className="text-gray-900 text-base">{user.bio}</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Links & URLs */}
+      {(candidateProfile.linkedinUrl || candidateProfile.githubUrl || candidateProfile.portfolioUrl) && (
+        <View className="bg-white rounded-xl p-5 mb-4 border border-gray-100">
+          <Text className="text-gray-900 font-bold text-lg mb-4">Links</Text>
+
+          {candidateProfile.linkedinUrl && (
+            <View className="mb-3">
+              <Text className="text-gray-600 text-xs mb-1">LinkedIn Profile</Text>
+              <Text className="text-primary-blue text-base">{candidateProfile.linkedinUrl}</Text>
+            </View>
+          )}
+
+          {candidateProfile.githubUrl && (
+            <View className="mb-3">
+              <Text className="text-gray-600 text-xs mb-1">GitHub Profile</Text>
+              <Text className="text-primary-blue text-base">{candidateProfile.githubUrl}</Text>
+            </View>
+          )}
+
+          {candidateProfile.portfolioUrl && (
+            <View className="mb-3">
+              <Text className="text-gray-600 text-xs mb-1">Portfolio URL</Text>
+              <Text className="text-primary-blue text-base">{candidateProfile.portfolioUrl}</Text>
+            </View>
+          )}
+        </View>
+      )}
+
+      {/* Preferences */}
+      {candidateProfile.preferredLocationsList && candidateProfile.preferredLocationsList.length > 0 && (
+        <View className="bg-white rounded-xl p-5 mb-4 border border-gray-100">
+          <Text className="text-gray-900 font-bold text-lg mb-4">Preferences</Text>
+
+          <View className="mb-3">
+            <Text className="text-gray-600 text-xs mb-2">Preferred Locations</Text>
+            <View className="flex-row flex-wrap gap-2">
+              {candidateProfile.preferredLocationsList.map((location, index) => (
+                <View key={index} className="bg-blue-50 border border-primary-blue rounded-full px-3 py-1">
+                  <Text className="text-primary-blue text-xs font-medium">{location}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        </View>
+      )}
+
     </View>
   );
 };

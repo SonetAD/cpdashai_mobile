@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -9,10 +9,12 @@ import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { Checkbox } from '../../components/ui/Checkbox';
 import SuccessPopup from '../../components/SuccessPopup';
+import KeyboardDismissWrapper from '../../components/KeyboardDismissWrapper';
 import { useLoginMutation } from '../../services/api';
 import { useAppDispatch } from '../../store/hooks';
 import { setCredentials } from '../../store/slices/authSlice';
 import { storeTokens } from '../../utils/authUtils';
+import { useAlert } from '../../contexts/AlertContext';
 
 // Import icons from assets
 import BackArrowIcon from '../../assets/images/arrowLeft.svg';
@@ -73,6 +75,7 @@ export default function LoginScreen({ onBack, onForgotPassword, onSignUp, onLogi
   const [showSuccessPopup, setShowSuccessPopup] = useState(false);
   const [login, { isLoading }] = useLoginMutation();
   const dispatch = useAppDispatch();
+  const { showAlert } = useAlert();
 
   const { control, handleSubmit, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(loginSchema),
@@ -128,20 +131,31 @@ export default function LoginScreen({ onBack, onForgotPassword, onSignUp, onLogi
         // Show success popup
         setShowSuccessPopup(true);
       } else {
-        Alert.alert('Error', response.message || 'Login failed. Please try again.', [{ text: 'OK' }]);
+        showAlert({
+          type: 'error',
+          title: 'Login Failed',
+          message: response.message || 'Login failed. Please try again.',
+          buttons: [{ text: 'OK', style: 'default' }],
+        });
         console.log('Login failed:', response.message);
       }
     } catch (error: any) {
       const errorMessage = error?.data?.login?.message || error?.data?.message || 'Login failed. Please check your credentials.';
-      Alert.alert('Error', errorMessage, [{ text: 'OK' }]);
+      showAlert({
+        type: 'error',
+        title: 'Login Error',
+        message: errorMessage,
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
       console.log('Login error:', errorMessage);
     }
   };
 
   return (
     <SafeAreaView className="flex-1 bg-white" edges={['top', 'bottom']}>
-      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 20 }}>
-        <View className="px-6 pt-6">
+      <KeyboardDismissWrapper>
+        <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 20 }}>
+          <View className="px-6 pt-6">
         {/* Back Button */}
         <TouchableOpacity className="mb-8" onPress={onBack}>
           <BackArrowIcon />
@@ -149,10 +163,10 @@ export default function LoginScreen({ onBack, onForgotPassword, onSignUp, onLogi
 
         {/* Header */}
         <Text className="text-3xl font-bold text-gray-900 mb-2">
-          Welcome Back, Sonet!
+          Welcome to CP Dash
         </Text>
         <Text className="text-sm text-gray-500 mb-8">
-          Log in to access your personalized AI dashboard
+          Your AI-Powered Career Advancement Platform
         </Text>
 
         {/* Email or Phone Input */}
@@ -253,7 +267,8 @@ export default function LoginScreen({ onBack, onForgotPassword, onSignUp, onLogi
           </TouchableOpacity>
         </View>
         </View>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardDismissWrapper>
 
       {/* Success Popup */}
       <SuccessPopup

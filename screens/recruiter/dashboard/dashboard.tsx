@@ -1,287 +1,652 @@
-import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import Svg, { Path, Circle } from 'react-native-svg';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, Dimensions, Animated } from 'react-native';
+import Svg, { Path, Circle, Rect, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg';
+import { LinearGradient } from 'expo-linear-gradient';
+import TalentPartnerLayout from '../../../components/layouts/TalentPartnerLayout';
+import TalentScreen from '../talent/TalentScreen';
+import ReportsScreen from '../reports/ReportsScreen';
+import ProfileScreen from '../profile/ProfileScreen';
 
-const BellIcon = () => (
-  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-    <Path
-      d="M12 6.43994V9.76994M12.02 2C8.34002 2 5.36002 4.98 5.36002 8.66V10.76C5.36002 11.44 5.08002 12.46 4.73002 13.04L3.46002 15.16C2.68002 16.47 3.22002 17.93 4.66002 18.41C9.44002 20 14.61 20 19.39 18.41C20.74 17.96 21.32 16.38 20.59 15.16L19.32 13.04C18.97 12.46 18.69 11.43 18.69 10.76V8.66C18.68 5 15.68 2 12.02 2Z"
-      stroke="#9CA3AF"
-      strokeWidth={1.5}
-      strokeMiterlimit={10}
-      strokeLinecap="round"
-    />
-    <Path
-      d="M15.33 18.8201C15.33 20.6501 13.83 22.1501 12 22.1501C11.09 22.1501 10.25 21.7701 9.65004 21.1701C9.05004 20.5701 8.67004 19.7301 8.67004 18.8201"
-      stroke="#9CA3AF"
-      strokeWidth={1.5}
-      strokeMiterlimit={10}
-    />
-  </Svg>
-);
-
-const UserCircleIcon = () => (
-  <Svg width={40} height={40} viewBox="0 0 40 40" fill="none">
-    <Circle cx={20} cy={20} r={20} fill="#2AD1CC" />
-    <Path
-      d="M20 10C17.24 10 15 12.24 15 15C15 17.76 17.24 20 20 20C22.76 20 25 17.76 25 15C25 12.24 22.76 10 20 10Z"
-      fill="white"
-    />
-    <Path
-      d="M20 22C15.58 22 12 25.58 12 30H28C28 25.58 24.42 22 20 22Z"
-      fill="white"
-    />
-  </Svg>
-);
-
-interface DashboardCardProps {
-  title: string;
-  value: string | number;
-  subtitle?: string;
-  icon?: React.ReactNode;
-  color?: string;
-}
-
-const DashboardCard: React.FC<DashboardCardProps> = ({
-  title,
-  value,
-  subtitle,
-  icon,
-  color = 'bg-white',
-}) => {
-  return (
-    <View className={`${color} rounded-2xl p-5 mb-4 shadow-sm`}>
-      <View className="flex-row justify-between items-start mb-2">
-        <Text className="text-gray-600 text-sm">{title}</Text>
-        {icon && <View>{icon}</View>}
-      </View>
-      <Text className="text-gray-900 text-3xl font-bold mb-1">{value}</Text>
-      {subtitle && <Text className="text-gray-500 text-xs">{subtitle}</Text>}
-    </View>
-  );
-};
-
-interface ActionCardProps {
-  title: string;
-  description: string;
-  icon: React.ReactNode;
-  onPress: () => void;
-}
-
-const ActionCard: React.FC<ActionCardProps> = ({
-  title,
-  description,
-  icon,
-  onPress,
-}) => {
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      className="bg-white rounded-2xl p-5 mb-4 flex-row items-center shadow-sm"
-      activeOpacity={0.7}
-    >
-      <View className="bg-primary-cyan/10 rounded-xl p-3 mr-4">{icon}</View>
-      <View className="flex-1">
-        <Text className="text-gray-900 text-base font-semibold mb-1">
-          {title}
-        </Text>
-        <Text className="text-gray-500 text-sm">{description}</Text>
-      </View>
-    </TouchableOpacity>
-  );
-};
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface RecruiterDashboardProps {
   userName?: string;
   onLogout?: () => void;
 }
 
+// Glassmorphic Hero Card Component
+interface HeroMetricCardProps {
+  title: string;
+  value: string | number;
+  subtitle: string;
+  icon: React.ReactNode;
+  gradientColors: string[];
+  trend?: {
+    value: string;
+    isPositive: boolean;
+  };
+}
+
+const HeroMetricCard: React.FC<HeroMetricCardProps> = ({
+  title,
+  value,
+  subtitle,
+  icon,
+  gradientColors,
+  trend
+}) => {
+  return (
+    <View
+      className="bg-white rounded-3xl p-5 mb-3"
+      style={{
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+        elevation: 3
+      }}
+    >
+      <View className="flex-row items-start justify-between mb-3">
+        <View
+          style={{
+            backgroundColor: `${gradientColors[0]}15`,
+            borderRadius: 16,
+            padding: 12
+          }}
+        >
+          {icon}
+        </View>
+        {trend && (
+          <View
+            className="px-3 py-1.5 rounded-full"
+            style={{ backgroundColor: trend.isPositive ? '#DCFCE7' : '#FEE2E2' }}
+          >
+            <Text
+              className="text-xs font-bold"
+              style={{ color: trend.isPositive ? '#16A34A' : '#DC2626' }}
+            >
+              {trend.isPositive ? '↑' : '↓'} {trend.value}
+            </Text>
+          </View>
+        )}
+      </View>
+      <Text className="text-gray-500 text-sm mb-2">{title}</Text>
+      <Text className="text-gray-900 font-bold mb-2" style={{ fontSize: 36 }}>{value}</Text>
+      <Text className="text-gray-400 text-xs">{subtitle}</Text>
+    </View>
+  );
+};
+
+// Pipeline Stage Card
+interface PipelineStageProps {
+  stage: string;
+  count: number;
+  percentage: number;
+  color: string;
+}
+
+const PipelineStage: React.FC<PipelineStageProps> = ({ stage, count, percentage, color }) => {
+  return (
+    <View className="mb-4">
+      <View className="flex-row items-center justify-between mb-2">
+        <Text className="text-gray-700 text-sm font-semibold">{stage}</Text>
+        <View className="flex-row items-center">
+          <Text className="text-gray-900 text-lg font-bold mr-2">{count}</Text>
+          <Text className="text-gray-500 text-xs">({percentage}%)</Text>
+        </View>
+      </View>
+      <View className="bg-gray-100 rounded-full h-2.5 overflow-hidden">
+        <View
+          style={{
+            width: `${percentage}%`,
+            backgroundColor: color,
+            height: '100%',
+            borderRadius: 20
+          }}
+        />
+      </View>
+    </View>
+  );
+};
+
+// AI Insight Card Component
+interface AIInsightCardProps {
+  title: string;
+  insight: string;
+  action: string;
+  onActionPress: () => void;
+}
+
+const AIInsightCard: React.FC<AIInsightCardProps> = ({ title, insight, action, onActionPress }) => {
+  return (
+    <View
+      className="rounded-3xl p-5 mb-4 bg-white"
+      style={{
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+        elevation: 3
+      }}
+    >
+      <View className="flex-row items-start mb-3">
+        <View className="bg-purple-100 rounded-xl p-2.5 mr-3">
+          <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+            <Path
+              d="M9.5 2C13.09 2 16 4.91 16 8.5C16 10.02 15.45 11.41 14.54 12.48L21.03 18.97C21.32 19.26 21.32 19.74 21.03 20.03C20.74 20.32 20.26 20.32 19.97 20.03L13.48 13.54C12.41 14.45 11.02 15 9.5 15C5.91 15 3 12.09 3 8.5C3 4.91 5.91 2 9.5 2Z"
+              fill="#9333EA"
+            />
+            <Circle cx="9.5" cy="8.5" r="2" fill="white" />
+          </Svg>
+        </View>
+        <View className="flex-1">
+          <Text className="text-purple-900 text-base font-bold mb-1">{title}</Text>
+          <Text className="text-gray-600 text-sm leading-5">{insight}</Text>
+        </View>
+      </View>
+      <TouchableOpacity
+        onPress={onActionPress}
+        className="bg-purple-500 rounded-xl py-3 items-center"
+        activeOpacity={0.8}
+      >
+        <Text className="text-white text-sm font-semibold">{action}</Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+// Activity Feed Item
+interface ActivityItemProps {
+  avatar: string;
+  name: string;
+  action: string;
+  time: string;
+  statusColor: string;
+}
+
+const ActivityItem: React.FC<ActivityItemProps> = ({ avatar, name, action, time, statusColor }) => {
+  return (
+    <View className="flex-row items-center py-3 border-b border-gray-100">
+      <View
+        className="w-10 h-10 rounded-full items-center justify-center mr-3"
+        style={{ backgroundColor: `${statusColor}20` }}
+      >
+        <Text className="text-base font-bold" style={{ color: statusColor }}>
+          {avatar}
+        </Text>
+      </View>
+      <View className="flex-1">
+        <View className="flex-row flex-wrap">
+          <Text className="text-gray-900 text-sm font-bold">{name}</Text>
+          <Text className="text-gray-600 text-sm"> {action}</Text>
+        </View>
+        <Text className="text-gray-400 text-xs mt-0.5">{time}</Text>
+      </View>
+      <View
+        className="w-2 h-2 rounded-full"
+        style={{ backgroundColor: statusColor }}
+      />
+    </View>
+  );
+};
+
+// Quality Score Gauge
+const QualityScoreGauge: React.FC<{ score: number }> = ({ score }) => {
+  const radius = 50;
+  const strokeWidth = 10;
+  const circumference = Math.PI * radius;
+  const progress = (score / 100) * circumference;
+
+  return (
+    <View className="items-center" style={{ height: 100 }}>
+      <Svg width={140} height={80} viewBox="0 0 140 80">
+        <Defs>
+          <SvgGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <Stop offset="0%" stopColor="#FF8D28" />
+            <Stop offset="50%" stopColor="#FFCC00" />
+            <Stop offset="100%" stopColor="#10B981" />
+          </SvgGradient>
+        </Defs>
+        <Path
+          d={`M 20 70 A ${radius} ${radius} 0 0 1 120 70`}
+          stroke="#E5E7EB"
+          strokeWidth={strokeWidth}
+          fill="none"
+        />
+        <Path
+          d={`M 20 70 A ${radius} ${radius} 0 0 1 120 70`}
+          stroke="url(#gaugeGradient)"
+          strokeWidth={strokeWidth}
+          fill="none"
+          strokeDasharray={`${progress} ${circumference}`}
+          strokeLinecap="round"
+        />
+      </Svg>
+      <View className="absolute" style={{ bottom: 10 }}>
+        <Text className="text-3xl font-bold text-gray-900 text-center">{score}</Text>
+        <Text className="text-xs text-gray-500 text-center">Quality Score</Text>
+      </View>
+    </View>
+  );
+};
+
+// Quick Action Button
+interface QuickActionBtnProps {
+  icon: React.ReactNode;
+  label: string;
+  bgColor: string;
+  onPress: () => void;
+}
+
+const QuickActionBtn: React.FC<QuickActionBtnProps> = ({ icon, label, bgColor, onPress }) => {
+  const buttonWidth = (SCREEN_WIDTH - 88) / 4; // 48 padding + 40 for gaps
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      className="items-center"
+      style={{ width: buttonWidth }}
+      activeOpacity={0.7}
+    >
+      <View
+        className="rounded-2xl items-center justify-center mb-2"
+        style={{
+          width: 52,
+          height: 52,
+          backgroundColor: `${bgColor}15`,
+          shadowColor: bgColor,
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.2,
+          shadowRadius: 8,
+          elevation: 4
+        }}
+      >
+        {icon}
+      </View>
+      <Text
+        className="text-gray-700 font-medium text-center"
+        style={{ fontSize: 11 }}
+        numberOfLines={2}
+      >
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
+};
+
 export default function RecruiterDashboard({
   userName = 'Recruiter',
   onLogout,
 }: RecruiterDashboardProps) {
-  return (
-    <SafeAreaView className="flex-1 bg-gray-50" edges={['top', 'bottom']}>
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View className="bg-primary-cyan px-6 pt-4 pb-8">
-          <View className="flex-row justify-between items-center mb-6">
-            <View className="flex-row items-center">
-              <UserCircleIcon />
-              <View className="ml-3">
-                <Text className="text-white text-lg font-bold">
-                  Welcome back!
-                </Text>
-                <Text className="text-white/80 text-sm">{userName}</Text>
+  const [activeTab, setActiveTab] = useState('home');
+
+  // Create separate animations for each tab
+  const homeOpacity = useRef(new Animated.Value(1)).current;
+  const talentOpacity = useRef(new Animated.Value(0)).current;
+  const reportsOpacity = useRef(new Animated.Value(0)).current;
+  const profileOpacity = useRef(new Animated.Value(0)).current;
+
+  const handleTabChange = (tabId: string) => {
+    if (tabId === activeTab) return;
+
+    const getOpacityRef = (tab: string) => {
+      switch (tab) {
+        case 'home': return homeOpacity;
+        case 'talent': return talentOpacity;
+        case 'reports': return reportsOpacity;
+        case 'profile': return profileOpacity;
+        default: return homeOpacity;
+      }
+    };
+
+    const currentOpacity = getOpacityRef(activeTab);
+    const nextOpacity = getOpacityRef(tabId);
+
+    // Fade out current, fade in next
+    Animated.parallel([
+      Animated.timing(currentOpacity, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(nextOpacity, {
+        toValue: 1,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    setActiveTab(tabId);
+  };
+
+  const HomeContent = React.useMemo(() => (
+    <TalentPartnerLayout
+      title="Talent Command Center"
+      subtitle={`Welcome back, ${userName}`}
+      activeTab={activeTab}
+      onTabChange={handleTabChange}
+    >
+      <ScrollView
+        className="flex-1"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 24 }}
+      >
+        <View className="px-6 pt-2">
+          {/* Hero Metrics - Glassmorphic Cards */}
+          <View className="mb-6">
+            <View className="flex-row mb-3" style={{ gap: 12 }}>
+              <View style={{ flex: 1 }}>
+                <HeroMetricCard
+                  title="Active Candidates"
+                  value="1,247"
+                  subtitle="87 reviewed today"
+                  icon={
+                    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+                      <Path
+                        d="M9 2C6.38 2 4.25 4.13 4.25 6.75C4.25 9.32 6.26 11.4 8.88 11.49C9.12 11.49 9.13 11.49 9.15 11.49C11.73 11.4 13.74 9.32 13.75 6.75C13.75 4.13 11.62 2 9 2Z"
+                        fill="#437EF4"
+                      />
+                      <Path
+                        d="M14.08 14.15C11.29 12.29 6.74 12.29 3.93 14.15C2.66 15 1.96 16.15 1.96 17.38C1.96 18.61 2.66 19.75 3.92 20.59C5.32 21.53 7.16 22 9 22C10.84 22 12.68 21.53 14.08 20.59C15.34 19.74 16.04 18.6 16.04 17.36C16.03 16.13 15.34 14.99 14.08 14.15Z"
+                        fill="#437EF4"
+                      />
+                    </Svg>
+                  }
+                  gradientColors={['#437EF4']}
+                  trend={{ value: '12%', isPositive: true }}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <HeroMetricCard
+                  title="Open Positions"
+                  value="34"
+                  subtitle="5 urgent hires"
+                  icon={
+                    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+                      <Path
+                        d="M8 22H16C20 22 22 20 22 16V8C22 4 20 2 16 2H8C4 2 2 4 2 8V16C2 20 4 22 8 22Z"
+                        fill="#10B981"
+                      />
+                      <Path
+                        d="M11.9998 8V16M16 12H8"
+                        stroke="white"
+                        strokeWidth={2}
+                        strokeLinecap="round"
+                      />
+                    </Svg>
+                  }
+                  gradientColors={['#10B981']}
+                  trend={{ value: '5 new', isPositive: true }}
+                />
               </View>
             </View>
-            <TouchableOpacity className="p-2">
-              <BellIcon />
-            </TouchableOpacity>
-          </View>
-        </View>
 
-        {/* Stats Cards */}
-        <View className="px-6 -mt-4">
-          <View className="flex-row justify-between mb-4">
-            <View className="flex-1 mr-2">
-              <DashboardCard
-                title="Active Jobs"
-                value="8"
-                subtitle="3 expiring soon"
-              />
-            </View>
-            <View className="flex-1 ml-2">
-              <DashboardCard
-                title="Applications"
-                value="142"
-                subtitle="34 new this week"
-              />
-            </View>
+            <HeroMetricCard
+              title="Time to Hire"
+              value="18 days"
+              subtitle="3 days faster than last month"
+              icon={
+                <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+                  <Circle cx="12" cy="12" r="9" stroke="#F59E0B" strokeWidth={2} />
+                  <Path
+                    d="M12 7V12L15 15"
+                    stroke="#F59E0B"
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                  />
+                </Svg>
+              }
+              gradientColors={['#F59E0B']}
+              trend={{ value: '16%', isPositive: true }}
+            />
           </View>
 
-          <DashboardCard
-            title="Top Candidates"
-            value="87"
-            subtitle="AI-matched candidates for your open positions"
-          />
-        </View>
+          {/* AI-Powered Insights */}
+          <View className="mb-6">
+            <Text className="text-gray-900 text-xl font-bold mb-4">AI Insights</Text>
+            <AIInsightCard
+              title="High-Quality Match Detected"
+              insight="Sarah Johnson's profile shows 94% compatibility with Senior React Developer role. Her skills align perfectly with your requirements."
+              action="Review Profile"
+              onActionPress={() => console.log('Review profile')}
+            />
+          </View>
 
-        {/* Quick Actions */}
-        <View className="px-6 mt-4">
-          <Text className="text-gray-900 text-xl font-bold mb-4">
-            Quick Actions
-          </Text>
+          {/* Recruitment Pipeline */}
+          <View className="mb-6">
+            <View className="flex-row items-center justify-between mb-4">
+              <Text className="text-gray-900 text-xl font-bold">Recruitment Pipeline</Text>
+              <TouchableOpacity>
+                <Text className="text-primary-blue text-sm font-semibold">View All</Text>
+              </TouchableOpacity>
+            </View>
 
-          <ActionCard
-            title="Post a Job"
-            description="Create a new job posting to find talent"
-            icon={
-              <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-                <Path
-                  d="M8 22H16C20 22 22 20 22 16V8C22 4 20 2 16 2H8C4 2 2 4 2 8V16C2 20 4 22 8 22Z"
-                  stroke="#2AD1CC"
-                  strokeWidth={1.5}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <Path
-                  d="M11.9998 8V16M16 12H8"
-                  stroke="#2AD1CC"
-                  strokeWidth={1.5}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </Svg>
-            }
-            onPress={() => console.log('Post Job')}
-          />
-
-          <ActionCard
-            title="Review Applications"
-            description="34 new applications waiting for review"
-            icon={
-              <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-                <Path
-                  d="M9 22H15C20 22 22 20 22 15V9C22 4 20 2 15 2H9C4 2 2 4 2 9V15C2 20 4 22 9 22Z"
-                  stroke="#2AD1CC"
-                  strokeWidth={1.5}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <Path
-                  d="M15.5 8.5H8.5M12 12H8.5M15.5 15.5H8.5"
-                  stroke="#2AD1CC"
-                  strokeWidth={1.5}
-                  strokeMiterlimit={10}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </Svg>
-            }
-            onPress={() => console.log('Review Applications')}
-          />
-
-          <ActionCard
-            title="AI Candidate Match"
-            description="Find the best candidates with AI assistance"
-            icon={
-              <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-                <Path
-                  d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"
-                  stroke="#2AD1CC"
-                  strokeWidth={1.5}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <Path
-                  d="M8.5 12.5L10.5 14.5L15.5 9.5"
-                  stroke="#2AD1CC"
-                  strokeWidth={1.5}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </Svg>
-            }
-            onPress={() => console.log('AI Match')}
-          />
-
-          <ActionCard
-            title="Messages"
-            description="7 new messages from candidates"
-            icon={
-              <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-                <Path
-                  d="M8.5 19H8C4 19 2 18 2 13V8C2 4 4 2 8 2H16C20 2 22 4 22 8V13C22 17 20 19 16 19H15.5C15.19 19 14.89 19.15 14.7 19.4L13.2 21.4C12.54 22.28 11.46 22.28 10.8 21.4L9.3 19.4C9.14 19.18 8.77 19 8.5 19Z"
-                  stroke="#2AD1CC"
-                  strokeWidth={1.5}
-                  strokeMiterlimit={10}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </Svg>
-            }
-            onPress={() => console.log('Messages')}
-          />
-
-          <ActionCard
-            title="Manage Jobs"
-            description="View and edit your current job postings"
-            icon={
-              <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-                <Path
-                  d="M14 2.26953V6.40007C14 7.06007 14.54 8.00953 15.15 8.28953L18.77 10.1395C19.54 10.5095 20.58 10.1095 20.87 9.26953L22.03 5.66007C22.62 3.86007 21.62 2.86953 19.83 2.44953L16.03 1.46953C15.07 1.21953 14 1.55953 14 2.26953Z"
-                  stroke="#2AD1CC"
-                  strokeWidth={1.5}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <Path
-                  d="M2 11.16V15.84C2 16.54 2.29 17.39 2.77 17.82L8.23 22.61C9.13 23.38 10.67 23.38 11.57 22.61L17.03 17.82C17.51 17.39 17.8 16.54 17.8 15.84V11.16C17.8 10.46 17.51 9.61001 17.03 9.18001L11.57 4.39001C10.67 3.62001 9.13 3.62001 8.23 4.39001L2.77 9.18001C2.29 9.61001 2 10.46 2 11.16Z"
-                  stroke="#2AD1CC"
-                  strokeWidth={1.5}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </Svg>
-            }
-            onPress={() => console.log('Manage Jobs')}
-          />
-        </View>
-
-        {/* Logout Button */}
-        {onLogout && (
-          <View className="px-6 mt-4 mb-6">
-            <TouchableOpacity
-              onPress={onLogout}
-              className="bg-white border border-gray-300 rounded-xl py-4 items-center"
+            <View
+              className="bg-white rounded-3xl p-5"
+              style={{
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.08,
+                shadowRadius: 12,
+                elevation: 3
+              }}
             >
-              <Text className="text-gray-700 font-semibold">Logout</Text>
-            </TouchableOpacity>
+              <PipelineStage stage="Applied" count={156} percentage={100} color="#3B82F6" />
+              <PipelineStage stage="Screening" count={89} percentage={57} color="#8B5CF6" />
+              <PipelineStage stage="Interview" count={34} percentage={22} color="#F59E0B" />
+              <PipelineStage stage="Offer" count={12} percentage={8} color="#10B981" />
+            </View>
           </View>
-        )}
+
+          {/* Candidate Quality Score */}
+          <View className="mb-6">
+            <Text className="text-gray-900 text-xl font-bold mb-4">Candidate Quality</Text>
+            <View
+              className="bg-white rounded-3xl p-6 items-center"
+              style={{
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.08,
+                shadowRadius: 12,
+                elevation: 3
+              }}
+            >
+              <QualityScoreGauge score={87} />
+              <Text className="text-gray-600 text-sm text-center mt-4 leading-5">
+                Your candidates are <Text className="font-bold text-green-600">highly qualified</Text>.{'\n'}
+                Keep up the great sourcing!
+              </Text>
+            </View>
+          </View>
+
+          {/* Quick Actions */}
+          <View className="mb-6">
+            <Text className="text-gray-900 text-xl font-bold mb-4">Quick Actions</Text>
+            <View
+              className="bg-white rounded-3xl p-5"
+              style={{
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.08,
+                shadowRadius: 12,
+                elevation: 3
+              }}
+            >
+              <View className="flex-row justify-between">
+                <QuickActionBtn
+                  icon={
+                    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+                      <Path
+                        d="M8 22H16C20 22 22 20 22 16V8C22 4 20 2 16 2H8C4 2 2 4 2 8V16C2 20 4 22 8 22Z"
+                        stroke="#437EF4"
+                        strokeWidth={2}
+                      />
+                      <Path
+                        d="M11.9998 8V16M16 12H8"
+                        stroke="#437EF4"
+                        strokeWidth={2}
+                        strokeLinecap="round"
+                      />
+                    </Svg>
+                  }
+                  label="Post Job"
+                  bgColor="#437EF4"
+                  onPress={() => console.log('Post job')}
+                />
+                <QuickActionBtn
+                  icon={
+                    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+                      <Circle cx="11" cy="11" r="8" stroke="#10B981" strokeWidth={2} />
+                      <Path d="M21 21L16.65 16.65" stroke="#10B981" strokeWidth={2} strokeLinecap="round" />
+                    </Svg>
+                  }
+                  label="Find Talent"
+                  bgColor="#10B981"
+                  onPress={() => console.log('Find talent')}
+                />
+                <QuickActionBtn
+                  icon={
+                    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+                      <Path
+                        d="M8 2V5M16 2V5M3.5 9.09H20.5M21 8.5V17C21 20 19.5 22 16 22H8C4.5 22 3 20 3 17V8.5C3 5.5 4.5 3.5 8 3.5H16C19.5 3.5 21 5.5 21 8.5Z"
+                        stroke="#F59E0B"
+                        strokeWidth={2}
+                        strokeLinecap="round"
+                      />
+                    </Svg>
+                  }
+                  label="Schedule"
+                  bgColor="#F59E0B"
+                  onPress={() => console.log('Schedule')}
+                />
+                <QuickActionBtn
+                  icon={
+                    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+                      <Path
+                        d="M9 22H15C20 22 22 20 22 15V9C22 4 20 2 15 2H9C4 2 2 4 2 9V15C2 20 4 22 9 22Z"
+                        stroke="#8B5CF6"
+                        strokeWidth={2}
+                      />
+                      <Path
+                        d="M15.5 9.75C16.19 10.45 16.19 11.55 15.5 12.25L12.56 15.19C11.86 15.88 10.76 15.88 10.06 15.19L9.5 14.63"
+                        stroke="#8B5CF6"
+                        strokeWidth={2}
+                        strokeLinecap="round"
+                      />
+                    </Svg>
+                  }
+                  label="Analytics"
+                  bgColor="#8B5CF6"
+                  onPress={() => console.log('Analytics')}
+                />
+              </View>
+            </View>
+          </View>
+
+          {/* Recent Activity Feed */}
+          <View className="mb-6">
+            <Text className="text-gray-900 text-xl font-bold mb-4">Recent Activity</Text>
+            <View
+              className="bg-white rounded-3xl p-5"
+              style={{
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.08,
+                shadowRadius: 12,
+                elevation: 3
+              }}
+            >
+              <ActivityItem
+                avatar="SJ"
+                name="Sarah Johnson"
+                action="applied for Senior React Developer"
+                time="2 min ago"
+                statusColor="#10B981"
+              />
+              <ActivityItem
+                avatar="MK"
+                name="Michael Kim"
+                action="completed technical interview"
+                time="15 min ago"
+                statusColor="#3B82F6"
+              />
+              <ActivityItem
+                avatar="EP"
+                name="Emily Parker"
+                action="accepted your offer"
+                time="1 hour ago"
+                statusColor="#F59E0B"
+              />
+              <ActivityItem
+                avatar="DM"
+                name="David Martinez"
+                action="scheduled for final interview"
+                time="3 hours ago"
+                statusColor="#8B5CF6"
+              />
+            </View>
+          </View>
+        </View>
       </ScrollView>
-    </SafeAreaView>
+    </TalentPartnerLayout>
+  ), [activeTab, userName, onLogout]);
+
+  return (
+    <View style={{ flex: 1 }}>
+      {/* Home Tab */}
+      <Animated.View
+        style={{
+          flex: 1,
+          opacity: homeOpacity,
+          position: activeTab === 'home' ? 'relative' : 'absolute',
+          width: '100%',
+          height: '100%',
+        }}
+        pointerEvents={activeTab === 'home' ? 'auto' : 'none'}
+      >
+        {HomeContent}
+      </Animated.View>
+
+      {/* Talent Tab */}
+      <Animated.View
+        style={{
+          flex: 1,
+          opacity: talentOpacity,
+          position: activeTab === 'talent' ? 'relative' : 'absolute',
+          width: '100%',
+          height: '100%',
+        }}
+        pointerEvents={activeTab === 'talent' ? 'auto' : 'none'}
+      >
+        <TalentScreen activeTab={activeTab} onTabChange={handleTabChange} />
+      </Animated.View>
+
+      {/* Reports Tab */}
+      <Animated.View
+        style={{
+          flex: 1,
+          opacity: reportsOpacity,
+          position: activeTab === 'reports' ? 'relative' : 'absolute',
+          width: '100%',
+          height: '100%',
+        }}
+        pointerEvents={activeTab === 'reports' ? 'auto' : 'none'}
+      >
+        <ReportsScreen activeTab={activeTab} onTabChange={handleTabChange} />
+      </Animated.View>
+
+      {/* Profile Tab */}
+      <Animated.View
+        style={{
+          flex: 1,
+          opacity: profileOpacity,
+          position: activeTab === 'profile' ? 'relative' : 'absolute',
+          width: '100%',
+          height: '100%',
+        }}
+        pointerEvents={activeTab === 'profile' ? 'auto' : 'none'}
+      >
+        <ProfileScreen activeTab={activeTab} onTabChange={handleTabChange} onLogout={onLogout} />
+      </Animated.View>
+    </View>
   );
 }

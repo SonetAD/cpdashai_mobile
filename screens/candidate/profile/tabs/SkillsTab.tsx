@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, TextInput, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput } from 'react-native';
 import { DeleteIcon, PlusIcon } from '../../../../components/profile/Icons';
 import {
   useAddSkillMutation,
   useRemoveSkillMutation,
 } from '../../../../services/api';
+import { useAlert } from '../../../../contexts/AlertContext';
 
 interface SkillsTabProps {
   skills: string[];
@@ -18,6 +19,7 @@ export const SkillsTab: React.FC<SkillsTabProps> = ({ skills = [], onUpdateSkill
 
   const [addSkill, { isLoading: isAdding }] = useAddSkillMutation();
   const [removeSkill, { isLoading: isRemoving }] = useRemoveSkillMutation();
+  const { showAlert } = useAlert();
 
   // Update local state when props change
   useEffect(() => {
@@ -26,12 +28,22 @@ export const SkillsTab: React.FC<SkillsTabProps> = ({ skills = [], onUpdateSkill
 
   const handleAddSkill = async () => {
     if (!newSkill.trim()) {
-      Alert.alert('Error', 'Please enter a skill');
+      showAlert({
+        type: 'error',
+        title: 'Error',
+        message: 'Please enter a skill',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
       return;
     }
 
     if (skillsList.includes(newSkill.trim())) {
-      Alert.alert('Error', 'This skill already exists');
+      showAlert({
+        type: 'error',
+        title: 'Error',
+        message: 'This skill already exists',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
       return;
     }
 
@@ -48,21 +60,37 @@ export const SkillsTab: React.FC<SkillsTabProps> = ({ skills = [], onUpdateSkill
           onUpdateSkills(updatedSkills);
         }
 
-        Alert.alert('Success', result.addSkill.message);
+        showAlert({
+          type: 'success',
+          title: 'Success',
+          message: result.addSkill.message,
+          buttons: [{ text: 'OK', style: 'default' }],
+        });
       } else {
-        Alert.alert('Error', result.addSkill.message);
+        showAlert({
+          type: 'error',
+          title: 'Error',
+          message: result.addSkill.message,
+          buttons: [{ text: 'OK', style: 'default' }],
+        });
       }
     } catch (error) {
       console.error('Failed to add skill:', error);
-      Alert.alert('Error', 'Failed to add skill. Please try again.');
+      showAlert({
+        type: 'error',
+        title: 'Error',
+        message: 'Failed to add skill. Please try again.',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
     }
   };
 
   const handleDeleteSkill = async (skillToDelete: string) => {
-    Alert.alert(
-      'Delete Skill',
-      `Are you sure you want to remove "${skillToDelete}"?`,
-      [
+    showAlert({
+      type: 'warning',
+      title: 'Delete Skill',
+      message: `Are you sure you want to remove "${skillToDelete}"?`,
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
@@ -79,18 +107,33 @@ export const SkillsTab: React.FC<SkillsTabProps> = ({ skills = [], onUpdateSkill
                   onUpdateSkills(updatedSkills);
                 }
 
-                Alert.alert('Success', result.removeSkill.message);
+                showAlert({
+                  type: 'success',
+                  title: 'Success',
+                  message: result.removeSkill.message,
+                  buttons: [{ text: 'OK', style: 'default' }],
+                });
               } else {
-                Alert.alert('Error', result.removeSkill.message);
+                showAlert({
+                  type: 'error',
+                  title: 'Error',
+                  message: result.removeSkill.message,
+                  buttons: [{ text: 'OK', style: 'default' }],
+                });
               }
             } catch (error) {
               console.error('Failed to remove skill:', error);
-              Alert.alert('Error', 'Failed to remove skill. Please try again.');
+              showAlert({
+                type: 'error',
+                title: 'Error',
+                message: 'Failed to remove skill. Please try again.',
+                buttons: [{ text: 'OK', style: 'default' }],
+              });
             }
           },
         },
-      ]
-    );
+      ],
+    });
   };
 
   return (

@@ -27,7 +27,7 @@ export interface ErrorType {
 }
 
 export interface RegisterCandidateResponse {
-  createCandidate: SuccessType | ErrorType;
+  createCandidate: LoginSuccessType | ErrorType;
 }
 
 export interface RegisterRecruiterInput {
@@ -36,10 +36,16 @@ export interface RegisterRecruiterInput {
   passwordConfirm: string;
   phoneNumber?: string;
   firstName?: string;
+  lastName?: string;
+  organizationName: string;
+  organizationType: 'employer' | 'university' | 'agency';
+  subRole: string;
+  position?: string;
+  linkedinUrl?: string;
 }
 
 export interface RegisterRecruiterResponse {
-  createRecruiter: SuccessType | ErrorType;
+  createRecruiter: LoginSuccessType | ErrorType;
 }
 
 export interface LoginInput {
@@ -139,15 +145,8 @@ export interface UpdateEducationInput {
   description?: string;
 }
 
-export interface UpdateEducationSuccessType {
-  __typename: 'UpdateEducationSuccessType';
-  education: Education;
-  message: string;
-  success: boolean;
-}
-
 export interface UpdateEducationResponse {
-  updateEducation: UpdateEducationSuccessType | ErrorType;
+  updateEducation: SuccessType | ErrorType;
 }
 
 export interface DeleteEducationInput {
@@ -284,6 +283,36 @@ export interface GetCandidateProfileResponse {
   candidate: GetCandidateProfileSuccessType | ErrorType;
 }
 
+// Recruiter Profile types
+export interface RecruiterType {
+  __typename: 'RecruiterType';
+  id: string;
+  user: User & {
+    fullName?: string;
+    bio?: string;
+    profilePictureUrl?: string;
+    dateJoined?: string;
+    updatedAt?: string;
+  };
+  organizationName?: string;
+  organizationType?: string;
+  subRole?: string;
+  position?: string;
+  companyName?: string;
+  companyWebsite?: string;
+  linkedinUrl?: string;
+  industries?: string[];
+  specializations?: string[];
+  isVerified?: boolean;
+  isActive?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface GetRecruiterProfileResponse {
+  recruiter: RecruiterType | ErrorType;
+}
+
 // Skills management types
 export interface AddSkillInput {
   skill: string;
@@ -345,6 +374,335 @@ export interface ResumeUploadResponse {
   uploadAndParseResume: SuccessType | ErrorType;
 }
 
+// CV Builder types
+export interface ResumeEducation {
+  degree: string;
+  institution: string;
+  location?: string;
+  startDate: string;
+  endDate?: string;
+  gpa?: string;
+  description?: string;
+}
+
+export interface ResumeExperience {
+  title: string;
+  company: string;
+  location?: string;
+  startDate: string;
+  endDate?: string;
+  current?: boolean;
+  responsibilities: string[];
+}
+
+export interface ResumeProject {
+  name: string;
+  description: string;
+  technologies: string[];
+  startDate?: string;
+  endDate?: string;
+  url?: string;
+  highlights: string[];
+}
+
+export interface ResumeSkill {
+  category: string;
+  items: string[];
+}
+
+export interface ResumeCertificate {
+  name: string;
+  issuer: string;
+  date: string;
+  credentialId?: string;
+  url?: string;
+}
+
+export interface ResumeAchievement {
+  title: string;
+  description: string;
+  date?: string;
+}
+
+export interface OtherLink {
+  name: string;
+  url: string;
+}
+
+export interface Resume {
+  id: string;
+  fullName: string;
+  email: string;
+  phone?: string;
+  location?: string;
+  linkedinUrl?: string;
+  githubUrl?: string;
+  portfolioUrl?: string;
+  otherLinks?: OtherLink[];
+  professionalSummary?: string;
+  atsScore?: number;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  errorMessage?: string;
+  generatedResumeUrl?: string;
+  createdAt: string;
+  updatedAt: string;
+  education?: ResumeEducation[];
+  experience?: ResumeExperience[];
+  projects?: ResumeProject[];
+  skills?: ResumeSkill[];
+  certificates?: ResumeCertificate[];
+  achievements?: ResumeAchievement[];
+  hobbiesList?: string[];
+}
+
+export interface CreateResumeInput {
+  fullName: string;
+  email: string;
+  phone?: string;
+  location?: string;
+  linkedinUrl?: string;
+  githubUrl?: string;
+  portfolioUrl?: string;
+  otherLinks?: OtherLink[];
+  professionalSummary?: string;
+  education?: ResumeEducation[];
+  experience?: ResumeExperience[];
+  projects?: ResumeProject[];
+  skills?: ResumeSkill[];
+  certificates?: ResumeCertificate[];
+  achievements?: ResumeAchievement[];
+  hobbies?: string[];
+}
+
+export interface UpdateResumeInput {
+  resumeId: string;
+  fullName?: string;
+  email?: string;
+  phone?: string;
+  location?: string;
+  linkedinUrl?: string;
+  githubUrl?: string;
+  portfolioUrl?: string;
+  otherLinks?: OtherLink[];
+  professionalSummary?: string;
+  education?: ResumeEducation[];
+  experience?: ResumeExperience[];
+  projects?: ResumeProject[];
+  skills?: ResumeSkill[];
+  certificates?: ResumeCertificate[];
+  achievements?: ResumeAchievement[];
+  hobbies?: string[];
+}
+
+export interface ResumeBuilderSuccessType {
+  __typename: 'ResumeBuilderSuccessType';
+  success: boolean;
+  message: string;
+  resume: Resume;
+}
+
+export interface CreateResumeResponse {
+  createResume: ResumeBuilderSuccessType | ErrorType;
+}
+
+export interface UpdateResumeResponse {
+  updateResume: ResumeBuilderSuccessType | ErrorType;
+}
+
+export interface DeleteResumeResponse {
+  deleteResume: SuccessType | ErrorType;
+}
+
+export interface ParseAndCreateResumeInput {
+  fileName: string;
+  fileData: string;
+}
+
+export interface ParseAndCreateResumeResponse {
+  parseAndCreateResume: ResumeBuilderSuccessType | ErrorType;
+}
+
+export interface GenerateProfessionalSummaryInput {
+  resumeId: string;
+  jobTitle?: string;
+  experienceYears?: number;
+}
+
+export interface GenerateProfessionalSummaryResponse {
+  generateProfessionalSummary: ResumeBuilderSuccessType | ErrorType;
+}
+
+export interface ImproveContentInput {
+  resumeId: string;
+  contentType: string;
+  content: string;
+  context?: string;
+}
+
+export interface ImproveContentSuccessResponse {
+  success: boolean;
+  improved_content: string;
+}
+
+export interface ImproveContentResponse {
+  improveContent: ImproveContentSuccessResponse | ErrorType;
+}
+
+export interface AddKeywordsInput {
+  resumeId: string;
+  targetJobTitle: string;
+  industry?: string;
+}
+
+export interface AddKeywordsResponse {
+  addKeywords: ResumeBuilderSuccessType | ErrorType;
+}
+
+export interface ExportResumePdfResponse {
+  exportResumePdf: SuccessType | ErrorType;
+}
+
+export interface MyResumesResponse {
+  myResumes: Resume[];
+}
+
+export interface ResumeByIdResponse {
+  resumeById: Resume;
+}
+
+export interface ResumeStats {
+  total_resumes: number;
+  completed: number;
+  pending: number;
+  processing: number;
+  failed: number;
+  average_ats_score: number;
+}
+
+export interface ResumeStatsResponse {
+  resumeStats: ResumeStats;
+}
+
+export interface SearchResumesInput {
+  query: string;
+  limit?: number;
+}
+
+export interface SearchResumesResponse {
+  searchResumes: Resume[];
+}
+
+// Resume Analysis REST API types
+export interface AnalyzeResumeInput {
+  resume: File | Blob;
+  job_description?: string;
+}
+
+export interface AnalyzeResumeResponse {
+  success: boolean;
+  overall_score: number;
+  job_match_score?: number;
+  strong_points: string[];
+  weak_points: string[];
+  matching_skills?: string[];
+  missing_skills?: string[];
+  detailed_feedback: string;
+}
+
+// Subscription types
+export interface SubscriptionPlan {
+  name: string;
+  planKey: string;
+  price: number;
+  stripePriceId?: string; // Optional - backend might not return this
+  aiResumeParses: number;
+  aiContentImprovements: number;
+  features: string[];
+}
+
+export interface AvailablePlansResponse {
+  availablePlans: {
+    plans: SubscriptionPlan[];
+  };
+}
+
+export interface SubscriptionStatus {
+  hasSubscription: boolean;
+  isActive: boolean;
+  plan: string;
+  status: string;
+  canUseAiFeatures: boolean;
+  aiResumeParsesRemaining: number | null;
+  aiContentImprovementsRemaining: number | null;
+  currentPeriodEnd: string | null;
+  message: string;
+}
+
+export interface SubscriptionStatusResponse {
+  subscriptionStatus: SubscriptionStatus;
+}
+
+export interface Subscription {
+  id: string;
+  plan: string;
+  status: string;
+  isActive: boolean;
+  currentPeriodStart: string;
+  currentPeriodEnd: string;
+  aiResumeParsesUsed: number;
+  aiResumeParsesLimit: number;
+  aiContentImprovementsUsed: number;
+  aiContentImprovementsLimit: number;
+  lastPaymentDate: string | null;
+  lastPaymentAmount: number | null;
+  nextPaymentDate: string | null;
+}
+
+export interface MySubscriptionResponse {
+  mySubscription: Subscription | null;
+}
+
+export interface CreateCheckoutSessionInput {
+  priceId: string;
+  successUrl: string;
+  cancelUrl: string;
+  trialPeriodDays?: number;
+}
+
+export interface CreateCheckoutSessionResponse {
+  createCheckoutSession: {
+    success: boolean;
+    message: string;
+    checkoutUrl: string | null;
+    sessionId: string | null;
+  };
+}
+
+export interface CancelSubscriptionInput {
+  cancelAtPeriodEnd: boolean;
+  reason?: string;
+}
+
+export interface CancelSubscriptionResponse {
+  cancelSubscription: SuccessType | ErrorType;
+}
+
+export interface ReactivateSubscriptionResponse {
+  reactivateSubscription: SuccessType | ErrorType;
+}
+
+export interface CreatePortalSessionResponse {
+  createPortalSession: {
+    success: boolean;
+    message: string;
+    portalUrl: string | null;
+  };
+}
+
+export interface StripePublicKeyResponse {
+  stripePublicKey: string;
+}
+
 // Create the API
 export const api = createApi({
   reducerPath: 'api',
@@ -382,7 +740,7 @@ export const api = createApi({
       return headers;
     },
   }),
-  tagTypes: ['Auth', 'Profile'],
+  tagTypes: ['Auth', 'Profile', 'Resume', 'Subscription'],
   endpoints: (builder) => ({
     registerCandidate: builder.mutation<RegisterCandidateResponse, RegisterCandidateInput>({
       query: (input) => {
@@ -390,10 +748,22 @@ export const api = createApi({
           query: `
             mutation CreateCandidate($input: RegisterAsCandidateInput!) {
               createCandidate(input: $input) {
-                ... on SuccessType {
+                ... on LoginSuccessType {
                   __typename
                   message
                   success
+                  accessToken
+                  refreshToken
+                  role
+                  user {
+                    id
+                    email
+                    phoneNumber
+                    firstName
+                    lastName
+                    role
+                    isVerified
+                  }
                 }
                 ... on ErrorType {
                   __typename
@@ -405,7 +775,7 @@ export const api = createApi({
           `,
           variables: { input },
         };
-        console.log('Making request to:', `${API_URL}/graphql/`);
+        console.log('Making candidate registration request to:', `${API_URL}/graphql/`);
         console.log('Request body:', JSON.stringify(body, null, 2));
         return {
           url: '/graphql/',
@@ -414,8 +784,15 @@ export const api = createApi({
         };
       },
       transformResponse: (response: any) => {
-        console.log('Response received:', response);
+        console.log('Candidate registration response received:', response);
         return response.data;
+      },
+      transformErrorResponse: (response: any, meta, arg) => {
+        console.log('Error response:', response);
+        console.log('Error status:', response?.status);
+        console.log('Error data:', JSON.stringify(response?.data));
+        console.log('Error meta:', meta);
+        return response;
       },
       invalidatesTags: ['Auth'],
     }),
@@ -425,10 +802,22 @@ export const api = createApi({
           query: `
             mutation CreateRecruiter($input: RegisterAsRecruiterInput!) {
               createRecruiter(input: $input) {
-                ... on SuccessType {
+                ... on LoginSuccessType {
                   __typename
                   message
                   success
+                  accessToken
+                  refreshToken
+                  role
+                  user {
+                    id
+                    email
+                    phoneNumber
+                    firstName
+                    lastName
+                    role
+                    isVerified
+                  }
                 }
                 ... on ErrorType {
                   __typename
@@ -647,6 +1036,7 @@ export const api = createApi({
         console.log('AddEducation response received:', response);
         return response.data;
       },
+      invalidatesTags: ['Profile'],
     }),
     updateEducation: builder.mutation<UpdateEducationResponse, UpdateEducationInput>({
       query: (input) => {
@@ -654,19 +1044,10 @@ export const api = createApi({
           query: `
             mutation UpdateEducation($input: UpdateEducationInput!) {
               updateEducation(input: $input) {
-                ... on UpdateEducationSuccessType {
+                ... on SuccessType {
                   __typename
                   success
                   message
-                  education {
-                    id
-                    degree
-                    institution
-                    fieldOfStudy
-                    startDate
-                    endDate
-                    grade
-                  }
                 }
                 ... on ErrorType {
                   __typename
@@ -690,6 +1071,7 @@ export const api = createApi({
         console.log('UpdateEducation response received:', response);
         return response.data;
       },
+      invalidatesTags: ['Profile'],
     }),
     deleteEducation: builder.mutation<DeleteEducationResponse, DeleteEducationInput>({
       query: ({ index }) => {
@@ -724,6 +1106,7 @@ export const api = createApi({
         console.log('DeleteEducation response received:', response);
         return response.data;
       },
+      invalidatesTags: ['Profile'],
     }),
     // Experience mutations
     addExperience: builder.mutation<AddExperienceResponse, AddExperienceInput>({
@@ -837,40 +1220,42 @@ export const api = createApi({
         const body = {
           query: `
             query GetMyProfile {
-              myCandidateProfile {
-                id
-                user {
+              myProfile {
+                ... on CandidateType {
                   id
-                  email
-                  firstName
-                  lastName
-                  fullName
-                  phoneNumber
-                  bio
-                  role
-                  isVerified
-                  profilePictureUrl
-                  dateJoined
+                  createdAt
+                  education
+                  expectedSalary
+                  experience
+                  experienceLevel
+                  githubUrl
+                  hobbies
+                  isActive
+                  linkedinUrl
+                  lookingForJob
+                  portfolioUrl
+                  preferredLocations
+                  preferredLocationsList
+                  resumeUrl
+                  skills
+                  title
                   updatedAt
+                  user {
+                    bio
+                    dateJoined
+                    email
+                    firstName
+                    fullName
+                    id
+                    isVerified
+                    lastName
+                    phoneNumber
+                    profilePictureUrl
+                    role
+                    updatedAt
+                  }
+                  yearsOfExperience
                 }
-                title
-                experienceLevel
-                yearsOfExperience
-                skills
-                hobbies
-                education
-                experience
-                portfolioUrl
-                githubUrl
-                linkedinUrl
-                resumeUrl
-                lookingForJob
-                expectedSalary
-                preferredLocations
-                preferredLocationsList
-                isActive
-                createdAt
-                updatedAt
               }
             }
           `,
@@ -884,9 +1269,9 @@ export const api = createApi({
       },
       transformResponse: (response: any) => {
         console.log('GetCandidateProfile response received:', response);
-        if (response.data?.myCandidateProfile) {
+        if (response.data?.myProfile) {
           // Parse JSON fields if they're strings
-          const profile = response.data.myCandidateProfile;
+          const profile = response.data.myProfile;
           if (typeof profile.education === 'string') {
             profile.education = profile.education.trim() ? JSON.parse(profile.education) : [];
             console.log('Parsed education data:', profile.education);
@@ -911,6 +1296,69 @@ export const api = createApi({
             hobbiesCount: profile.hobbies?.length || 0,
           });
           return { candidate: { __typename: 'CandidateType', ...profile } };
+        }
+        return response.data;
+      },
+      providesTags: ['Profile'],
+    }),
+    // Get recruiter profile
+    getRecruiterProfile: builder.query<GetRecruiterProfileResponse, void>({
+      query: () => {
+        const body = {
+          query: `
+            query GetMyProfile {
+              myProfile {
+                ... on RecruiterType {
+                  id
+                  organizationName
+                  organizationType
+                  subRole
+                  position
+                  companyName
+                  companyWebsite
+                  linkedinUrl
+                  industries
+                  specializations
+                  isVerified
+                  isActive
+                  createdAt
+                  updatedAt
+                  user {
+                    id
+                    email
+                    firstName
+                    lastName
+                    phoneNumber
+                    bio
+                    role
+                    isVerified
+                    fullName
+                    profilePictureUrl
+                  }
+                }
+              }
+            }
+          `,
+        };
+        console.log('Making getRecruiterProfile request to:', `${API_URL}/graphql/`);
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('GetRecruiterProfile response received:', response);
+        if (response.data?.myProfile) {
+          const profile = response.data.myProfile;
+          // Parse JSON fields if they're strings
+          if (typeof profile.industries === 'string') {
+            profile.industries = profile.industries.trim() ? JSON.parse(profile.industries) : [];
+          }
+          if (typeof profile.specializations === 'string') {
+            profile.specializations = profile.specializations.trim() ? JSON.parse(profile.specializations) : [];
+          }
+          return { recruiter: { __typename: 'RecruiterType', ...profile } };
         }
         return response.data;
       },
@@ -1186,6 +1634,847 @@ export const api = createApi({
       },
       invalidatesTags: ['Profile'],
     }),
+    // CV Builder mutations
+    createResume: builder.mutation<CreateResumeResponse, CreateResumeInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation CreateResume($input: CreateResumeInput!) {
+              createResume(input: $input) {
+                ... on ResumeBuilderSuccessType {
+                  __typename
+                  success
+                  message
+                  resume {
+                    id
+                    fullName
+                    email
+                    phone
+                    location
+                    linkedinUrl
+                    githubUrl
+                    portfolioUrl
+                    professionalSummary
+                    atsScore
+                    status
+                    createdAt
+                    updatedAt
+                    education {
+                      degree
+                      institution
+                      location
+                      startDate
+                      endDate
+                      gpa
+                      description
+                    }
+                    experience {
+                      title
+                      company
+                      location
+                      startDate
+                      endDate
+                      current
+                      responsibilities
+                    }
+                    projects {
+                      name
+                      description
+                      technologies
+                      startDate
+                      endDate
+                      url
+                      highlights
+                    }
+                    skills {
+                      category
+                      items
+                    }
+                    certificates {
+                      name
+                      issuer
+                      date
+                      credentialId
+                      url
+                    }
+                    achievements {
+                      title
+                      description
+                      date
+                    }
+                    hobbiesList
+                  }
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                  errors {
+                    field
+                    message
+                  }
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        console.log('Making createResume request to:', `${API_URL}/graphql/`);
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('CreateResume response received:', response);
+        if (response.data?.createResume?.__typename === 'ResumeBuilderSuccessType') {
+          console.log('✅ Resume created with details:', {
+            id: response.data.createResume.resume.id,
+            fullName: response.data.createResume.resume.fullName,
+            email: response.data.createResume.resume.email,
+            // Check if resume has owner/user field
+            owner: response.data.createResume.resume.owner || 'NOT RETURNED',
+            user: response.data.createResume.resume.user || 'NOT RETURNED',
+          });
+        }
+        return response.data;
+      },
+      invalidatesTags: [{ type: 'Resume', id: 'LIST' }],
+    }),
+    updateResume: builder.mutation<UpdateResumeResponse, UpdateResumeInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation UpdateResume($input: UpdateResumeInput!) {
+              updateResume(input: $input) {
+                ... on ResumeBuilderSuccessType {
+                  __typename
+                  success
+                  message
+                  resume {
+                    id
+                    fullName
+                    email
+                    phone
+                    atsScore
+                    updatedAt
+                  }
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        console.log('Making updateResume request to:', `${API_URL}/graphql/`);
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('UpdateResume response received:', response);
+        return response.data;
+      },
+      invalidatesTags: (result, error, { resumeId }) => [
+        { type: 'Resume', id: resumeId },
+        { type: 'Resume', id: 'LIST' },
+      ],
+    }),
+    deleteResume: builder.mutation<DeleteResumeResponse, string>({
+      query: (resumeId) => {
+        const body = {
+          query: `
+            mutation DeleteResume($resumeId: String!) {
+              deleteResume(resumeId: $resumeId) {
+                ... on SuccessType {
+                  __typename
+                  success
+                  message
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                }
+              }
+            }
+          `,
+          variables: { resumeId },
+        };
+        console.log('Making deleteResume request to:', `${API_URL}/graphql/`);
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('DeleteResume response received:', response);
+        return response.data;
+      },
+      invalidatesTags: (result, error, resumeId) => [
+        { type: 'Resume', id: resumeId },
+        { type: 'Resume', id: 'LIST' },
+      ],
+    }),
+    parseAndCreateResume: builder.mutation<ParseAndCreateResumeResponse, ParseAndCreateResumeInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation ParseAndCreateResume($fileName: String!, $fileData: String!) {
+              parseAndCreateResume(fileName: $fileName, fileData: $fileData) {
+                ... on ResumeBuilderSuccessType {
+                  __typename
+                  success
+                  message
+                  resume {
+                    id
+                    fullName
+                    email
+                    phone
+                    location
+                    linkedinUrl
+                    githubUrl
+                    portfolioUrl
+                    professionalSummary
+                    atsScore
+                    education {
+                      degree
+                      institution
+                      location
+                      startDate
+                      endDate
+                      gpa
+                    }
+                    experience {
+                      title
+                      company
+                      location
+                      startDate
+                      endDate
+                      current
+                      responsibilities
+                    }
+                    projects {
+                      name
+                      description
+                      technologies
+                      highlights
+                    }
+                    skills {
+                      category
+                      items
+                    }
+                    certificates {
+                      name
+                      issuer
+                      date
+                    }
+                    achievements {
+                      title
+                      description
+                    }
+                    hobbiesList
+                  }
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                  errors {
+                    field
+                    message
+                  }
+                }
+              }
+            }
+          `,
+          variables: input,
+        };
+        console.log('Making parseAndCreateResume request to:', `${API_URL}/graphql/`);
+        console.log('Parse input:', { fileName: input.fileName, fileDataLength: input.fileData.length });
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('ParseAndCreateResume response received:', response);
+        return response.data;
+      },
+      invalidatesTags: [{ type: 'Resume', id: 'LIST' }, 'Profile'],
+    }),
+    generateProfessionalSummary: builder.mutation<GenerateProfessionalSummaryResponse, GenerateProfessionalSummaryInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation GenerateSummary($input: GenerateProfessionalSummaryInput!) {
+              generateProfessionalSummary(input: $input) {
+                ... on ResumeBuilderSuccessType {
+                  __typename
+                  success
+                  message
+                  resume {
+                    id
+                    professionalSummary
+                  }
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        console.log('Making generateProfessionalSummary request to:', `${API_URL}/graphql/`);
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('GenerateProfessionalSummary response received:', response);
+        return response.data;
+      },
+      invalidatesTags: (result, error, { resumeId }) => [
+        { type: 'Resume', id: resumeId },
+        { type: 'Resume', id: 'LIST' },
+      ],
+    }),
+    improveContent: builder.mutation<ImproveContentResponse, ImproveContentInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation ImproveContent($input: ImproveContentInput!) {
+              improveContent(input: $input)
+            }
+          `,
+          variables: { input },
+        };
+        console.log('Making improveContent request to:', `${API_URL}/graphql/`);
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('ImproveContent response received:', response);
+        return response.data;
+      },
+    }),
+    addKeywords: builder.mutation<AddKeywordsResponse, AddKeywordsInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation AddKeywords($input: AddKeywordsInput!) {
+              addKeywords(input: $input) {
+                ... on ResumeBuilderSuccessType {
+                  __typename
+                  success
+                  message
+                  resume {
+                    id
+                    skills {
+                      category
+                      items
+                    }
+                  }
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        console.log('Making addKeywords request to:', `${API_URL}/graphql/`);
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('AddKeywords response received:', response);
+        return response.data;
+      },
+      invalidatesTags: (result, error, { resumeId }) => [
+        { type: 'Resume', id: resumeId },
+        { type: 'Resume', id: 'LIST' },
+      ],
+    }),
+    exportResumePdf: builder.mutation<ExportResumePdfResponse, string>({
+      query: (resumeId) => {
+        const body = {
+          query: `
+            mutation ExportPDF($resumeId: String!) {
+              exportResumePdf(resumeId: $resumeId) {
+                ... on SuccessType {
+                  __typename
+                  success
+                  message
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                }
+              }
+            }
+          `,
+          variables: { resumeId },
+        };
+        console.log('Making exportResumePdf request to:', `${API_URL}/graphql/`);
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('ExportResumePdf response received:', response);
+        return response.data;
+      },
+      invalidatesTags: (result, error, resumeId) => [
+        { type: 'Resume', id: resumeId },
+        { type: 'Resume', id: 'LIST' },
+      ],
+    }),
+    // CV Builder queries
+    getMyResumes: builder.query<MyResumesResponse, void>({
+      query: () => {
+        const body = {
+          query: `
+            query MyResumes {
+              myResumes {
+                id
+                fullName
+                email
+                phone
+                location
+                professionalSummary
+                atsScore
+                status
+                createdAt
+                updatedAt
+                generatedResumeUrl
+                education {
+                  degree
+                  institution
+                  startDate
+                  endDate
+                }
+                experience {
+                  title
+                  company
+                  startDate
+                  endDate
+                  current
+                }
+                skills {
+                  category
+                  items
+                }
+              }
+            }
+          `,
+        };
+        console.log('Making getMyResumes request to:', `${API_URL}/graphql/`);
+        console.log('📤 Full GraphQL query:', body.query);
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('GetMyResumes response received:', response);
+        console.log('📊 GetMyResumes detailed:', {
+          hasData: !!response.data,
+          hasMyResumes: !!response.data?.myResumes,
+          resumeCount: response.data?.myResumes?.length || 0,
+          resumeIds: response.data?.myResumes?.map((r: any) => r.id) || [],
+          statuses: response.data?.myResumes?.map((r: any) => ({
+            id: r.id,
+            name: r.fullName,
+            status: r.status,
+            hasUrl: !!r.generatedResumeUrl,
+            url: r.generatedResumeUrl || 'none'
+          })) || [],
+        });
+        return response.data;
+      },
+      providesTags: (result) =>
+        result?.myResumes
+          ? [
+              ...result.myResumes.map(({ id }) => ({ type: 'Resume' as const, id })),
+              { type: 'Resume', id: 'LIST' },
+            ]
+          : [{ type: 'Resume', id: 'LIST' }],
+      keepUnusedDataFor: 0, // Don't cache, always fetch fresh data
+    }),
+    getResumeById: builder.query<ResumeByIdResponse, string>({
+      query: (resumeId) => {
+        const body = {
+          query: `
+            query GetResume($resumeId: String!) {
+              resumeById(resumeId: $resumeId) {
+                id
+                fullName
+                email
+                phone
+                location
+                linkedinUrl
+                githubUrl
+                portfolioUrl
+                professionalSummary
+                atsScore
+                status
+                errorMessage
+                generatedResumeUrl
+                createdAt
+                updatedAt
+                otherLinks {
+                  name
+                  url
+                }
+                education {
+                  degree
+                  institution
+                  location
+                  startDate
+                  endDate
+                  gpa
+                  description
+                }
+                experience {
+                  title
+                  company
+                  location
+                  startDate
+                  endDate
+                  current
+                  responsibilities
+                }
+                projects {
+                  name
+                  description
+                  technologies
+                  startDate
+                  endDate
+                  url
+                  highlights
+                }
+                skills {
+                  category
+                  items
+                }
+                certificates {
+                  name
+                  issuer
+                  date
+                  credentialId
+                  url
+                }
+                achievements {
+                  title
+                  description
+                  date
+                }
+                hobbiesList
+              }
+            }
+          `,
+          variables: { resumeId },
+        };
+        console.log('Making getResumeById request to:', `${API_URL}/graphql/`);
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('GetResumeById response received:', response);
+        return response.data;
+      },
+      providesTags: ['Resume'],
+    }),
+    getResumeStats: builder.query<ResumeStatsResponse, void>({
+      query: () => {
+        const body = {
+          query: `
+            query ResumeStats {
+              resumeStats
+            }
+          `,
+        };
+        console.log('Making getResumeStats request to:', `${API_URL}/graphql/`);
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('GetResumeStats response received:', response);
+        return response.data;
+      },
+      providesTags: ['Resume'],
+    }),
+    searchResumes: builder.query<SearchResumesResponse, SearchResumesInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            query SearchResumes($query: String!, $limit: Int) {
+              searchResumes(query: $query, limit: $limit) {
+                id
+                fullName
+                email
+                professionalSummary
+                atsScore
+                createdAt
+              }
+            }
+          `,
+          variables: input,
+        };
+        console.log('Making searchResumes request to:', `${API_URL}/graphql/`);
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('SearchResumes response received:', response);
+        return response.data;
+      },
+      providesTags: ['Resume'],
+    }),
+    // Subscription endpoints
+    getStripePublicKey: builder.query<StripePublicKeyResponse, void>({
+      query: () => {
+        const body = {
+          query: `
+            query GetStripePublicKey {
+              stripePublicKey
+            }
+          `,
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+    }),
+    getAvailablePlans: builder.query<AvailablePlansResponse, void>({
+      query: () => {
+        const body = {
+          query: `
+            query GetAvailablePlans {
+              availablePlans {
+                plans {
+                  name
+                  planKey
+                  price
+                  stripePriceId
+                  aiResumeParses
+                  aiContentImprovements
+                  features
+                }
+              }
+            }
+          `,
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      providesTags: ['Subscription'],
+    }),
+    checkSubscriptionStatus: builder.query<SubscriptionStatusResponse, void>({
+      query: () => {
+        const body = {
+          query: `
+            query CheckSubscriptionStatus {
+              subscriptionStatus {
+                hasSubscription
+                isActive
+                plan
+                status
+                canUseAiFeatures
+                aiResumeParsesRemaining
+                aiContentImprovementsRemaining
+                currentPeriodEnd
+                message
+              }
+            }
+          `,
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      providesTags: ['Subscription'],
+    }),
+    getMySubscription: builder.query<MySubscriptionResponse, void>({
+      query: () => {
+        const body = {
+          query: `
+            query GetMySubscription {
+              mySubscription {
+                id
+                plan
+                status
+                isActive
+                currentPeriodStart
+                currentPeriodEnd
+                aiResumeParsesUsed
+                aiResumeParsesLimit
+                aiContentImprovementsUsed
+                aiContentImprovementsLimit
+                lastPaymentDate
+                lastPaymentAmount
+                nextPaymentDate
+              }
+            }
+          `,
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      providesTags: ['Subscription'],
+    }),
+    createCheckoutSession: builder.mutation<CreateCheckoutSessionResponse, CreateCheckoutSessionInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation CreateCheckoutSession($input: CreateCheckoutSessionInput!) {
+              createCheckoutSession(input: $input) {
+                success
+                message
+                checkoutUrl
+                sessionId
+              }
+            }
+          `,
+          variables: { input },
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      invalidatesTags: ['Subscription'],
+    }),
+    cancelSubscription: builder.mutation<CancelSubscriptionResponse, CancelSubscriptionInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation CancelSubscription($input: CancelSubscriptionInput!) {
+              cancelSubscription(input: $input) {
+                ... on SuccessType {
+                  success
+                  message
+                }
+                ... on ErrorType {
+                  success
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      invalidatesTags: ['Subscription'],
+    }),
+    reactivateSubscription: builder.mutation<ReactivateSubscriptionResponse, void>({
+      query: () => {
+        const body = {
+          query: `
+            mutation ReactivateSubscription {
+              reactivateSubscription {
+                ... on SuccessType {
+                  success
+                  message
+                }
+                ... on ErrorType {
+                  success
+                  message
+                }
+              }
+            }
+          `,
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      invalidatesTags: ['Subscription'],
+    }),
+    createPortalSession: builder.mutation<CreatePortalSessionResponse, string>({
+      query: (returnUrl) => {
+        const body = {
+          query: `
+            mutation CreatePortalSession($returnUrl: String!) {
+              createPortalSession(returnUrl: $returnUrl) {
+                success
+                message
+                portalUrl
+              }
+            }
+          `,
+          variables: { returnUrl },
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+    }),
   }),
 });
 
@@ -1203,6 +2492,7 @@ export const {
   useUpdateExperienceMutation,
   useDeleteExperienceMutation,
   useGetCandidateProfileQuery,
+  useGetRecruiterProfileQuery,
   useAddSkillMutation,
   useRemoveSkillMutation,
   useUpdateSkillsMutation,
@@ -1210,4 +2500,26 @@ export const {
   useRemoveHobbyMutation,
   useUpdateHobbiesMutation,
   useUploadAndParseResumeMutation,
+  // CV Builder hooks
+  useCreateResumeMutation,
+  useUpdateResumeMutation,
+  useDeleteResumeMutation,
+  useParseAndCreateResumeMutation,
+  useGenerateProfessionalSummaryMutation,
+  useImproveContentMutation,
+  useAddKeywordsMutation,
+  useExportResumePdfMutation,
+  useGetMyResumesQuery,
+  useGetResumeByIdQuery,
+  useGetResumeStatsQuery,
+  useSearchResumesQuery,
+  // Subscription hooks
+  useGetStripePublicKeyQuery,
+  useGetAvailablePlansQuery,
+  useCheckSubscriptionStatusQuery,
+  useGetMySubscriptionQuery,
+  useCreateCheckoutSessionMutation,
+  useCancelSubscriptionMutation,
+  useReactivateSubscriptionMutation,
+  useCreatePortalSessionMutation,
 } = api;

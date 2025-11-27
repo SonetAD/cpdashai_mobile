@@ -110,7 +110,7 @@ export default function CreateAccountScreen({ onRoleSelect }: CreateAccountScree
 
           <RoleCard
             icon={<UserIcon />}
-            title="Tallent Partners"
+            title="Talent Partners"
             description="Discover qualified talent, review stronger applications, and make faster hiring decisions with AI-enhanced support"
             onPress={handleRecruiterPress}
             borderColor="border-primary-cyan"

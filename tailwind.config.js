@@ -11,6 +11,8 @@ module.exports = {
         primary: {
           blue: '#437EF4',
           cyan: '#83E4E1',
+          orange: '#FF8D28',
+          yellow: '#FFCC00',
         },
         error: {
           red: '#FF383C',

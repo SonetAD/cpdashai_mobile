@@ -1,17 +1,65 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, Linking } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
-import { useUploadAndParseResumeMutation } from '../../../../services/api';
+import { useParseAndCreateResumeMutation, useGetMyResumesQuery, Resume } from '../../../../services/api';
+import { useAlert } from '../../../../contexts/AlertContext';
 import Svg, { Path } from 'react-native-svg';
 
+// Simple Resume Card for Profile - No edit/delete, no ATS score/status
+interface ResumeCardProps {
+  resume: Resume;
+  onDownload: () => void;
+}
+
+const ResumeCard: React.FC<ResumeCardProps> = ({ resume, onDownload }) => {
+
+  return (
+    <TouchableOpacity
+      className="bg-white rounded-xl p-4 mb-3 border border-gray-100 shadow-sm"
+      activeOpacity={0.7}
+      onPress={onDownload}
+    >
+      <View className="flex-row items-center">
+        {/* Document Icon */}
+        <View className="bg-blue-50 rounded-full p-3 mr-3">
+          <Svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <Path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" fill="#437EF4"/>
+          </Svg>
+        </View>
+
+        {/* Resume Info */}
+        <View className="flex-1">
+          <Text className="text-gray-900 text-base font-semibold" numberOfLines={1}>
+            {resume.fullName}
+          </Text>
+          <Text className="text-gray-500 text-xs mt-0.5" numberOfLines={1}>
+            {resume.email}
+          </Text>
+        </View>
+
+        {/* Download Icon */}
+        <View className="bg-green-50 rounded-full p-2">
+          <Svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+            <Path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" fill="#10B981"/>
+          </Svg>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+};
+
 export const ResumeTab: React.FC = () => {
-  const [uploadResume, { isLoading }] = useUploadAndParseResumeMutation();
+  const [parseAndCreateResume, { isLoading: isUploading }] = useParseAndCreateResumeMutation();
+  const { data: resumesData, isLoading: isLoadingResumes, error, refetch } = useGetMyResumesQuery();
+  const { showAlert } = useAlert();
+
+  const resumes = resumesData?.myResumes || [];
 
   const handlePickDocument = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: 'application/pdf',
+        type: ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
         copyToCacheDirectory: true,
       });
 
@@ -22,24 +70,47 @@ export const ResumeTab: React.FC = () => {
 
       const file = result.assets[0];
 
-      // Validate file size (5MB limit)
-      const maxSize = 5 * 1024 * 1024; // 5MB
+      // Validate file size (10MB limit)
+      const maxSize = 10 * 1024 * 1024; // 10MB
       if (file.size && file.size > maxSize) {
-        Alert.alert('File Too Large', 'Please select a file smaller than 5MB.');
+        showAlert({
+          type: 'error',
+          title: 'File Too Large',
+          message: 'Please select a file smaller than 10MB.',
+          buttons: [{ text: 'OK', style: 'default' }],
+        });
         return;
       }
 
-      Alert.alert(
-        'Resume Selected',
-        `${file.name}\nSize: ${((file.size || 0) / 1024).toFixed(2)} KB\n\nDo you want to upload and parse this resume?`,
-        [
+      // Validate file type
+      const validTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+      if (!validTypes.includes(file.mimeType || '')) {
+        showAlert({
+          type: 'error',
+          title: 'Invalid File Type',
+          message: 'Only PDF and DOCX files are supported.',
+          buttons: [{ text: 'OK', style: 'default' }],
+        });
+        return;
+      }
+
+      showAlert({
+        type: 'confirm',
+        title: 'Resume Selected',
+        message: `${file.name}\nSize: ${((file.size || 0) / 1024).toFixed(2)} KB\n\nDo you want to upload and parse this resume?`,
+        buttons: [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Upload', onPress: () => handleUploadResume(file) },
-        ]
-      );
+          { text: 'Upload', style: 'default', onPress: () => handleUploadResume(file) },
+        ],
+      });
     } catch (error) {
       console.error('DocumentPicker error:', error);
-      Alert.alert('Error', 'Failed to pick document. Please try again.');
+      showAlert({
+        type: 'error',
+        title: 'Error',
+        message: 'Failed to pick document. Please try again.',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
     }
   };
 
@@ -47,89 +118,117 @@ export const ResumeTab: React.FC = () => {
     try {
       console.log('Reading file from path:', file.uri);
 
-      // Read file as base64 using Expo FileSystem
-      const base64Data = await FileSystem.readAsStringAsync(file.uri, {
+      // Read file as base64
+      const base64 = await FileSystem.readAsStringAsync(file.uri, {
         encoding: 'base64',
       });
 
-      console.log('File converted to base64, length:', base64Data.length);
+      // Add data URI prefix
+      const fileData = `data:${file.mimeType};base64,${base64}`;
 
-      // Call the mutation
-      const result = await uploadResume({
+      console.log('File converted to base64 with data URI');
+
+      // Parse and create resume
+      const data = await parseAndCreateResume({
         fileName: file.name,
-        fileData: base64Data,
-        fileType: file.mimeType || 'application/pdf',
+        fileData: fileData,
       }).unwrap();
 
-      console.log('Upload result:', result);
+      if (data.parseAndCreateResume.__typename === 'ResumeBuilderSuccessType') {
+        const resume = data.parseAndCreateResume.resume;
 
-      if (result?.uploadAndParseResume?.__typename === 'SuccessType') {
-        Alert.alert(
-          'Success',
-          result.uploadAndParseResume.message,
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                // Profile data will be auto-refetched due to invalidatesTags
-              },
-            },
-          ]
-        );
-      } else if (result?.uploadAndParseResume) {
-        Alert.alert('Error', result.uploadAndParseResume.message);
-      } else {
-        Alert.alert('Error', 'No response received from server. Please try again.');
+        showAlert({
+          type: 'success',
+          title: 'Success!',
+          message: `Resume parsed successfully!\n\nName: ${resume.fullName}\n\nYou can view and manage it in the CV Builder section.`,
+          buttons: [{
+            text: 'OK',
+            style: 'default',
+            onPress: () => refetch(),
+          }],
+        });
+      } else if (data.parseAndCreateResume.__typename === 'ErrorType') {
+        showAlert({
+          type: 'error',
+          title: 'Upload Failed',
+          message: data.parseAndCreateResume.message || 'Failed to parse resume.',
+          buttons: [{ text: 'OK', style: 'default' }],
+        });
       }
     } catch (error: any) {
       console.error('Failed to upload resume:', error);
-      Alert.alert(
-        'Upload Failed',
-        error?.data?.uploadAndParseResume?.message ||
-        error?.message ||
-        'Failed to upload and parse resume. Please try again.'
-      );
+      showAlert({
+        type: 'error',
+        title: 'Upload Failed',
+        message: error?.data?.parseAndCreateResume?.message || error?.message || 'Failed to upload and parse resume. Please try again.',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
+    }
+  };
+
+  // Handle download resume
+  const handleDownloadResume = async (resume: Resume) => {
+    const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2:8000';
+    const downloadUrl = `${API_URL}/api/resume/build/${resume.id}/download/`;
+
+    try {
+      console.log('📥 Downloading PDF from:', downloadUrl);
+
+      const canOpen = await Linking.canOpenURL(downloadUrl);
+
+      if (canOpen) {
+        await Linking.openURL(downloadUrl);
+        console.log('✅ PDF download initiated');
+      } else {
+        showAlert({
+          type: 'confirm',
+          title: 'Download Resume',
+          message: `Would you like to download "${resume.fullName}" resume?`,
+          buttons: [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Download',
+              style: 'default',
+              onPress: async () => {
+                try {
+                  await Linking.openURL(downloadUrl);
+                  console.log('✅ PDF download initiated');
+                } catch (error) {
+                  console.error('❌ Failed to open URL:', error);
+                  showAlert({
+                    type: 'error',
+                    title: 'Error',
+                    message: 'Could not open PDF. Please try again.',
+                    buttons: [{ text: 'OK', style: 'default' }],
+                  });
+                }
+              }
+            }
+          ],
+        });
+      }
+    } catch (error) {
+      console.error('❌ Error downloading PDF:', error);
+      showAlert({
+        type: 'error',
+        title: 'Download Failed',
+        message: 'Failed to download PDF. Please try again.',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
     }
   };
 
   return (
-    <View>
-      {/* Instructions Card */}
-      <View className="bg-blue-50 rounded-xl p-4 mb-4 border border-blue-100">
-        <View className="flex-row items-start mb-2">
-          <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" className="mt-0.5 mr-2">
-            <Path
-              d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"
-              fill="#3B82F6"
-            />
-          </Svg>
-          <View className="flex-1">
-            <Text className="text-blue-900 font-semibold text-sm mb-1">
-              Auto-Fill Your Profile
-            </Text>
-            <Text className="text-blue-700 text-xs leading-5">
-              Upload your resume (PDF only) and we'll automatically extract your skills, experience, and education.
-            </Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Current Resume Status */}
-      <View className="bg-white rounded-xl p-4 mb-4 border border-gray-100">
-        <Text className="text-gray-600 text-sm mb-2">Resume Status</Text>
-        <Text className="text-gray-500 text-sm">
-          No resume uploaded yet
-        </Text>
-      </View>
-
-      {/* Upload Button */}
+    <View className="flex-1">
+      {/* Upload Button at Top */}
       <TouchableOpacity
-        className="bg-primary-blue rounded-xl py-3 items-center flex-row justify-center"
+        className="bg-primary-blue rounded-xl py-3 items-center flex-row justify-center mb-4"
         activeOpacity={0.8}
         onPress={handlePickDocument}
-        disabled={isLoading}
+        disabled={isUploading}
+        style={{ backgroundColor: '#437EF4' }}
       >
-        {isLoading ? (
+        {isUploading ? (
           <ActivityIndicator color="#FFFFFF" size="small" />
         ) : (
           <>
@@ -142,44 +241,64 @@ export const ResumeTab: React.FC = () => {
               </Svg>
             </View>
             <Text className="text-white text-sm font-semibold">
-              {isLoading ? 'Uploading & Parsing...' : 'Upload Resume (PDF)'}
+              {isUploading ? 'Uploading & Parsing...' : 'Upload Resume (PDF/DOCX)'}
             </Text>
           </>
         )}
       </TouchableOpacity>
 
-      {/* Guidelines */}
-      <View className="mt-4 bg-gray-50 rounded-xl p-4 border border-gray-100">
-        <Text className="text-gray-700 text-sm font-semibold mb-2">
-          For Best Results:
+      {/* My Resumes Section */}
+      <View className="mb-3">
+        <Text className="text-gray-900 text-base font-semibold mb-1">My Resumes</Text>
+        <Text className="text-gray-500 text-xs">
+          {resumes.length} {resumes.length === 1 ? 'resume' : 'resumes'} uploaded
         </Text>
-        <View className="space-y-1">
-          <View className="flex-row items-start mb-1">
-            <Text className="text-gray-600 text-xs mr-2">✓</Text>
-            <Text className="text-gray-600 text-xs flex-1">
-              Use a standard resume format with clear sections
-            </Text>
-          </View>
-          <View className="flex-row items-start mb-1">
-            <Text className="text-gray-600 text-xs mr-2">✓</Text>
-            <Text className="text-gray-600 text-xs flex-1">
-              Include section headers: Experience, Education, Skills
-            </Text>
-          </View>
-          <View className="flex-row items-start mb-1">
-            <Text className="text-gray-600 text-xs mr-2">✓</Text>
-            <Text className="text-gray-600 text-xs flex-1">
-              File must be PDF format and under 5MB
-            </Text>
-          </View>
-          <View className="flex-row items-start">
-            <Text className="text-gray-600 text-xs mr-2">✓</Text>
-            <Text className="text-gray-600 text-xs flex-1">
-              Review and edit the extracted data after upload
-            </Text>
-          </View>
-        </View>
       </View>
+
+      {/* Loading state */}
+      {isLoadingResumes && resumes.length === 0 && (
+        <View className="bg-white rounded-xl p-6 items-center justify-center border border-gray-100">
+          <ActivityIndicator size="small" color="#437EF4" />
+          <Text className="text-gray-400 text-xs mt-2">Loading resumes...</Text>
+        </View>
+      )}
+
+      {/* Error state */}
+      {error && (
+        <View className="bg-red-50 rounded-xl p-4 mb-3 border border-red-200">
+          <Text className="text-red-600 text-sm font-medium mb-2">Failed to load resumes</Text>
+          <TouchableOpacity
+            className="bg-red-500 rounded-lg py-2 items-center"
+            onPress={() => refetch()}
+          >
+            <Text className="text-white text-xs font-semibold">Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Empty state */}
+      {!isLoadingResumes && resumes.length === 0 && !error && (
+        <View className="bg-gray-50 rounded-xl p-6 items-center border border-gray-100">
+          <View className="bg-blue-100 rounded-full p-3 mb-3">
+            <Svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+              <Path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" fill="#437EF4"/>
+            </Svg>
+          </View>
+          <Text className="text-gray-700 text-sm font-semibold mb-1">No resumes yet</Text>
+          <Text className="text-gray-500 text-xs text-center">
+            Upload your first resume to get started
+          </Text>
+        </View>
+      )}
+
+      {/* Resume list */}
+      {resumes.map((resume) => (
+        <ResumeCard
+          key={resume.id}
+          resume={resume}
+          onDownload={() => handleDownloadResume(resume)}
+        />
+      ))}
     </View>
   );
 };

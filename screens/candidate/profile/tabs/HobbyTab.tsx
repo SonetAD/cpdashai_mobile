@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, TextInput, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput } from 'react-native';
 import { PlusIcon } from '../../../../components/profile/Icons';
 import {
   useAddHobbyMutation,
   useRemoveHobbyMutation,
 } from '../../../../services/api';
+import { useAlert } from '../../../../contexts/AlertContext';
 
 interface HobbyTabProps {
   hobbies?: string[];
@@ -18,6 +19,7 @@ export const HobbyTab: React.FC<HobbyTabProps> = ({ hobbies = [], onUpdateHobbie
 
   const [addHobby, { isLoading: isAdding }] = useAddHobbyMutation();
   const [removeHobby, { isLoading: isRemoving }] = useRemoveHobbyMutation();
+  const { showAlert } = useAlert();
 
   // Update local state when props change
   useEffect(() => {
@@ -26,12 +28,22 @@ export const HobbyTab: React.FC<HobbyTabProps> = ({ hobbies = [], onUpdateHobbie
 
   const handleAddHobby = async () => {
     if (!newHobby.trim()) {
-      Alert.alert('Error', 'Please enter a hobby');
+      showAlert({
+        type: 'error',
+        title: 'Error',
+        message: 'Please enter a hobby',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
       return;
     }
 
     if (hobbiesList.includes(newHobby.trim())) {
-      Alert.alert('Error', 'This hobby already exists');
+      showAlert({
+        type: 'error',
+        title: 'Error',
+        message: 'This hobby already exists',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
       return;
     }
 
@@ -48,21 +60,37 @@ export const HobbyTab: React.FC<HobbyTabProps> = ({ hobbies = [], onUpdateHobbie
           onUpdateHobbies(updatedHobbies);
         }
 
-        Alert.alert('Success', result.addHobby.message);
+        showAlert({
+          type: 'success',
+          title: 'Success',
+          message: result.addHobby.message,
+          buttons: [{ text: 'OK', style: 'default' }],
+        });
       } else {
-        Alert.alert('Error', result.addHobby.message);
+        showAlert({
+          type: 'error',
+          title: 'Error',
+          message: result.addHobby.message,
+          buttons: [{ text: 'OK', style: 'default' }],
+        });
       }
     } catch (error) {
       console.error('Failed to add hobby:', error);
-      Alert.alert('Error', 'Failed to add hobby. Please try again.');
+      showAlert({
+        type: 'error',
+        title: 'Error',
+        message: 'Failed to add hobby. Please try again.',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
     }
   };
 
   const handleDeleteHobby = async (hobbyToDelete: string) => {
-    Alert.alert(
-      'Delete Hobby',
-      `Are you sure you want to remove "${hobbyToDelete}"?`,
-      [
+    showAlert({
+      type: 'warning',
+      title: 'Delete Hobby',
+      message: `Are you sure you want to remove "${hobbyToDelete}"?`,
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
@@ -79,18 +107,33 @@ export const HobbyTab: React.FC<HobbyTabProps> = ({ hobbies = [], onUpdateHobbie
                   onUpdateHobbies(updatedHobbies);
                 }
 
-                Alert.alert('Success', result.removeHobby.message);
+                showAlert({
+                  type: 'success',
+                  title: 'Success',
+                  message: result.removeHobby.message,
+                  buttons: [{ text: 'OK', style: 'default' }],
+                });
               } else {
-                Alert.alert('Error', result.removeHobby.message);
+                showAlert({
+                  type: 'error',
+                  title: 'Error',
+                  message: result.removeHobby.message,
+                  buttons: [{ text: 'OK', style: 'default' }],
+                });
               }
             } catch (error) {
               console.error('Failed to remove hobby:', error);
-              Alert.alert('Error', 'Failed to remove hobby. Please try again.');
+              showAlert({
+                type: 'error',
+                title: 'Error',
+                message: 'Failed to remove hobby. Please try again.',
+                buttons: [{ text: 'OK', style: 'default' }],
+              });
             }
           },
         },
-      ]
-    );
+      ],
+    });
   };
 
   return (

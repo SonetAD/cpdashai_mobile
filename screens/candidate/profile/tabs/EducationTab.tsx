@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, TextInput, Alert, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, Platform } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { EditIcon, DeleteIcon } from '../../../../components/profile/Icons';
 import {
@@ -7,6 +7,7 @@ import {
   useUpdateEducationMutation,
   useDeleteEducationMutation,
 } from '../../../../services/api';
+import { useAlert } from '../../../../contexts/AlertContext';
 
 interface EducationEntry {
   id: string;
@@ -43,6 +44,7 @@ export const EducationTab: React.FC<EducationTabProps> = ({ educationList, setEd
   const [addEducation, { isLoading: isAdding }] = useAddEducationMutation();
   const [updateEducation, { isLoading: isUpdating }] = useUpdateEducationMutation();
   const [deleteEducation] = useDeleteEducationMutation();
+  const { showAlert } = useAlert();
 
   const handleSaveEducation = async () => {
     if (newEducation.startDate && newEducation.endDate) {
@@ -50,7 +52,12 @@ export const EducationTab: React.FC<EducationTabProps> = ({ educationList, setEd
       const end = new Date(newEducation.endDate);
 
       if (end <= start) {
-        Alert.alert('Invalid Dates', 'End date must be after start date.');
+        showAlert({
+          type: 'error',
+          title: 'Invalid Dates',
+          message: 'End date must be after start date.',
+          buttons: [{ text: 'OK', style: 'default' }],
+        });
         return;
       }
     }
@@ -70,7 +77,7 @@ export const EducationTab: React.FC<EducationTabProps> = ({ educationList, setEd
           grade: newEducation.grade,
         }).unwrap();
 
-        if (result.updateEducation.__typename === 'UpdateEducationSuccessType') {
+        if (result.updateEducation.__typename === 'SuccessType') {
           setEducationList(
             educationList.map((edu) =>
               edu.id === editingEducationId
@@ -79,9 +86,19 @@ export const EducationTab: React.FC<EducationTabProps> = ({ educationList, setEd
             )
           );
           resetForm();
-          Alert.alert('Success', result.updateEducation.message);
+          showAlert({
+            type: 'success',
+            title: 'Success',
+            message: result.updateEducation.message,
+            buttons: [{ text: 'OK', style: 'default' }],
+          });
         } else {
-          Alert.alert('Error', result.updateEducation.message);
+          showAlert({
+            type: 'error',
+            title: 'Error',
+            message: result.updateEducation.message,
+            buttons: [{ text: 'OK', style: 'default' }],
+          });
         }
       } else {
         const result = await addEducation({
@@ -100,14 +117,29 @@ export const EducationTab: React.FC<EducationTabProps> = ({ educationList, setEd
           };
           setEducationList([...educationList, education]);
           resetForm();
-          Alert.alert('Success', result.addEducation.message);
+          showAlert({
+            type: 'success',
+            title: 'Success',
+            message: result.addEducation.message,
+            buttons: [{ text: 'OK', style: 'default' }],
+          });
         } else {
-          Alert.alert('Error', result.addEducation.message);
+          showAlert({
+            type: 'error',
+            title: 'Error',
+            message: result.addEducation.message,
+            buttons: [{ text: 'OK', style: 'default' }],
+          });
         }
       }
     } catch (error) {
       console.error('Failed to save education:', error);
-      Alert.alert('Error', 'Failed to save education. Please try again.');
+      showAlert({
+        type: 'error',
+        title: 'Error',
+        message: 'Failed to save education. Please try again.',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
     }
   };
 
@@ -132,7 +164,12 @@ export const EducationTab: React.FC<EducationTabProps> = ({ educationList, setEd
       const educationIndex = educationList.findIndex((edu) => edu.id === id);
 
       if (educationIndex === -1) {
-        Alert.alert('Error', 'Education entry not found.');
+        showAlert({
+          type: 'error',
+          title: 'Error',
+          message: 'Education entry not found.',
+          buttons: [{ text: 'OK', style: 'default' }],
+        });
         return;
       }
 
@@ -140,13 +177,28 @@ export const EducationTab: React.FC<EducationTabProps> = ({ educationList, setEd
 
       if (result.deleteEducation.__typename === 'SuccessType') {
         setEducationList(educationList.filter((edu) => edu.id !== id));
-        Alert.alert('Success', result.deleteEducation.message);
+        showAlert({
+          type: 'success',
+          title: 'Success',
+          message: result.deleteEducation.message,
+          buttons: [{ text: 'OK', style: 'default' }],
+        });
       } else {
-        Alert.alert('Error', result.deleteEducation.message);
+        showAlert({
+          type: 'error',
+          title: 'Error',
+          message: result.deleteEducation.message,
+          buttons: [{ text: 'OK', style: 'default' }],
+        });
       }
     } catch (error) {
       console.error('Failed to delete education:', error);
-      Alert.alert('Error', 'Failed to delete education. Please try again.');
+      showAlert({
+        type: 'error',
+        title: 'Error',
+        message: 'Failed to delete education. Please try again.',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
     }
   };
 
@@ -180,7 +232,12 @@ export const EducationTab: React.FC<EducationTabProps> = ({ educationList, setEd
       if (newEducation.startDate) {
         const start = new Date(newEducation.startDate);
         if (selectedDate <= start) {
-          Alert.alert('Invalid Date', 'End date must be after start date.');
+          showAlert({
+            type: 'error',
+            title: 'Invalid Date',
+            message: 'End date must be after start date.',
+            buttons: [{ text: 'OK', style: 'default' }],
+          });
           return;
         }
       }

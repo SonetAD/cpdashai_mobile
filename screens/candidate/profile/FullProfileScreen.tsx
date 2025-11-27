@@ -5,7 +5,7 @@ import { RootState } from '../../../store/store';
 import CandidateLayout from '../../../components/layouts/CandidateLayout';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { SkeletonLoader } from '../../../components/SkeletonLoader';
-import { useGetCandidateProfileQuery } from '../../../services/api';
+import { useGetCandidateProfileQuery, useGetRecruiterProfileQuery } from '../../../services/api';
 
 // Import tab components
 import { PersonalInfoTab } from './tabs/PersonalInfoTab';
@@ -51,14 +51,31 @@ export default function FullProfileScreen({
 }: FullProfileScreenProps) {
   const user = useSelector((state: RootState) => state.auth.user);
   const userName = user?.email?.split('@')[0] || 'User';
+  const userRole = user?.role?.toLowerCase();
+  const isRecruiter = userRole === 'recruiter';
+
   const [selectedTab, setSelectedTab] = useState('personal');
   const [educationList, setEducationList] = useState<EducationEntry[]>([]);
   const [experienceList, setExperienceList] = useState<ExperienceEntry[]>([]);
   const [skills, setSkills] = useState<string[]>([]);
   const [hobbies, setHobbies] = useState<string[]>([]);
 
-  // RTK Query
-  const { data: profileData, isLoading: isLoadingProfile, error: profileError } = useGetCandidateProfileQuery();
+  // RTK Query - use appropriate query based on user role
+  const { data: candidateProfileData, isLoading: isLoadingCandidate, error: candidateError, refetch: refetchCandidate } = useGetCandidateProfileQuery(undefined, { skip: isRecruiter });
+  const { data: recruiterProfileData, isLoading: isLoadingRecruiter, error: recruiterError, refetch: refetchRecruiter } = useGetRecruiterProfileQuery(undefined, { skip: !isRecruiter });
+
+  const profileData = isRecruiter ? recruiterProfileData : candidateProfileData;
+  const isLoadingProfile = isRecruiter ? isLoadingRecruiter : isLoadingCandidate;
+  const profileError = isRecruiter ? recruiterError : candidateError;
+
+  // Refetch profile data when component mounts
+  useEffect(() => {
+    if (isRecruiter) {
+      refetchRecruiter();
+    } else {
+      refetchCandidate();
+    }
+  }, [isRecruiter, refetchCandidate, refetchRecruiter]);
 
   // Debug profile loading
   useEffect(() => {
@@ -70,10 +87,10 @@ export default function FullProfileScreen({
     }
   }, [profileData, profileError]);
 
-  // Populate data from query response
+  // Populate data from query response (only for candidates)
   useEffect(() => {
-    if (profileData?.candidate && profileData.candidate.__typename === 'CandidateType') {
-      const candidate = profileData.candidate;
+    if (!isRecruiter && candidateProfileData?.candidate && candidateProfileData.candidate.__typename === 'CandidateType') {
+      const candidate = candidateProfileData.candidate;
 
       // Populate education list
       if (candidate.education && candidate.education.length > 0) {
@@ -126,16 +143,19 @@ export default function FullProfileScreen({
         setHobbies(candidate.hobbies);
       }
     }
-  }, [profileData]);
+  }, [candidateProfileData, isRecruiter]);
 
-  const tabs = [
-    { id: 'personal', label: 'Personal Info' },
-    { id: 'education', label: 'Education' },
-    { id: 'experience', label: 'Experience' },
-    { id: 'skills', label: 'Skills' },
-    { id: 'resume', label: 'Resume' },
-    { id: 'hobby', label: 'Hobby' },
-  ];
+  // Tabs - different for candidate and recruiter
+  const tabs = isRecruiter
+    ? [{ id: 'personal', label: 'Personal Info' }]
+    : [
+        { id: 'personal', label: 'Personal Info' },
+        { id: 'education', label: 'Education' },
+        { id: 'experience', label: 'Experience' },
+        { id: 'skills', label: 'Skills' },
+        { id: 'resume', label: 'Resume' },
+        { id: 'hobby', label: 'Hobby' },
+      ];
 
   const getFullName = () => {
     if (user?.firstName && user?.lastName) {
@@ -157,10 +177,148 @@ export default function FullProfileScreen({
     return userName.substring(0, 2).toUpperCase();
   };
 
+  const renderRecruiterProfile = () => {
+    if (!recruiterProfileData || recruiterProfileData.recruiter.__typename === 'ErrorType') {
+      return (
+        <View className="bg-white rounded-xl p-6 mb-4">
+          <Text className="text-gray-500 text-sm text-center">
+            Failed to load profile information
+          </Text>
+        </View>
+      );
+    }
+
+    const recruiter = recruiterProfileData.recruiter;
+
+    return (
+      <View>
+        {/* Organization Information */}
+        <View className="bg-white rounded-xl p-5 mb-4 border border-gray-100">
+          <Text className="text-gray-900 font-bold text-lg mb-4">Organization Information</Text>
+
+          {recruiter.organizationName && (
+            <View className="mb-3">
+              <Text className="text-gray-600 text-xs mb-1">Organization Name</Text>
+              <Text className="text-gray-900 text-base">{recruiter.organizationName}</Text>
+            </View>
+          )}
+
+          {recruiter.organizationType && (
+            <View className="mb-3">
+              <Text className="text-gray-600 text-xs mb-1">Organization Type</Text>
+              <Text className="text-gray-900 text-base capitalize">{recruiter.organizationType}</Text>
+            </View>
+          )}
+
+          {recruiter.subRole && (
+            <View className="mb-3">
+              <Text className="text-gray-600 text-xs mb-1">Sub Role</Text>
+              <Text className="text-gray-900 text-base">{recruiter.subRole}</Text>
+            </View>
+          )}
+
+          {recruiter.position && (
+            <View className="mb-3">
+              <Text className="text-gray-600 text-xs mb-1">Position</Text>
+              <Text className="text-gray-900 text-base">{recruiter.position}</Text>
+            </View>
+          )}
+
+          {recruiter.companyName && (
+            <View className="mb-3">
+              <Text className="text-gray-600 text-xs mb-1">Company Name</Text>
+              <Text className="text-gray-900 text-base">{recruiter.companyName}</Text>
+            </View>
+          )}
+
+          {recruiter.companyWebsite && (
+            <View className="mb-3">
+              <Text className="text-gray-600 text-xs mb-1">Company Website</Text>
+              <Text className="text-primary-blue text-base">{recruiter.companyWebsite}</Text>
+            </View>
+          )}
+
+          {recruiter.linkedinUrl && (
+            <View className="mb-3">
+              <Text className="text-gray-600 text-xs mb-1">LinkedIn Profile</Text>
+              <Text className="text-primary-blue text-base">{recruiter.linkedinUrl}</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Industries & Specializations */}
+        {(recruiter.industries && recruiter.industries.length > 0) ||
+         (recruiter.specializations && recruiter.specializations.length > 0) ? (
+          <View className="bg-white rounded-xl p-5 mb-4 border border-gray-100">
+            <Text className="text-gray-900 font-bold text-lg mb-4">Areas of Focus</Text>
+
+            {recruiter.industries && recruiter.industries.length > 0 && (
+              <View className="mb-4">
+                <Text className="text-gray-600 text-xs mb-2">Industries</Text>
+                <View className="flex-row flex-wrap gap-2">
+                  {recruiter.industries.map((industry, index) => (
+                    <View key={index} className="bg-blue-50 border border-primary-blue rounded-full px-3 py-1">
+                      <Text className="text-primary-blue text-xs font-medium">{industry}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {recruiter.specializations && recruiter.specializations.length > 0 && (
+              <View>
+                <Text className="text-gray-600 text-xs mb-2">Specializations</Text>
+                <View className="flex-row flex-wrap gap-2">
+                  {recruiter.specializations.map((spec, index) => (
+                    <View key={index} className="bg-green-50 border border-green-500 rounded-full px-3 py-1">
+                      <Text className="text-green-700 text-xs font-medium">{spec}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+          </View>
+        ) : null}
+
+        {/* Account Status */}
+        <View className="bg-white rounded-xl p-5 mb-4 border border-gray-100">
+          <Text className="text-gray-900 font-bold text-lg mb-4">Account Status</Text>
+
+          <View className="flex-row justify-between mb-3">
+            <Text className="text-gray-600 text-sm">Verification Status</Text>
+            <View className={`px-3 py-1 rounded-full ${recruiter.isVerified ? 'bg-green-50' : 'bg-orange-50'}`}>
+              <Text className={`text-xs font-medium ${recruiter.isVerified ? 'text-green-700' : 'text-orange-700'}`}>
+                {recruiter.isVerified ? 'Verified' : 'Pending Verification'}
+              </Text>
+            </View>
+          </View>
+
+          <View className="flex-row justify-between mb-3">
+            <Text className="text-gray-600 text-sm">Account Status</Text>
+            <View className={`px-3 py-1 rounded-full ${recruiter.isActive ? 'bg-green-50' : 'bg-gray-100'}`}>
+              <Text className={`text-xs font-medium ${recruiter.isActive ? 'text-green-700' : 'text-gray-700'}`}>
+                {recruiter.isActive ? 'Active' : 'Inactive'}
+              </Text>
+            </View>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
   const renderTabContent = () => {
+    if (isRecruiter && selectedTab === 'personal') {
+      return renderRecruiterProfile();
+    }
+
+    // Get candidate profile data
+    const candidateProfile = candidateProfileData?.candidate?.__typename === 'CandidateType'
+      ? candidateProfileData.candidate
+      : null;
+
     switch (selectedTab) {
       case 'personal':
-        return <PersonalInfoTab user={user} getFullName={getFullName} />;
+        return <PersonalInfoTab candidateProfile={candidateProfile} />;
       case 'education':
         return (
           <EducationTab

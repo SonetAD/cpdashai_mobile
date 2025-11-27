@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -10,7 +10,12 @@ import { Button } from '../../components/ui/Button';
 import { Checkbox } from '../../components/ui/Checkbox';
 import { Select } from '../../components/ui/Select';
 import SuccessPopup from '../../components/SuccessPopup';
+import KeyboardDismissWrapper from '../../components/KeyboardDismissWrapper';
 import { useRegisterCandidateMutation, useRegisterRecruiterMutation } from '../../services/api';
+import { useAppDispatch } from '../../store/hooks';
+import { setCredentials } from '../../store/slices/authSlice';
+import { storeTokens } from '../../utils/authUtils';
+import { useAlert } from '../../contexts/AlertContext';
 
 // Import icons from assets
 import BackArrowIcon from '../../assets/images/arrowLeft.svg';
@@ -21,8 +26,8 @@ import CallIcon from '../../assets/images/callIcon.svg';
 import EyeSlashIcon from '../../assets/images/eyeSlash.svg';
 import EyeIcon from '../../assets/images/eye.svg';
 
-// Validation schema
-const registerSchema = z.object({
+// Base object schema without refinements
+const baseObjectSchema = z.object({
   registrationType: z.enum(['email', 'phone', 'both']),
   username: z.string().min(3, 'Username must be at least 3 characters'),
   email: z.string().optional(),
@@ -30,6 +35,48 @@ const registerSchema = z.object({
   confirmPassword: z.string(),
   phoneNumber: z.string().optional(),
   agreedToTerms: z.boolean().refine((val) => val === true, 'You must agree to terms'),
+});
+
+// Candidate schema with refinements
+const registerSchema = baseObjectSchema.refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ['confirmPassword'],
+}).refine((data) => {
+  // Email is required when registrationType is 'email' or 'both'
+  if ((data.registrationType === 'email' || data.registrationType === 'both') && !data.email) {
+    return false;
+  }
+  // Email must be valid if provided
+  if (data.email && !z.string().email().safeParse(data.email).success) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Valid email is required",
+  path: ['email'],
+}).refine((data) => {
+  // Phone is required when registrationType is 'phone' or 'both'
+  if ((data.registrationType === 'phone' || data.registrationType === 'both') && !data.phoneNumber) {
+    return false;
+  }
+  // Phone must be at least 10 characters if provided
+  if (data.phoneNumber && data.phoneNumber.length < 10) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Valid phone number is required (min 10 digits)",
+  path: ['phoneNumber'],
+});
+
+// Extended schema for recruiter registration
+const recruiterSchema = baseObjectSchema.extend({
+  lastName: z.string().optional(),
+  organizationName: z.string().min(2, 'Organization name is required'),
+  organizationType: z.enum(['employer', 'university', 'agency']),
+  subRole: z.string().min(1, 'Please select a sub role'),
+  position: z.string().optional(),
+  linkedinUrl: z.string().optional(),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ['confirmPassword'],
@@ -96,21 +143,49 @@ interface RegisterScreenProps {
   role: 'candidate' | 'recruiter' | null;
   onBack: () => void;
   onLogin?: () => void;
+  onRegisterSuccess?: () => void;
 }
 
-type FormData = z.infer<typeof registerSchema>;
+type CandidateFormData = z.infer<typeof registerSchema>;
+type RecruiterFormData = z.infer<typeof recruiterSchema>;
+type FormData = CandidateFormData | RecruiterFormData;
 
-export default function RegisterScreen({ role, onBack, onLogin }: RegisterScreenProps) {
+// Sub-role options based on organization type
+const subRoleOptions = {
+  employer: [
+    { label: 'Company', value: 'company' },
+    { label: 'Recruiter', value: 'recruiter' },
+    { label: 'HR Team', value: 'hr_team' },
+  ],
+  university: [
+    { label: 'College', value: 'college' },
+    { label: 'University', value: 'university' },
+    { label: 'Skill Bootcamp', value: 'bootcamp' },
+    { label: 'Training Center', value: 'training_center' },
+  ],
+  agency: [
+    { label: 'Staffing Agency', value: 'staffing_agency' },
+    { label: 'Career Service', value: 'career_service' },
+    { label: 'Placement Department', value: 'placement_dept' },
+  ],
+};
+
+export default function RegisterScreen({ role, onBack, onLogin, onRegisterSuccess }: RegisterScreenProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [showSuccessPopup, setShowSuccessPopup] = useState(false);
   const [registerCandidate, { isLoading: isCandidateLoading }] = useRegisterCandidateMutation();
   const [registerRecruiter, { isLoading: isRecruiterLoading }] = useRegisterRecruiterMutation();
+  const dispatch = useAppDispatch();
+  const { showAlert } = useAlert();
 
   const isLoading = isCandidateLoading || isRecruiterLoading;
 
+  // Use appropriate schema based on role
+  const schema = role === 'recruiter' ? recruiterSchema : registerSchema;
+
   const { control, handleSubmit, formState: { errors }, watch } = useForm<FormData>({
-    resolver: zodResolver(registerSchema),
+    resolver: zodResolver(schema),
     defaultValues: {
       registrationType: 'email',
       username: '',
@@ -119,10 +194,19 @@ export default function RegisterScreen({ role, onBack, onLogin }: RegisterScreen
       confirmPassword: '',
       phoneNumber: '',
       agreedToTerms: false,
+      ...(role === 'recruiter' && {
+        lastName: '',
+        organizationName: '',
+        organizationType: 'employer' as const,
+        subRole: '',
+        position: '',
+        linkedinUrl: '',
+      }),
     },
   });
 
   const registrationType = watch('registrationType');
+  const organizationType = role === 'recruiter' ? watch('organizationType' as any) : undefined;
 
   const onSubmit = async (data: FormData) => {
     try {
@@ -143,25 +227,101 @@ export default function RegisterScreen({ role, onBack, onLogin }: RegisterScreen
       }
 
       if (role === 'recruiter') {
+        // Add recruiter-specific fields
+        const recruiterData = data as RecruiterFormData;
+        registrationData.lastName = recruiterData.lastName || '';
+        registrationData.organizationName = recruiterData.organizationName;
+        registrationData.organizationType = recruiterData.organizationType;
+        registrationData.subRole = recruiterData.subRole;
+        if (recruiterData.position) {
+          registrationData.position = recruiterData.position;
+        }
+        if (recruiterData.linkedinUrl) {
+          registrationData.linkedinUrl = recruiterData.linkedinUrl;
+        }
         const result = await registerRecruiter(registrationData).unwrap();
         const response = result.createRecruiter;
 
-        if (response.success && response.__typename === 'SuccessType') {
-          console.log('Recruiter registration successful:', result);
+        if (response.success && response.__typename === 'LoginSuccessType') {
+          console.log('Recruiter registration successful with tokens:', result);
+          console.log('Access Token:', response.accessToken);
+          console.log('Role:', response.role);
+
+          // Store tokens securely in SecureStore
+          await storeTokens(response.accessToken, response.refreshToken);
+
+          // Normalize role to lowercase
+          const normalizedRole = (response.role?.toLowerCase() || 'recruiter') as 'candidate' | 'recruiter';
+
+          // Store credentials in Redux
+          dispatch(setCredentials({
+            user: {
+              id: response.user.id,
+              email: response.user.email || '',
+              firstName: response.user.firstName,
+              lastName: response.user.lastName,
+              phoneNumber: response.user.phoneNumber || '',
+              role: normalizedRole,
+              isVerified: response.user.isVerified,
+            },
+            token: response.accessToken,
+            refreshToken: response.refreshToken,
+          }));
+
+          console.log('Registration successful - tokens stored, redirecting to dashboard');
+
+          // Show success popup and then navigate to dashboard
           setShowSuccessPopup(true);
         } else {
-          Alert.alert('Error', response.message || 'Registration failed. Please try again.', [{ text: 'OK' }]);
+          showAlert({
+            type: 'error',
+            title: 'Registration Failed',
+            message: response.message || 'Registration failed. Please try again.',
+            buttons: [{ text: 'OK', style: 'default' }],
+          });
           console.log('Recruiter registration failed:', response.message);
         }
       } else {
         const result = await registerCandidate(registrationData).unwrap();
         const response = result.createCandidate;
 
-        if (response.success && response.__typename === 'SuccessType') {
-          console.log('Candidate registration successful:', result);
+        if (response.success && response.__typename === 'LoginSuccessType') {
+          console.log('Candidate registration successful with tokens:', result);
+          console.log('Access Token:', response.accessToken);
+          console.log('Role:', response.role);
+
+          // Store tokens securely in SecureStore
+          await storeTokens(response.accessToken, response.refreshToken);
+
+          // Normalize role to lowercase
+          const normalizedRole = (response.role?.toLowerCase() || 'candidate') as 'candidate' | 'recruiter';
+
+          // Store credentials in Redux
+          dispatch(setCredentials({
+            user: {
+              id: response.user.id,
+              email: response.user.email || '',
+              firstName: response.user.firstName,
+              lastName: response.user.lastName,
+              phoneNumber: response.user.phoneNumber || '',
+              role: normalizedRole,
+              isVerified: response.user.isVerified,
+            },
+            token: response.accessToken,
+            refreshToken: response.refreshToken,
+          }));
+
+          console.log('Registration successful - tokens stored, redirecting to dashboard');
+
+          // Show success popup and then navigate to dashboard
           setShowSuccessPopup(true);
         } else {
-          Alert.alert('Error', response.message || 'Registration failed. Please try again.', [{ text: 'OK' }]);
+          showAlert({
+            type: 'error',
+            title: 'Registration Failed',
+            message: response.message || 'Registration failed. Please try again.',
+            buttons: [{ text: 'OK', style: 'default' }],
+          });
           console.log('Candidate registration failed:', response.message);
         }
       }
@@ -171,15 +331,21 @@ export default function RegisterScreen({ role, onBack, onLogin }: RegisterScreen
         error?.data?.createCandidate?.message ||
         error?.data?.message ||
         'Registration failed. Please try again.';
-      Alert.alert('Error', errorMessage, [{ text: 'OK' }]);
+      showAlert({
+        type: 'error',
+        title: 'Registration Error',
+        message: errorMessage,
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
       console.log('Registration error:', errorMessage);
     }
   };
 
   return (
     <SafeAreaView className="flex-1 bg-white" edges={['top', 'bottom']}>
-      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 20 }}>
-        <View className="px-6 pt-6">
+      <KeyboardDismissWrapper>
+        <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 20 }}>
+          <View className="px-6 pt-6">
         {/* Header */}
         <TouchableOpacity className="mb-6" onPress={onBack}>
           <BackArrowIcon />
@@ -340,6 +506,112 @@ export default function RegisterScreen({ role, onBack, onLogin }: RegisterScreen
           />
         )}
 
+        {/* Recruiter-specific fields */}
+        {role === 'recruiter' && (
+          <>
+            {/* Last Name */}
+            <Controller
+              control={control}
+              name={'lastName' as any}
+              render={({ field: { onChange, value } }) => (
+                <Input
+                  leftIcon={<UserIcon />}
+                  placeholder="Last Name (Optional)"
+                  value={value}
+                  onChangeText={onChange}
+                  error={errors['lastName' as keyof typeof errors]?.message}
+                  containerClassName="mb-4"
+                />
+              )}
+            />
+
+            {/* Organization Name */}
+            <Controller
+              control={control}
+              name={'organizationName' as any}
+              render={({ field: { onChange, value } }) => (
+                <Input
+                  placeholder="Organization Name *"
+                  value={value}
+                  onChangeText={onChange}
+                  error={errors['organizationName' as keyof typeof errors]?.message}
+                  containerClassName="mb-4"
+                />
+              )}
+            />
+
+            {/* Organization Type */}
+            <Controller
+              control={control}
+              name={'organizationType' as any}
+              render={({ field: { onChange, value } }) => (
+                <Select
+                  value={value}
+                  onValueChange={onChange}
+                  placeholder="Select Organization Type *"
+                  options={[
+                    { label: 'Employer', value: 'employer' },
+                    { label: 'University', value: 'university' },
+                    { label: 'Agency', value: 'agency' },
+                  ]}
+                  error={errors['organizationType' as keyof typeof errors]?.message}
+                  containerClassName="mb-4"
+                />
+              )}
+            />
+
+            {/* Sub Role - conditional based on organization type */}
+            {organizationType && (
+              <Controller
+                control={control}
+                name={'subRole' as any}
+                render={({ field: { onChange, value } }) => (
+                  <Select
+                    value={value}
+                    onValueChange={onChange}
+                    placeholder="Select Sub Role *"
+                    options={subRoleOptions[organizationType as keyof typeof subRoleOptions] || []}
+                    error={errors['subRole' as keyof typeof errors]?.message}
+                    containerClassName="mb-4"
+                  />
+                )}
+              />
+            )}
+
+            {/* Position */}
+            <Controller
+              control={control}
+              name={'position' as any}
+              render={({ field: { onChange, value } }) => (
+                <Input
+                  placeholder="Position (Optional)"
+                  value={value}
+                  onChangeText={onChange}
+                  error={errors['position' as keyof typeof errors]?.message}
+                  containerClassName="mb-4"
+                />
+              )}
+            />
+
+            {/* LinkedIn URL */}
+            <Controller
+              control={control}
+              name={'linkedinUrl' as any}
+              render={({ field: { onChange, value } }) => (
+                <Input
+                  placeholder="LinkedIn URL (Optional)"
+                  value={value}
+                  onChangeText={onChange}
+                  keyboardType="url"
+                  autoCapitalize="none"
+                  error={errors['linkedinUrl' as keyof typeof errors]?.message}
+                  containerClassName="mb-4"
+                />
+              )}
+            />
+          </>
+        )}
+
         {/* Terms and Conditions */}
         <Controller
           control={control}
@@ -357,7 +629,7 @@ export default function RegisterScreen({ role, onBack, onLogin }: RegisterScreen
                 />
                 <Text className="text-sm text-gray-700 flex-1">
                   Agree to the{' '}
-                  <Text className="text-primary-blue">Term & Condition</Text> and{' '}
+                  <Text className="text-primary-blue">Terms & Conditions</Text> and{' '}
                   <Text className="text-primary-blue">Privacy Policy</Text>
                 </Text>
               </TouchableOpacity>
@@ -376,7 +648,7 @@ export default function RegisterScreen({ role, onBack, onLogin }: RegisterScreen
           onPress={handleSubmit(onSubmit)}
           isLoading={isLoading}
         >
-          Sign In
+          Sign Up
         </Button>
 
         {/* OR Divider */}
@@ -407,17 +679,18 @@ export default function RegisterScreen({ role, onBack, onLogin }: RegisterScreen
           </TouchableOpacity>
         </View>
         </View>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardDismissWrapper>
 
       {/* Success Popup */}
       <SuccessPopup
         visible={showSuccessPopup}
         title="Registration Successful!"
-        message="Your account has been created successfully. Please check your email to verify your account."
-        buttonText="Continue"
+        message="Your account has been created and you're now logged in. Welcome aboard!"
+        buttonText="Continue to Dashboard"
         onContinue={() => {
           setShowSuccessPopup(false);
-          onLogin?.();
+          onRegisterSuccess?.();
         }}
       />
     </SafeAreaView>

@@ -17,7 +17,7 @@ interface CandidateLayoutProps {
 
 export default function CandidateLayout({
   children,
-  userName = 'Sonet',
+  userName = 'User',
   showSearch = true,
   onSearchPress,
   activeTab = 'home',
@@ -36,13 +36,10 @@ export default function CandidateLayout({
           {/* Logo */}
           <LogoWhite width={39} height={33} />
 
-          {/* Welcome Text */}
+          {/* CPDash AI Title */}
           <View className="flex-1 mx-4">
-            <Text className="text-white text-lg font-bold">
-              Welcome back, {userName}!
-            </Text>
-            <Text className="text-white/90 text-xs mt-0.5">
-              Your AI-powered career snapshot is ready.
+            <Text className="text-white text-xl font-bold">
+              CPDash AI
             </Text>
           </View>
 
