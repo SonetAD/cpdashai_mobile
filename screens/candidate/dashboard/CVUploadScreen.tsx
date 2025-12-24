@@ -8,9 +8,11 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { useSelector } from 'react-redux';
 import LogoWhite from '../../../assets/images/logoWhite.svg';
 import BottomNavBar from '../../../components/BottomNavBar';
+import ResumeParsingProgressModal from '../../../components/ResumeParsingProgressModal';
 import {
   useGetMyResumesQuery,
   useParseAndCreateResumeMutation,
+  useParseResumeAsyncMutation,
   useDeleteResumeMutation,
   useExportResumePdfMutation,
   useCheckSubscriptionStatusQuery,
@@ -18,6 +20,7 @@ import {
   AnalyzeResumeResponse,
 } from '../../../services/api';
 import { analyzeResume, uriToBlob } from '../../../services/resumeAnalysis';
+import { resumeParsingProgressService, ProgressUpdate } from '../../../services/resumeParsingProgress';
 import ResumeDetailScreen from './ResumeDetailScreen';
 import ResumeAnalysisResultScreen from './ResumeAnalysisResultScreen';
 import { useAlert } from '../../../contexts/AlertContext';
@@ -83,13 +86,21 @@ const CVCard: React.FC<CVCardProps> = ({ resume, onEdit, onDelete, onDownload, o
         <View className="flex-1 mr-3">
           <Text className="text-gray-900 text-lg font-bold mb-1">{resume.fullName}</Text>
           <Text className="text-gray-500 text-xs mb-1">{resume.email}</Text>
-          {/* <View className="flex-row items-center mt-1">
-            <Svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-              <Path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fill="#9CA3AF"/>
-              <Path d="M12.5 7H11v6l5.25 3.15.75-1.23-4.5-2.67z" fill="#9CA3AF"/>
-            </Svg>
-            <Text className="text-gray-400 text-xs ml-1">{formatDate(resume.updatedAt)}</Text>
-          </View> */}
+          {/* Status Detail */}
+          {resume.status && resume.status !== 'completed' && (
+            <View className="flex-row items-center mt-2">
+              <View className={`w-2 h-2 rounded-full mr-1.5 ${
+                resume.status === 'pending' ? 'bg-gray-400' : 
+                resume.status === 'processing' ? 'bg-yellow-500' : 
+                resume.status === 'failed' ? 'bg-red-500' : 'bg-blue-500'
+              }`} />
+              <Text className="text-gray-500 text-xs">
+                {resume.status === 'pending' ? 'Waiting to process' : 
+                 resume.status === 'processing' ? 'Being analyzed by AI' : 
+                 resume.status === 'failed' ? 'Processing failed' : 'In progress'}
+              </Text>
+            </View>
+          )}
         </View>
         <View className="items-end">
           {resume.atsScore !== undefined && (
@@ -219,6 +230,11 @@ export default function CVUploadScreen({
   const [showJobDescModal, setShowJobDescModal] = useState(false);
   const [jobDescription, setJobDescription] = useState('');
   const [pendingAnalysisResume, setPendingAnalysisResume] = useState<Resume | null>(null);
+  const [showParsingProgress, setShowParsingProgress] = useState(false);
+  const [parsingProgress, setParsingProgress] = useState(0);
+  const [parsingStage, setParsingStage] = useState('');
+  const [parsingStageLabel, setParsingStageLabel] = useState('');
+  const [parsingMessage, setParsingMessage] = useState('');
   const accessToken = useSelector((state: any) => state.auth.token);
   const userEmail = useSelector((state: any) => state.auth.user?.email);
   const { showAlert } = useAlert();
@@ -226,6 +242,7 @@ export default function CVUploadScreen({
   // API hooks
   const { data: resumesData, isLoading, error, refetch, isUninitialized } = useGetMyResumesQuery();
   const [parseAndCreateResume] = useParseAndCreateResumeMutation();
+  const [parseResumeAsync] = useParseResumeAsyncMutation();
   const [deleteResume] = useDeleteResumeMutation();
   const [exportPdf] = useExportResumePdfMutation();
   const { data: subscriptionData } = useCheckSubscriptionStatusQuery();
@@ -251,6 +268,13 @@ export default function CVUploadScreen({
       resumes: resumes.map(r => ({ id: r.id, name: r.fullName, email: r.email, status: r.status })),
     });
   }, [resumesData, resumes]);
+
+  // Cleanup WebSocket connection on unmount
+  useEffect(() => {
+    return () => {
+      resumeParsingProgressService.disconnect();
+    };
+  }, []);
 
   // Auto-generate PDFs for pending resumes in background
   useEffect(() => {
@@ -444,83 +468,91 @@ export default function CVUploadScreen({
                 // Add data URI prefix
                 const fileData = `data:${file.mimeType};base64,${base64}`;
 
-                // Parse and create resume
-      const data = await parseAndCreateResume({
-        fileName: file.name,
-        fileData: fileData,
-      }).unwrap();
+                // Use async parsing with progress tracking
+                const data = await parseResumeAsync({
+                  fileName: file.name,
+                  fileData: fileData,
+                }).unwrap();
 
-      if (data.parseAndCreateResume.__typename === 'ResumeBuilderSuccessType') {
-        const resume = data.parseAndCreateResume.resume;
+                setIsUploading(false);
 
-        // Automatically trigger PDF generation
-        try {
-          console.log('🔄 Automatically triggering PDF generation for uploaded resume:', resume.id);
-          const pdfData = await exportPdf(resume.id).unwrap();
+                if (data.parseResumeAsync.__typename === 'ResumeParsingTaskSuccessType') {
+                  const taskId = data.parseResumeAsync.task.taskId;
+                  
+                  console.log('📤 Resume parsing started. Task ID:', taskId);
 
-          if (pdfData.exportResumePdf.__typename === 'SuccessType') {
-            console.log('✅ PDF generation started successfully');
-            showAlert({
-              type: 'success',
-              title: 'Success!',
-              message: `Resume parsed successfully!\n\nName: ${resume.fullName}\nATS Score: ${resume.atsScore}%\n\nYour PDF is being generated.`,
-              buttons: [{
-                text: 'OK',
-                style: 'default',
-                onPress: () => {
-                  setTimeout(() => safeRefetch(), 500);
+                  // Show progress modal
+                  setShowParsingProgress(true);
+                  setParsingProgress(0);
+                  setParsingStage('pending');
+                  setParsingStageLabel('Starting...');
+                  setParsingMessage('');
+
+                  // Subscribe to progress updates
+                  resumeParsingProgressService.subscribe(
+                    taskId,
+                    accessToken,
+                    // On progress update
+                    (update: ProgressUpdate) => {
+                      console.log('Progress update:', update);
+                      setParsingProgress(update.progress);
+                      setParsingStage(update.stage);
+                      setParsingStageLabel(update.stageLabel);
+                      setParsingMessage(update.message || '');
+                      setParsingStatus(update.status || 'in_progress');
+                    },
+                    // On completed
+                    async (resumeId: string) => {
+                      console.log('✅ Parsing completed! Resume ID:', resumeId);
+                      setShowParsingProgress(false);
+
+                      // Refetch resumes to get the new one
+                      await safeRefetch();
+
+                      // Show success alert
+                      showAlert({
+                        type: 'success',
+                        title: 'Success!',
+                        message: 'Your resume has been parsed and analyzed successfully! PDF generation has been started.',
+                        buttons: [{
+                          text: 'OK',
+                          style: 'default',
+                        }],
+                      });
+                    },
+                    // On error
+                    (error: string) => {
+                      console.error('❌ Parsing error:', error);
+                      setShowParsingProgress(false);
+                      
+                      showAlert({
+                        type: 'error',
+                        title: 'Parsing Failed',
+                        message: error || 'Failed to parse resume. Please try again.',
+                        buttons: [{ text: 'OK', style: 'default' }],
+                      });
+                    }
+                  );
+                } else {
+                  // Error response
+                  showAlert({
+                    type: 'error',
+                    title: 'Error',
+                    message: data.parseResumeAsync.message || 'Failed to start resume parsing',
+                    buttons: [{ text: 'OK', style: 'default' }],
+                  });
                 }
-              }],
-            });
-          } else {
-            // PDF generation failed, but resume was created
-            showAlert({
-              type: 'warning',
-              title: 'Partial Success',
-              message: `Resume parsed with ATS Score: ${resume.atsScore}%\n\nPDF generation will be available shortly.`,
-              buttons: [{
-                text: 'OK',
-                style: 'default',
-                onPress: () => {
-                  setTimeout(() => safeRefetch(), 500);
-                }
-              }],
-            });
-          }
-        } catch (pdfError) {
-          // PDF generation failed, but resume was created
-          console.error('PDF generation failed:', pdfError);
-          showAlert({
-            type: 'success',
-            title: 'Resume Uploaded',
-            message: `Resume parsed with ATS Score: ${resume.atsScore}%\n\nYou can generate the PDF from the list below.`,
-            buttons: [{
-              text: 'OK',
-              style: 'default',
-              onPress: () => {
-                setTimeout(() => refetch(), 500);
-              }
-            }],
-          });
-        }
-      } else {
-        showAlert({
-          type: 'error',
-          title: 'Error',
-          message: data.parseAndCreateResume.message,
-          buttons: [{ text: 'OK', style: 'default' }],
-        });
-      }
               } catch (error: any) {
                 console.error('Upload failed:', error);
+                setIsUploading(false);
+                setShowParsingProgress(false);
+                
                 showAlert({
                   type: 'error',
                   title: 'Upload Failed',
                   message: error.message || 'Failed to upload and parse resume',
                   buttons: [{ text: 'OK', style: 'default' }],
                 });
-              } finally {
-                setIsUploading(false);
               }
             },
           },
@@ -1382,6 +1414,16 @@ export default function CVUploadScreen({
           </View>
         </View>
       )}
+
+      {/* Resume Parsing Progress Modal */}
+      <ResumeParsingProgressModal
+        visible={showParsingProgress}
+        progress={parsingProgress}
+        stage={parsingStage}
+        stageLabel={parsingStageLabel}
+        message={parsingMessage}
+        status={parsingStatus}
+      />
     </SafeAreaView>
   );
 }

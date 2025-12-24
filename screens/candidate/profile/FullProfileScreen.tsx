@@ -6,6 +6,7 @@ import CandidateLayout from '../../../components/layouts/CandidateLayout';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { SkeletonLoader } from '../../../components/SkeletonLoader';
 import { useGetCandidateProfileQuery, useGetRecruiterProfileQuery } from '../../../services/api';
+import ProfilePictureUpload from '../../../components/profile/ProfilePictureUpload';
 
 // Import tab components
 import { PersonalInfoTab } from './tabs/PersonalInfoTab';
@@ -14,6 +15,10 @@ import { ExperienceTab } from './tabs/ExperienceTab';
 import { SkillsTab } from './tabs/SkillsTab';
 import { ResumeTab } from './tabs/ResumeTab';
 import { HobbyTab } from './tabs/HobbyTab';
+import CertificatesTab from './tabs/CertificatesTab';
+import ExtraCurricularTab from './tabs/ExtraCurricularTab';
+import LeadershipSocialTab from './tabs/LeadershipSocialTab';
+import LocationTab from './tabs/LocationTab';
 
 interface FullProfileScreenProps {
   activeTab?: string;
@@ -77,6 +82,9 @@ export default function FullProfileScreen({
     }
   }, [isRecruiter, refetchCandidate, refetchRecruiter]);
 
+  // Track if profile is being updated
+  const [isProfileUpdating, setIsProfileUpdating] = useState(false);
+
   // Debug profile loading
   useEffect(() => {
     if (profileError) {
@@ -84,13 +92,15 @@ export default function FullProfileScreen({
     }
     if (profileData) {
       console.log('Profile data loaded:', profileData);
+      // Check if there's an ongoing resume parsing that will update profile
+      setIsProfileUpdating(false);
     }
   }, [profileData, profileError]);
 
   // Populate data from query response (only for candidates)
   useEffect(() => {
-    if (!isRecruiter && candidateProfileData?.candidate && candidateProfileData.candidate.__typename === 'CandidateType') {
-      const candidate = candidateProfileData.candidate;
+    if (!isRecruiter && candidateProfileData?.myProfile && candidateProfileData.myProfile.__typename === 'CandidateType') {
+      const candidate = candidateProfileData.myProfile;
 
       // Populate education list
       if (candidate.education && candidate.education.length > 0) {
@@ -150,9 +160,13 @@ export default function FullProfileScreen({
     ? [{ id: 'personal', label: 'Personal Info' }]
     : [
         { id: 'personal', label: 'Personal Info' },
+        { id: 'location', label: 'Locations' },
         { id: 'education', label: 'Education' },
         { id: 'experience', label: 'Experience' },
         { id: 'skills', label: 'Skills' },
+        { id: 'certificates', label: 'Certificates' },
+        { id: 'extracurricular', label: 'Extra-curricular' },
+        { id: 'leadership', label: 'Leadership' },
         { id: 'resume', label: 'Resume' },
         { id: 'hobby', label: 'Hobby' },
       ];
@@ -312,13 +326,15 @@ export default function FullProfileScreen({
     }
 
     // Get candidate profile data
-    const candidateProfile = candidateProfileData?.candidate?.__typename === 'CandidateType'
-      ? candidateProfileData.candidate
+    const candidateProfile = candidateProfileData?.myProfile?.__typename === 'CandidateType'
+      ? candidateProfileData.myProfile
       : null;
 
     switch (selectedTab) {
       case 'personal':
         return <PersonalInfoTab candidateProfile={candidateProfile} />;
+      case 'location':
+        return <LocationTab />;
       case 'education':
         return (
           <EducationTab
@@ -342,6 +358,12 @@ export default function FullProfileScreen({
             }}
           />
         );
+      case 'certificates':
+        return <CertificatesTab />;
+      case 'extracurricular':
+        return <ExtraCurricularTab />;
+      case 'leadership':
+        return <LeadershipSocialTab />;
       case 'resume':
         return <ResumeTab />;
       case 'hobby':
@@ -397,7 +419,15 @@ export default function FullProfileScreen({
               />
             </Svg>
           </TouchableOpacity>
-          <Text className="text-gray-900 text-base font-medium">Profile</Text>
+          <View className="flex-1">
+            <Text className="text-gray-900 text-2xl font-bold">My Profile</Text>
+            {isProfileUpdating && (
+              <View className="flex-row items-center mt-1">
+                <View className="w-2 h-2 bg-blue-500 rounded-full mr-2 animate-pulse" />
+                <Text className="text-blue-600 text-xs font-medium">Profile being updated from resume...</Text>
+              </View>
+            )}
+          </View>
         </View>
 
         <View className="px-6 bg-white">
@@ -426,18 +456,12 @@ export default function FullProfileScreen({
                   strokeLinecap="round"
                 />
               </Svg>
-              {/* Avatar */}
-              <View
-                className="items-center justify-center overflow-hidden"
-                style={{
-                  width: 70,
-                  height: 70,
-                  borderRadius: 35,
-                  backgroundColor: '#437EF4'
-                }}
-              >
-                <Text className="text-white text-2xl font-semibold">{getInitials()}</Text>
-              </View>
+              {/* Profile Picture */}
+              <ProfilePictureUpload
+                initials={getInitials()}
+                size={70}
+                editable={false}
+              />
             </View>
             <Text className="text-gray-900 text-lg font-bold mb-1">{getFullName()}</Text>
             <Text className="text-gray-500 text-xs">{user?.email || 'No email'}</Text>

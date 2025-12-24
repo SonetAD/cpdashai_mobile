@@ -13,6 +13,10 @@ interface CandidateLayoutProps {
   onSearchPress?: () => void;
   activeTab?: string;
   onTabChange?: (tabId: string) => void;
+  showBackButton?: boolean;
+  onBack?: () => void;
+  title?: string;
+  subtitle?: string;
 }
 
 export default function CandidateLayout({
@@ -22,6 +26,10 @@ export default function CandidateLayout({
   onSearchPress,
   activeTab = 'home',
   onTabChange,
+  showBackButton = false,
+  onBack,
+  title,
+  subtitle,
 }: CandidateLayoutProps) {
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
@@ -33,18 +41,34 @@ export default function CandidateLayout({
         className="px-6 py-4"
       >
         <View className="flex-row items-center justify-between">
-          {/* Logo */}
-          <LogoWhite width={39} height={33} />
+          {showBackButton && onBack ? (
+            <>
+              <TouchableOpacity onPress={onBack} className="mr-4">
+                <View style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={{ color: 'white', fontSize: 24, fontWeight: 'bold' }}>‹</Text>
+                </View>
+              </TouchableOpacity>
+              <View className="flex-1">
+                {title && <Text className="text-white text-lg font-bold">{title}</Text>}
+                {subtitle && <Text className="text-white/80 text-sm">{subtitle}</Text>}
+              </View>
+            </>
+          ) : (
+            <>
+              {/* Logo */}
+              <LogoWhite width={39} height={33} />
 
-          {/* CPDash AI Title */}
-          <View className="flex-1 mx-4">
-            <Text className="text-white text-xl font-bold">
-              CPDash AI
-            </Text>
-          </View>
+              {/* CPDash AI Title */}
+              <View className="flex-1 mx-4">
+                <Text className="text-white text-xl font-bold">
+                  CPDash AI
+                </Text>
+              </View>
+            </>
+          )}
 
           {/* Search Icon */}
-          {showSearch && (
+          {showSearch && !showBackButton && (
             <TouchableOpacity
               onPress={onSearchPress}
               className="p-2"

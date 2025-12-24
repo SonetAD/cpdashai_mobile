@@ -6,6 +6,9 @@ import TalentPartnerLayout from '../../../components/layouts/TalentPartnerLayout
 import TalentScreen from '../talent/TalentScreen';
 import ReportsScreen from '../reports/ReportsScreen';
 import ProfileScreen from '../profile/ProfileScreen';
+import RecruiterJobsScreen from './RecruiterJobsScreen';
+import CreateEditJobPostingScreen from './CreateEditJobPostingScreen';
+import JobApplicationsScreen from './JobApplicationsScreen';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -278,6 +281,11 @@ export default function RecruiterDashboard({
   onLogout,
 }: RecruiterDashboardProps) {
   const [activeTab, setActiveTab] = useState('home');
+  const [showRecruiterJobs, setShowRecruiterJobs] = useState(false);
+  const [showCreateJob, setShowCreateJob] = useState(false);
+  const [showApplications, setShowApplications] = useState(false);
+  const [editingJobId, setEditingJobId] = useState<string | undefined>(undefined);
+  const [viewingApplicationsJobId, setViewingApplicationsJobId] = useState<string | undefined>(undefined);
 
   // Create separate animations for each tab
   const homeOpacity = useRef(new Animated.Value(1)).current;
@@ -331,14 +339,116 @@ export default function RecruiterDashboard({
         contentContainerStyle={{ paddingBottom: 24 }}
       >
         <View className="px-6 pt-2">
+          {/* MY JOB POSTINGS - TOP PRIORITY SECTION */}
+          <View className="mb-6">
+            <Text className="text-gray-900 text-2xl font-bold mb-4">My Job Postings</Text>
+            
+            <TouchableOpacity
+              onPress={() => setShowRecruiterJobs(true)}
+              activeOpacity={0.7}
+              className="rounded-3xl p-6 mb-4"
+              style={{
+                backgroundColor: '#437EF4',
+                shadowColor: '#437EF4',
+                shadowOffset: { width: 0, height: 6 },
+                shadowOpacity: 0.3,
+                shadowRadius: 16,
+                elevation: 8
+              }}
+            >
+              <View className="flex-row items-center mb-4">
+                <View className="bg-white/20 rounded-2xl p-3 mr-4">
+                  <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
+                    <Path
+                      d="M8 22H16C20 22 22 20 22 16V8C22 4 20 2 16 2H8C4 2 2 4 2 8V16C2 20 4 22 8 22Z"
+                      fill="white"
+                    />
+                    <Path
+                      d="M11.9998 8V16M16 12H8"
+                      stroke="#437EF4"
+                      strokeWidth={2.5}
+                      strokeLinecap="round"
+                    />
+                  </Svg>
+                </View>
+                <View className="flex-1">
+                  <Text className="text-white text-xl font-bold mb-1">View My Jobs</Text>
+                  <Text className="text-white/90 text-sm">Manage postings & review applications</Text>
+                </View>
+                <View className="bg-white/20 rounded-full p-2">
+                  <Svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                    <Path
+                      d="M8.91 19.92L15.43 13.4C16.2 12.63 16.2 11.37 15.43 10.6L8.91 4.08"
+                      stroke="white"
+                      strokeWidth="2.5"
+                      strokeMiterlimit="10"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </Svg>
+                </View>
+              </View>
+              
+              <View className="flex-row items-center justify-between">
+                <View className="bg-white/20 rounded-xl px-4 py-2.5 mr-2 flex-1">
+                  <Text className="text-white text-xs font-bold text-center">VIEW APPLICATIONS</Text>
+                </View>
+                <View className="bg-white/20 rounded-xl px-4 py-2.5 flex-1">
+                  <Text className="text-white text-xs font-bold text-center">MANAGE JOBS</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => {
+                setShowCreateJob(true);
+                setEditingJobId(undefined);
+              }}
+              activeOpacity={0.7}
+              className="bg-white rounded-3xl p-5 border-2 border-primary-blue"
+              style={{
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.06,
+                shadowRadius: 8,
+                elevation: 2
+              }}
+            >
+              <View className="flex-row items-center justify-between">
+                <View className="flex-row items-center flex-1">
+                  <View className="bg-primary-blue/10 rounded-2xl p-3 mr-4">
+                    <Svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                      <Path d="M12 5v14M5 12h14" stroke="#437EF4" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </Svg>
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-gray-900 text-lg font-bold mb-0.5">Create New Job</Text>
+                    <Text className="text-gray-500 text-sm">Post a new job opening</Text>
+                  </View>
+                </View>
+                <Svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                  <Path
+                    d="M8.91 19.92L15.43 13.4C16.2 12.63 16.2 11.37 15.43 10.6L8.91 4.08"
+                    stroke="#437EF4"
+                    strokeWidth="1.5"
+                    strokeMiterlimit="10"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </Svg>
+              </View>
+            </TouchableOpacity>
+          </View>
+
           {/* Hero Metrics - Glassmorphic Cards */}
           <View className="mb-6">
+            <Text className="text-gray-700 text-base font-semibold mb-3">Overview</Text>
             <View className="flex-row mb-3" style={{ gap: 12 }}>
               <View style={{ flex: 1 }}>
                 <HeroMetricCard
                   title="Active Candidates"
-                  value="1,247"
-                  subtitle="87 reviewed today"
+                  value="0"
+                  subtitle="0 reviewed today"
                   icon={
                     <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
                       <Path
@@ -352,14 +462,17 @@ export default function RecruiterDashboard({
                     </Svg>
                   }
                   gradientColors={['#437EF4']}
-                  trend={{ value: '12%', isPositive: true }}
                 />
               </View>
-              <View style={{ flex: 1 }}>
+              <TouchableOpacity 
+                style={{ flex: 1 }}
+                onPress={() => setShowRecruiterJobs(true)}
+                activeOpacity={0.7}
+              >
                 <HeroMetricCard
                   title="Open Positions"
-                  value="34"
-                  subtitle="5 urgent hires"
+                  value="0"
+                  subtitle="0 urgent hires"
                   icon={
                     <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
                       <Path
@@ -375,15 +488,14 @@ export default function RecruiterDashboard({
                     </Svg>
                   }
                   gradientColors={['#10B981']}
-                  trend={{ value: '5 new', isPositive: true }}
                 />
-              </View>
+              </TouchableOpacity>
             </View>
 
             <HeroMetricCard
               title="Time to Hire"
-              value="18 days"
-              subtitle="3 days faster than last month"
+              value="0 days"
+              subtitle="No data yet"
               icon={
                 <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
                   <Circle cx="12" cy="12" r="9" stroke="#F59E0B" strokeWidth={2} />
@@ -396,7 +508,6 @@ export default function RecruiterDashboard({
                 </Svg>
               }
               gradientColors={['#F59E0B']}
-              trend={{ value: '16%', isPositive: true }}
             />
           </View>
 
@@ -430,10 +541,10 @@ export default function RecruiterDashboard({
                 elevation: 3
               }}
             >
-              <PipelineStage stage="Applied" count={156} percentage={100} color="#3B82F6" />
-              <PipelineStage stage="Screening" count={89} percentage={57} color="#8B5CF6" />
-              <PipelineStage stage="Interview" count={34} percentage={22} color="#F59E0B" />
-              <PipelineStage stage="Offer" count={12} percentage={8} color="#10B981" />
+              <PipelineStage stage="Applied" count={0} percentage={0} color="#3B82F6" />
+              <PipelineStage stage="Screening" count={0} percentage={0} color="#8B5CF6" />
+              <PipelineStage stage="Interview" count={0} percentage={0} color="#F59E0B" />
+              <PipelineStage stage="Offer" count={0} percentage={0} color="#10B981" />
             </View>
           </View>
 
@@ -450,10 +561,10 @@ export default function RecruiterDashboard({
                 elevation: 3
               }}
             >
-              <QualityScoreGauge score={87} />
+              <QualityScoreGauge score={0} />
               <Text className="text-gray-600 text-sm text-center mt-4 leading-5">
-                Your candidates are <Text className="font-bold text-green-600">highly qualified</Text>.{'\n'}
-                Keep up the great sourcing!
+                No candidates yet.{' \n'}
+                Start sourcing to see quality metrics!
               </Text>
             </View>
           </View>
@@ -490,7 +601,10 @@ export default function RecruiterDashboard({
                   }
                   label="Post Job"
                   bgColor="#437EF4"
-                  onPress={() => console.log('Post job')}
+                  onPress={() => {
+                    setShowCreateJob(true);
+                    setEditingJobId(undefined);
+                  }}
                 />
                 <QuickActionBtn
                   icon={
@@ -541,6 +655,8 @@ export default function RecruiterDashboard({
               </View>
             </View>
           </View>
+
+
 
           {/* Recent Activity Feed */}
           <View className="mb-6">
@@ -647,6 +763,82 @@ export default function RecruiterDashboard({
       >
         <ProfileScreen activeTab={activeTab} onTabChange={handleTabChange} onLogout={onLogout} />
       </Animated.View>
+
+      {/* Job Management Screens */}
+      {showRecruiterJobs && (
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000 }}>
+          <RecruiterJobsScreen
+            activeTab="dashboard"
+            onTabChange={(tabId) => {
+              setShowRecruiterJobs(false);
+              handleTabChange(tabId);
+            }}
+            onBack={() => setShowRecruiterJobs(false)}
+            onCreateJob={() => {
+              setShowRecruiterJobs(false);
+              setShowCreateJob(true);
+              setEditingJobId(undefined);
+            }}
+            onEditJob={(jobId) => {
+              setShowRecruiterJobs(false);
+              setShowCreateJob(true);
+              setEditingJobId(jobId);
+            }}
+            onViewJob={(jobId) => {
+              // TODO: Navigate to job details view
+              console.log('View job:', jobId);
+            }}
+            onViewApplications={(jobId) => {
+              setShowRecruiterJobs(false);
+              setViewingApplicationsJobId(jobId);
+              setShowApplications(true);
+            }}
+          />
+        </View>
+      )}
+
+      {showCreateJob && (
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000 }}>
+          <CreateEditJobPostingScreen
+            activeTab="dashboard"
+            onTabChange={(tabId) => {
+              setShowCreateJob(false);
+              setEditingJobId(undefined);
+              handleTabChange(tabId);
+            }}
+            jobId={editingJobId}
+            onBack={() => {
+              setShowCreateJob(false);
+              setEditingJobId(undefined);
+              setShowRecruiterJobs(true);
+            }}
+            onSuccess={() => {
+              setShowCreateJob(false);
+              setEditingJobId(undefined);
+              setShowRecruiterJobs(true);
+            }}
+          />
+        </View>
+      )}
+
+      {showApplications && viewingApplicationsJobId && (
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000 }}>
+          <JobApplicationsScreen
+            activeTab="dashboard"
+            onTabChange={(tabId) => {
+              setShowApplications(false);
+              setViewingApplicationsJobId(undefined);
+              handleTabChange(tabId);
+            }}
+            jobId={viewingApplicationsJobId}
+            onBack={() => {
+              setShowApplications(false);
+              setViewingApplicationsJobId(undefined);
+              setShowRecruiterJobs(true);
+            }}
+          />
+        </View>
+      )}
     </View>
   );
 }

@@ -10,7 +10,9 @@ import UserQuestionIcon from '../../../assets/images/userQuestionWhite.svg';
 import CandidateLayout from '../../../components/layouts/CandidateLayout';
 import SearchModal from '../../../components/SearchModal';
 import SettingsScreen from './SettingsScreen';
-import { useCheckSubscriptionStatusQuery } from '../../../services/api';
+import ProfilePictureUpload from '../../../components/profile/ProfilePictureUpload';
+import ProfileBannerUpload from '../../../components/profile/ProfileBannerUpload';
+import { useCheckSubscriptionStatusQuery, useGetMyProfileQuery } from '../../../services/api';
 import { useAlert } from '../../../contexts/AlertContext';
 
 interface ProfileFieldProps {
@@ -71,6 +73,7 @@ export default function ProfileScreen({
 
   // Get subscription status
   const { data: subscriptionData, refetch: refetchSubscription } = useCheckSubscriptionStatusQuery();
+  const { data: profileData, refetch: refetchProfile } = useGetMyProfileQuery();
   const { showAlert } = useAlert();
   // Generate initials from user name
   const getInitials = () => {
@@ -98,11 +101,39 @@ export default function ProfileScreen({
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      await refetchSubscription();
+      const refetchPromises = [];
+      if (refetchSubscription) refetchPromises.push(refetchSubscription().catch(e => console.log('Subscription refetch skipped')));
+      if (refetchProfile) refetchPromises.push(refetchProfile().catch(e => console.log('Profile refetch skipped')));
+      await Promise.all(refetchPromises);
     } catch (error) {
       console.error('Error refreshing data:', error);
     } finally {
       setRefreshing(false);
+    }
+  };
+
+  // Handle profile picture upload success
+  const handleProfilePictureUploadSuccess = async (imageUrl: string) => {
+    // Refetch profile to get the updated picture
+    try {
+      const refetchPromises = [];
+      if (refetchSubscription) refetchPromises.push(refetchSubscription().catch(e => console.log('Subscription refetch skipped')));
+      if (refetchProfile) refetchPromises.push(refetchProfile().catch(e => console.log('Profile refetch skipped')));
+      await Promise.all(refetchPromises);
+    } catch (error) {
+      console.log('Error refetching after profile picture update:', error);
+    }
+  };
+
+  // Handle banner upload success
+  const handleBannerUploadSuccess = async (imageUrl: string) => {
+    // Refetch profile to get the updated banner
+    try {
+      if (refetchProfile) {
+        await refetchProfile();
+      }
+    } catch (error) {
+      console.log('Error refetching after banner update:', error);
     }
   };
 
@@ -166,21 +197,37 @@ export default function ProfileScreen({
           />
         }
       >
+        {/* Profile Banner */}
+        <ProfileBannerUpload
+          height={150}
+          editable={true}
+          onUploadSuccess={handleBannerUploadSuccess}
+        />
+        
         <View className="px-6 mt-6 pb-6">
         {/* Avatar Section */}
-        <View className="items-center mb-6">
-          <View
-            className="rounded-full bg-blue-400 items-center justify-center mb-3"
-            style={{ width: 70, height: 70 }}
-          >
-            <Text className="text-white text-2xl font-semibold">{getInitials()}</Text>
-          </View>
-          <Text className="text-gray-900 text-xl font-bold mb-1">{getFullName()}</Text>
+        <View className="items-center mb-6" style={{ marginTop: -40 }}>
+          <ProfilePictureUpload
+            initials={getInitials()}
+            size={80}
+            editable={true}
+            onUploadSuccess={handleProfilePictureUploadSuccess}
+          />
+          <Text className="text-gray-900 text-xl font-bold mb-1 mt-3">{getFullName()}</Text>
           <Text className="text-gray-500 text-sm mb-1">
             {user?.email || 'No email'}
           </Text>
           {user?.phoneNumber && (
             <Text className="text-gray-500 text-sm">{user.phoneNumber}</Text>
+          )}
+          
+          {/* Profile Status Badge */}
+          {profileData?.myProfile?.__typename === 'CandidateType' && (
+            <View className="mt-3 bg-blue-50 border border-blue-200 rounded-full px-4 py-1.5">
+              <Text className="text-blue-700 text-xs font-semibold">
+                Profile Active
+              </Text>
+            </View>
           )}
         </View>
 

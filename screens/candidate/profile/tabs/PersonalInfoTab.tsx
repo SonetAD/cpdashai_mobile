@@ -79,14 +79,14 @@ export const PersonalInfoTab: React.FC<PersonalInfoTabProps> = ({ candidateProfi
       )}
 
       {/* Preferences */}
-      {candidateProfile.preferredLocationsList && candidateProfile.preferredLocationsList.length > 0 && (
+      {candidateProfile.preferredLocations && candidateProfile.preferredLocations.length > 0 && (
         <View className="bg-white rounded-xl p-5 mb-4 border border-gray-100">
           <Text className="text-gray-900 font-bold text-lg mb-4">Preferences</Text>
 
           <View className="mb-3">
             <Text className="text-gray-600 text-xs mb-2">Preferred Locations</Text>
             <View className="flex-row flex-wrap gap-2">
-              {candidateProfile.preferredLocationsList.map((location, index) => (
+              {candidateProfile.preferredLocations.map((location, index) => (
                 <View key={index} className="bg-blue-50 border border-primary-blue rounded-full px-3 py-1">
                   <Text className="text-primary-blue text-xs font-medium">{location}</Text>
                 </View>

@@ -7,12 +7,13 @@ import CandidateLayout from '../../../components/layouts/CandidateLayout';
 import ProfileScreen from '../profile/ProfileScreen';
 import FullProfileScreen from '../profile/FullProfileScreen';
 import JobsScreen from './JobsScreen';
-import JobDetailsScreen from './JobDetailsScreen';
-import ApplicationTrackerScreen from './ApplicationTrackerScreen';
+import JobDetailsScreen from './JobDetailsScreenNew';
+import ApplicationTrackerScreen from './ApplicationTrackerScreenNew';
 import CVUploadScreen from './CVUploadScreen';
 import CVBuilderScreen from './CVBuilderScreen';
 import InterviewCoachScreen from '../aiCoach/InterviewCoachScreen';
 import AIClaraAssistantScreen from '../aiCoach/AIClaraAssistantScreen';
+import AIInterviewScreen from '../aiCoach/AIInterviewScreen';
 import SearchModal from '../../../components/SearchModal';
 import PricingScreen from '../subscription/PricingScreen';
 import SubscriptionSuccessScreen from '../subscription/SubscriptionSuccessScreen';
@@ -120,6 +121,7 @@ interface JobCardProps {
   skills: string[];
   aiInsight: string;
   badgeColor?: string;
+  onViewAll?: () => void;
 }
 
 const JobCard: React.FC<JobCardProps> = ({
@@ -132,9 +134,14 @@ const JobCard: React.FC<JobCardProps> = ({
   skills,
   aiInsight,
   badgeColor = '#437EF4',
+  onViewAll,
 }) => {
   return (
-    <View className="bg-white rounded-2xl p-5 mb-4 shadow-sm">
+    <TouchableOpacity 
+      className="bg-white rounded-2xl p-5 mb-4 shadow-sm"
+      activeOpacity={0.7}
+      onPress={onViewAll}
+    >
       {/* Position Badge */}
       <View className="flex-row items-center mb-3">
         <View
@@ -186,7 +193,7 @@ const JobCard: React.FC<JobCardProps> = ({
           <Text className="text-white text-sm font-semibold">Save</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 };
 
@@ -247,11 +254,13 @@ export default function CandidateDashboard({
   const [activeTab, setActiveTab] = useState('home');
   const [showFullProfile, setShowFullProfile] = useState(false);
   const [showJobDetails, setShowJobDetails] = useState(false);
+  const [selectedJobId, setSelectedJobId] = useState<string | undefined>(undefined);
   const [showApplicationTracker, setShowApplicationTracker] = useState(false);
   const [showCVUpload, setShowCVUpload] = useState(false);
   const [showCVBuilder, setShowCVBuilder] = useState(false);
   const [editResumeId, setEditResumeId] = useState<string | undefined>(undefined);
   const [showClaraAssistant, setShowClaraAssistant] = useState(false);
+  const [showAIInterview, setShowAIInterview] = useState(false);
   const [cvRefreshTrigger, setCvRefreshTrigger] = useState(0);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [showPricing, setShowPricing] = useState(false);
@@ -323,6 +332,7 @@ export default function CandidateDashboard({
     }
     if (tabId !== 'aiCoach') {
       setShowClaraAssistant(false);
+      setShowAIInterview(false);
     }
   };
 
@@ -334,12 +344,14 @@ export default function CandidateDashboard({
     setShowFullProfile(false);
   };
 
-  const handleJobPress = () => {
+  const handleJobPress = (jobId: string) => {
+    setSelectedJobId(jobId);
     setShowJobDetails(true);
   };
 
   const handleBackFromJobDetails = () => {
     setShowJobDetails(false);
+    setSelectedJobId(undefined);
   };
 
   const handleApplicationTrackerPress = () => {
@@ -381,6 +393,14 @@ export default function CandidateDashboard({
 
   const handleBackFromClara = () => {
     setShowClaraAssistant(false);
+  };
+
+  const handleAIInterviewPress = () => {
+    setShowAIInterview(true);
+  };
+
+  const handleBackFromAIInterview = () => {
+    setShowAIInterview(false);
   };
 
   // Handle resume upload from home screen
@@ -532,12 +552,24 @@ export default function CandidateDashboard({
       />
     );
   }
-  if (showJobDetails) {
+  if (showJobDetails && selectedJobId) {
     return (
       <JobDetailsScreen
-        activeTab={activeTab}
-        onTabChange={handleTabChange}
+        jobId={selectedJobId}
         onBack={handleBackFromJobDetails}
+        onNavigateToProfile={() => {
+          setShowJobDetails(false);
+          setSelectedJobId(undefined);
+          setShowFullProfile(true);
+          setActiveTab('profile');
+        }}
+        activeTab={activeTab}
+        onTabChange={(tabId: string) => {
+          // Close job details and navigate to selected tab
+          setShowJobDetails(false);
+          setSelectedJobId(undefined);
+          setActiveTab(tabId);
+        }}
       />
     );
   }
@@ -547,6 +579,24 @@ export default function CandidateDashboard({
         activeTab={activeTab}
         onTabChange={handleTabChange}
         onBack={handleBackFromClara}
+      />
+    );
+  }
+  if (showAIInterview) {
+    return (
+      <AIInterviewScreen
+        navigation={{
+          goBack: handleBackFromAIInterview,
+        }}
+      />
+    );
+  }
+  if (showAIInterview) {
+    return (
+      <AIInterviewScreen
+        navigation={{
+          goBack: handleBackFromAIInterview,
+        }}
       />
     );
   }
@@ -604,7 +654,7 @@ export default function CandidateDashboard({
                 icon={<FindJobsIcon width={40} height={40} />}
                 title="Find Jobs"
                 description="Discover your dream job effortlessly in the sea of opportunities! Dive in and explore"
-                onPress={() => console.log('Find Jobs')}
+                onPress={() => handleTabChange('jobs')}
               />
             </View>
 
@@ -614,7 +664,7 @@ export default function CandidateDashboard({
                 icon={<PracticeInterviewIcon width={40} height={40} />}
                 title="Practice Interview"
                 description="Prepare with confidence for real moments, by simulating AI-driven mock sessions"
-                onPress={() => console.log('Practice Interview')}
+                onPress={() => handleTabChange('aiCoach')}
               />
               <QuickActionCard
                 icon={<SkillGraphIcon width={32} height={32} />}
@@ -644,6 +694,7 @@ export default function CandidateDashboard({
               skills={['Figma', 'UX Research', 'Prototyping']}
               aiInsight="AI Insight: Your design portfolio shows strong UX depth 87% fit for this role."
               badgeColor="#437EF4"
+              onViewAll={() => handleTabChange('jobs')}
             />
 
             <JobCard
@@ -656,13 +707,18 @@ export default function CandidateDashboard({
               skills={['React', 'TypeScript', 'Next.js']}
               aiInsight="AI Insight: Your frontend skills and React experience make you a strong match for this position."
               badgeColor="#FFCC00"
+              onViewAll={() => handleTabChange('jobs')}
             />
           </View>
 
           {/* View All Link */}
-          <TouchableOpacity className="items-end mb-6">
+          <TouchableOpacity 
+            className="items-end mb-6"
+            onPress={() => handleTabChange('jobs')}
+            activeOpacity={0.7}
+          >
             <View className="flex-row items-center">
-              <Text className="text-primary-blue text-sm font-medium mr-1">View All</Text>
+              <Text className="text-primary-blue text-sm font-medium mr-1">View All Jobs</Text>
               <Svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                 <Path
                   d="M6 12L10 8L6 4"
@@ -816,6 +872,7 @@ export default function CandidateDashboard({
           activeTab={activeTab}
           onTabChange={handleTabChange}
           onClaraPress={handleClaraPress}
+          onAIInterviewPress={handleAIInterviewPress}
         />
       </Animated.View>
 

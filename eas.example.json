@@ -1,0 +1,59 @@
+{
+  "cli": {
+    "version": ">= 14.0.0"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": {
+        "gradleCommand": ":app:assembleDebug",
+        "buildType": "apk"
+      },
+      "ios": {
+        "buildConfiguration": "Debug"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "YOUR_API_URL_HERE",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "YOUR_GOOGLE_WEB_CLIENT_ID",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "YOUR_GOOGLE_ANDROID_CLIENT_ID",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "YOUR_GOOGLE_IOS_CLIENT_ID",
+        "EXPO_PUBLIC_GOOGLE_EXPO_CLIENT_ID": "YOUR_GOOGLE_EXPO_CLIENT_ID",
+        "EXPO_PUBLIC_OAUTH_REDIRECT_SCHEME": "YOUR_REDIRECT_SCHEME",
+        "EXPO_PUBLIC_OAUTH_REDIRECT_PATH": "auth/callback"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "YOUR_API_URL_HERE",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "YOUR_GOOGLE_WEB_CLIENT_ID",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "YOUR_GOOGLE_ANDROID_CLIENT_ID",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "YOUR_GOOGLE_IOS_CLIENT_ID",
+        "EXPO_PUBLIC_GOOGLE_EXPO_CLIENT_ID": "YOUR_GOOGLE_EXPO_CLIENT_ID",
+        "EXPO_PUBLIC_OAUTH_REDIRECT_SCHEME": "YOUR_REDIRECT_SCHEME",
+        "EXPO_PUBLIC_OAUTH_REDIRECT_PATH": "auth/callback"
+      }
+    },
+    "production": {
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "YOUR_API_URL_HERE",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "YOUR_GOOGLE_WEB_CLIENT_ID",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "YOUR_GOOGLE_ANDROID_CLIENT_ID",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "YOUR_GOOGLE_IOS_CLIENT_ID",
+        "EXPO_PUBLIC_GOOGLE_EXPO_CLIENT_ID": "YOUR_GOOGLE_EXPO_CLIENT_ID",
+        "EXPO_PUBLIC_OAUTH_REDIRECT_SCHEME": "YOUR_REDIRECT_SCHEME",
+        "EXPO_PUBLIC_OAUTH_REDIRECT_PATH": "auth/callback"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

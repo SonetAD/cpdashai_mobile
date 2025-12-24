@@ -3,11 +3,6 @@ import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
 import TalentPartnerLayout from '../../../components/layouts/TalentPartnerLayout';
 
-interface TalentPartnerDashboardProps {
-  activeTab?: string;
-  onTabChange?: (tabId: string) => void;
-}
-
 // Icons
 const UsersIcon = ({ color = '#437EF4' }) => (
   <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
@@ -194,9 +189,18 @@ const QuickInsight: React.FC<QuickInsightProps> = ({ title, value, color }) => {
   );
 };
 
+interface TalentPartnerDashboardProps {
+  activeTab?: string;
+  onTabChange?: (tabId: string) => void;
+  onViewJobs?: () => void;
+  onCreateJob?: () => void;
+}
+
 export default function TalentPartnerDashboard({
   activeTab = 'home',
   onTabChange,
+  onViewJobs,
+  onCreateJob,
 }: TalentPartnerDashboardProps) {
   return (
     <TalentPartnerLayout
@@ -210,49 +214,141 @@ export default function TalentPartnerDashboard({
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 24 }}
       >
-        <View className="px-6">
-          {/* Stats Grid */}
-          <View className="flex-row mb-4">
-            <View className="flex-1 mr-2">
-              <StatCard
-                title="Active Candidates"
-                value="1,247"
-                change="+12%"
-                trend="up"
-                icon={<UsersIcon color="#437EF4" />}
-                color="#437EF4"
-              />
-            </View>
-            <View className="flex-1 ml-2">
-              <StatCard
-                title="Open Positions"
-                value="34"
-                change="+5"
-                trend="up"
-                icon={<BriefcaseIcon color="#83E4E1" />}
-                color="#83E4E1"
-              />
-            </View>
+        <View className="px-6 pt-6">
+          {/* My Jobs Section - MOST PROMINENT at Top */}
+          <View className="mb-8">
+            <Text className="text-gray-900 text-2xl font-bold mb-4">📋 My Job Postings</Text>
+            
+            <TouchableOpacity
+              onPress={onViewJobs}
+              className="bg-gradient-to-br from-primary-blue to-blue-600 rounded-3xl p-6 mb-3 shadow-lg"
+              style={{ 
+                backgroundColor: '#437EF4',
+                shadowColor: '#437EF4', 
+                shadowOffset: { width: 0, height: 4 }, 
+                shadowOpacity: 0.3, 
+                shadowRadius: 12, 
+                elevation: 6 
+              }}
+              activeOpacity={0.8}
+            >
+              <View className="flex-row items-center justify-between mb-4">
+                <View className="flex-row items-center flex-1">
+                  <View className="bg-white/20 rounded-2xl p-3 mr-4">
+                    <BriefcaseIcon color="#FFFFFF" />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-white text-lg font-bold mb-1">View My Jobs</Text>
+                    <Text className="text-white/90 text-sm">Manage postings & review applications</Text>
+                  </View>
+                </View>
+                <View className="bg-white/20 rounded-full p-2">
+                  <Svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                    <Path
+                      d="M8.91 19.92L15.43 13.4C16.2 12.63 16.2 11.37 15.43 10.6L8.91 4.08"
+                      stroke="white"
+                      strokeWidth="2"
+                      strokeMiterlimit="10"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </Svg>
+                </View>
+              </View>
+              
+              <View className="flex-row items-center">
+                <View className="bg-white/20 rounded-xl px-4 py-2 mr-3">
+                  <Text className="text-white text-xs font-semibold">View Applications</Text>
+                </View>
+                <View className="bg-white/20 rounded-xl px-4 py-2">
+                  <Text className="text-white text-xs font-semibold">Manage Jobs</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={onCreateJob}
+              className="bg-white rounded-3xl p-5 border-2 border-primary-blue shadow-sm"
+              style={{ 
+                shadowColor: '#000', 
+                shadowOffset: { width: 0, height: 2 }, 
+                shadowOpacity: 0.05, 
+                shadowRadius: 8, 
+                elevation: 2 
+              }}
+              activeOpacity={0.8}
+            >
+              <View className="flex-row items-center justify-between">
+                <View className="flex-row items-center flex-1">
+                  <View className="bg-primary-blue/10 rounded-2xl p-3 mr-4">
+                    <Svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                      <Path d="M12 5v14M5 12h14" stroke="#437EF4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </Svg>
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-gray-900 text-base font-bold mb-0.5">Create New Job</Text>
+                    <Text className="text-gray-500 text-sm">Post a new job opening</Text>
+                  </View>
+                </View>
+                <Svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                  <Path
+                    d="M8.91 19.92L15.43 13.4C16.2 12.63 16.2 11.37 15.43 10.6L8.91 4.08"
+                    stroke="#437EF4"
+                    strokeWidth="1.5"
+                    strokeMiterlimit="10"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </Svg>
+              </View>
+            </TouchableOpacity>
           </View>
 
-          <View className="flex-row mb-6">
-            <View className="flex-1 mr-2">
-              <StatCard
-                title="Interviews Today"
-                value="12"
-                icon={<ChartIcon color="#FF8D28" />}
-                color="#FF8D28"
-              />
+          {/* Stats Grid - Compact */}
+          <View className="mb-6">
+            <Text className="text-gray-700 text-base font-semibold mb-3">Overview</Text>
+            <View className="flex-row mb-3">
+              <View className="flex-1 mr-2">
+                <StatCard
+                  title="Active Candidates"
+                  value="1,247"
+                  change="+12%"
+                  trend="up"
+                  icon={<UsersIcon color="#437EF4" />}
+                  color="#437EF4"
+                />
+              </View>
+              <View className="flex-1 ml-2">
+                <StatCard
+                  title="Open Positions"
+                  value="34"
+                  change="+5"
+                  trend="up"
+                  icon={<BriefcaseIcon color="#83E4E1" />}
+                  color="#83E4E1"
+                />
+              </View>
             </View>
-            <View className="flex-1 ml-2">
-              <StatCard
-                title="Placements"
-                value="89"
-                change="+18%"
-                trend="up"
-                icon={<DocumentIcon color="#FFCC00" />}
-                color="#FFCC00"
-              />
+
+            <View className="flex-row mb-3">
+              <View className="flex-1 mr-2">
+                <StatCard
+                  title="Interviews Today"
+                  value="12"
+                  icon={<ChartIcon color="#FF8D28" />}
+                  color="#FF8D28"
+                />
+              </View>
+              <View className="flex-1 ml-2">
+                <StatCard
+                  title="Placements"
+                  value="89"
+                  change="+18%"
+                  trend="up"
+                  icon={<DocumentIcon color="#FFCC00" />}
+                  color="#FFCC00"
+                />
+              </View>
             </View>
           </View>
 
@@ -267,9 +363,9 @@ export default function TalentPartnerDashboard({
             </ScrollView>
           </View>
 
-          {/* Quick Actions */}
+          {/* Additional Actions - Simplified */}
           <View className="mb-4">
-            <Text className="text-gray-900 text-xl font-bold mb-4">Quick Actions</Text>
+            <Text className="text-gray-700 text-base font-semibold mb-3">More Actions</Text>
 
             <ActionCard
               title="Find Candidates"
@@ -277,14 +373,6 @@ export default function TalentPartnerDashboard({
               icon={<UsersIcon color="#437EF4" />}
               onPress={() => console.log('Find Candidates')}
               gradient={['#437EF4', '#3B71E0']}
-            />
-
-            <ActionCard
-              title="Post New Job"
-              description="Create and publish a new job listing"
-              icon={<BriefcaseIcon color="#83E4E1" />}
-              onPress={() => console.log('Post Job')}
-              gradient={['#83E4E1', '#6FD5D2']}
             />
 
             <ActionCard

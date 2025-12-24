@@ -3,7 +3,9 @@ import { View, Text, ScrollView, TouchableOpacity, Switch, ActivityIndicator } f
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../../store/store';
-import { useGetRecruiterProfileQuery } from '../../../services/api';
+import { useGetRecruiterProfileQuery, useGetMyProfileQuery } from '../../../services/api';
+import ProfilePictureUpload from '../../../components/profile/ProfilePictureUpload';
+import ProfileBannerUpload from '../../../components/profile/ProfileBannerUpload';
 import TalentPartnerLayout from '../../../components/layouts/TalentPartnerLayout';
 
 interface ProfileScreenProps {
@@ -12,28 +14,6 @@ interface ProfileScreenProps {
   onLogout?: () => void;
 }
 
-// Profile Avatar Component
-const ProfileAvatar = ({ name }: { name: string }) => {
-  const initials = name
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
-
-  return (
-    <View
-      className="rounded-full items-center justify-center"
-      style={{
-        width: 80,
-        height: 80,
-        backgroundColor: '#437EF4',
-      }}
-    >
-      <Text className="text-white text-2xl font-bold">{initials}</Text>
-    </View>
-  );
-};
 
 // Settings Item Component
 interface SettingsItemProps {
@@ -139,12 +119,38 @@ export default function ProfileScreen({
   const user = useSelector((state: RootState) => state.auth.user);
 
   // Fetch recruiter profile data
-  const { data: recruiterProfileData, isLoading } = useGetRecruiterProfileQuery();
+  const { data: recruiterProfileData, isLoading, refetch: refetchRecruiterProfile } = useGetRecruiterProfileQuery();
+  const { data: profileData, refetch: refetchProfile } = useGetMyProfileQuery();
 
   // Extract recruiter profile
   const recruiterProfile = recruiterProfileData?.recruiter?.__typename === 'RecruiterType'
     ? recruiterProfileData.recruiter
     : null;
+
+  // Handle profile picture upload success
+  const handleProfilePictureUploadSuccess = async (imageUrl: string) => {
+    // Refetch both profile queries to get the updated picture
+    try {
+      const refetchPromises = [];
+      if (refetchRecruiterProfile) refetchPromises.push(refetchRecruiterProfile().catch(e => console.log('Recruiter profile refetch skipped')));
+      if (refetchProfile) refetchPromises.push(refetchProfile().catch(e => console.log('Profile refetch skipped')));
+      await Promise.all(refetchPromises);
+    } catch (error) {
+      console.log('Error refetching after profile picture update:', error);
+    }
+  };
+
+  // Handle banner upload success
+  const handleBannerUploadSuccess = async (imageUrl: string) => {
+    // Refetch profile to get the updated banner
+    try {
+      if (refetchProfile) {
+        await refetchProfile();
+      }
+    } catch (error) {
+      console.log('Error refetching after banner update:', error);
+    }
+  };
 
   // Prepare display data
   const getFullName = () => {
@@ -186,6 +192,16 @@ export default function ProfileScreen({
     return 'Recently joined';
   };
 
+  // Get initials for profile picture
+  const getInitials = () => {
+    const fullName = getFullName();
+    const names = fullName.split(' ');
+    if (names.length >= 2) {
+      return `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase();
+    }
+    return fullName.substring(0, 2).toUpperCase();
+  };
+
   // Show loading state
   if (isLoading) {
     return (
@@ -215,11 +231,19 @@ export default function ProfileScreen({
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 24 }}
       >
+        {/* Profile Banner */}
+        <ProfileBannerUpload
+          height={150}
+          editable={true}
+          onUploadSuccess={handleBannerUploadSuccess}
+        />
+
         <View className="px-6 pt-4">
           {/* Profile Header Card */}
           <View
             className="bg-white rounded-3xl p-6 mb-6 items-center"
             style={{
+              marginTop: -40,
               shadowColor: '#000',
               shadowOffset: { width: 0, height: 2 },
               shadowOpacity: 0.08,
@@ -227,7 +251,12 @@ export default function ProfileScreen({
               elevation: 3,
             }}
           >
-            <ProfileAvatar name={getFullName()} />
+            <ProfilePictureUpload
+              initials={getInitials()}
+              size={80}
+              editable={true}
+              onUploadSuccess={handleProfilePictureUploadSuccess}
+            />
             <Text className="text-gray-900 text-2xl font-bold mt-4 mb-1">
               {getFullName()}
             </Text>

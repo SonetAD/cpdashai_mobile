@@ -1,10 +1,52 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, Linking } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
-import { useParseAndCreateResumeMutation, useGetMyResumesQuery, Resume } from '../../../../services/api';
+import { useSelector } from 'react-redux';
+import { useParseResumeAsyncMutation, useGetMyResumesQuery, Resume } from '../../../../services/api';
 import { useAlert } from '../../../../contexts/AlertContext';
-import Svg, { Path } from 'react-native-svg';
+import { resumeParsingProgressService, ProgressUpdate } from '../../../../services/resumeParsingProgress';
+import Svg, { Path, Circle } from 'react-native-svg';
+
+// Pending Task Card - Shows parsing progress
+interface PendingTaskCardProps {
+  taskId: string;
+  fileName: string;
+  progress: number;
+  stage: string;
+  stageLabel: string;
+  status: string;
+}
+
+const PendingTaskCard: React.FC<PendingTaskCardProps> = ({ fileName, progress, stageLabel, status }) => {
+  return (
+    <View className="bg-blue-50 rounded-xl p-4 mb-3 border border-blue-200">
+      <View className="flex-row items-center mb-2">
+        <View className="bg-blue-100 rounded-full p-2 mr-3">
+          <ActivityIndicator size="small" color="#437EF4" />
+        </View>
+        <View className="flex-1">
+          <Text className="text-gray-900 text-base font-semibold" numberOfLines={1}>
+            {fileName}
+          </Text>
+          <Text className="text-blue-600 text-xs mt-0.5">
+            {status === 'pending' ? 'Queued for processing...' : stageLabel}
+          </Text>
+        </View>
+        <Text className="text-blue-600 text-xs font-semibold">
+          {progress}%
+        </Text>
+      </View>
+      {/* Progress Bar */}
+      <View className="bg-blue-100 rounded-full h-1.5 overflow-hidden">
+        <View 
+          className="bg-blue-500 h-full rounded-full"
+          style={{ width: `${progress}%` }}
+        />
+      </View>
+    </View>
+  );
+};
 
 // Simple Resume Card for Profile - No edit/delete, no ATS score/status
 interface ResumeCardProps {
@@ -50,11 +92,57 @@ const ResumeCard: React.FC<ResumeCardProps> = ({ resume, onDownload }) => {
 };
 
 export const ResumeTab: React.FC = () => {
-  const [parseAndCreateResume, { isLoading: isUploading }] = useParseAndCreateResumeMutation();
+  const [parseResumeAsync, { isLoading: isUploading }] = useParseResumeAsyncMutation();
   const { data: resumesData, isLoading: isLoadingResumes, error, refetch } = useGetMyResumesQuery();
   const { showAlert } = useAlert();
+  const accessToken = useSelector((state: any) => state.auth.token);
+  
+  // Track pending parsing tasks with real-time progress
+  const [pendingTasks, setPendingTasks] = useState<Map<string, {
+    fileName: string;
+    progress: number;
+    stage: string;
+    stageLabel: string;
+    status: string;
+  }>>(new Map());
+  
+  // Track active WebSocket subscriptions
+  const [activeSubscriptions, setActiveSubscriptions] = useState<Set<string>>(new Set());
 
   const resumes = resumesData?.myResumes || [];
+  
+  // Display pending resumes from server (for tasks that may have been created before this session)
+  useEffect(() => {
+    const pendingResumes = resumes.filter(r => r.status === 'pending' || r.status === 'processing');
+    
+    // Add pending resumes to display (without active WebSocket subscription)
+    pendingResumes.forEach(resume => {
+      if (!pendingTasks.has(resume.id) && !activeSubscriptions.has(resume.id)) {
+        setPendingTasks(prev => new Map(prev).set(resume.id, {
+          fileName: resume.fileName || resume.fullName,
+          progress: 0,
+          stage: 'pending',
+          stageLabel: 'Processing on server...',
+          status: resume.status || 'pending'
+        }));
+      }
+    });
+    
+    // Remove completed tasks from pending display
+    setPendingTasks(prev => {
+      const newMap = new Map(prev);
+      const pendingIds = new Set(pendingResumes.map(r => r.id));
+      
+      for (const taskId of newMap.keys()) {
+        // Only remove if not in pending list AND not actively subscribed
+        if (!pendingIds.has(taskId) && !activeSubscriptions.has(taskId)) {
+          newMap.delete(taskId);
+        }
+      }
+      
+      return newMap;
+    });
+  }, [resumes, activeSubscriptions]);
 
   const handlePickDocument = async () => {
     try {
@@ -116,7 +204,7 @@ export const ResumeTab: React.FC = () => {
 
   const handleUploadResume = async (file: DocumentPicker.DocumentPickerAsset) => {
     try {
-      console.log('Reading file from path:', file.uri);
+      console.log('📤 Reading file from path:', file.uri);
 
       // Read file as base64
       const base64 = await FileSystem.readAsStringAsync(file.uri, {
@@ -126,41 +214,154 @@ export const ResumeTab: React.FC = () => {
       // Add data URI prefix
       const fileData = `data:${file.mimeType};base64,${base64}`;
 
-      console.log('File converted to base64 with data URI');
+      console.log('📦 File converted to base64, uploading...');
 
-      // Parse and create resume
-      const data = await parseAndCreateResume({
+      // Use async parsing mutation
+      const data = await parseResumeAsync({
         fileName: file.name,
         fileData: fileData,
       }).unwrap();
 
-      if (data.parseAndCreateResume.__typename === 'ResumeBuilderSuccessType') {
-        const resume = data.parseAndCreateResume.resume;
+      if (data.parseResumeAsync.__typename === 'ResumeParsingTaskSuccessType') {
+        const taskId = data.parseResumeAsync.task.taskId;
+        
+        console.log('✅ Resume parsing task created. Task ID:', taskId);
 
+        // Show success message immediately
         showAlert({
           type: 'success',
-          title: 'Success!',
-          message: `Resume parsed successfully!\n\nName: ${resume.fullName}\n\nYou can view and manage it in the CV Builder section.`,
-          buttons: [{
-            text: 'OK',
-            style: 'default',
-            onPress: () => refetch(),
-          }],
+          title: 'Upload Started!',
+          message: 'Your resume is being processed. You can see the progress below.',
+          buttons: [{ text: 'OK', style: 'default' }],
         });
-      } else if (data.parseAndCreateResume.__typename === 'ErrorType') {
+
+        // Add pending task to display immediately at 0%
+        setPendingTasks(prev => new Map(prev).set(taskId, {
+          fileName: file.name,
+          progress: 0,
+          stage: 'pending',
+          stageLabel: 'Starting upload...',
+          status: 'pending'
+        }));
+
+        // Track this subscription
+        setActiveSubscriptions(prev => new Set(prev).add(taskId));
+
+        // Track if minimum 0% display time has passed
+        let canShowProgress = false;
+        
+        // Wait 1.5 seconds before allowing progress updates to show
+        // This ensures user always sees 0% for at least 1.5 seconds
+        setTimeout(() => {
+          canShowProgress = true;
+          console.log('✅ Minimum 0% display time reached, can now show real progress');
+        }, 1500);
+
+        // Queue to store updates that arrive before minimum display time
+        let queuedUpdate: ProgressUpdate | null = null;
+
+        // Subscribe to WebSocket progress updates
+        resumeParsingProgressService.subscribe(
+          taskId,
+          accessToken,
+          // On progress update
+          (update: ProgressUpdate) => {
+            console.log('📊 Progress update received:', update.progress + '%');
+            
+            if (canShowProgress) {
+              // Minimum time has passed, show the update immediately
+              setPendingTasks(prev => new Map(prev).set(taskId, {
+                fileName: file.name,
+                progress: update.progress,
+                stage: update.stage,
+                stageLabel: update.stageLabel,
+                status: update.status
+              }));
+            } else {
+              // Still in minimum display time, queue the latest update
+              console.log('⏳ Queuing update until minimum 0% display time passes');
+              queuedUpdate = update;
+              
+              // Check every 100ms if we can show the queued update
+              const checkInterval = setInterval(() => {
+                if (canShowProgress && queuedUpdate) {
+                  console.log('🎬 Showing queued progress:', queuedUpdate.progress + '%');
+                  setPendingTasks(prev => new Map(prev).set(taskId, {
+                    fileName: file.name,
+                    progress: queuedUpdate!.progress,
+                    stage: queuedUpdate!.stage,
+                    stageLabel: queuedUpdate!.stageLabel,
+                    status: queuedUpdate!.status
+                  }));
+                  queuedUpdate = null;
+                  clearInterval(checkInterval);
+                }
+              }, 100);
+            }
+          },
+          // On completed
+          async (resumeId: string) => {
+            console.log('✅ Parsing completed! Resume ID:', resumeId);
+            
+            // Remove from pending tasks
+            setPendingTasks(prev => {
+              const newMap = new Map(prev);
+              newMap.delete(taskId);
+              return newMap;
+            });
+            
+            // Remove from active subscriptions
+            setActiveSubscriptions(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(taskId);
+              return newSet;
+            });
+
+            // Refetch resumes to show the new one
+            await refetch();
+            
+            // No success alert - user already got confirmation when upload started
+          },
+          // On error
+          (error: string) => {
+            console.error('❌ Parsing error:', error);
+            
+            // Remove from pending tasks
+            setPendingTasks(prev => {
+              const newMap = new Map(prev);
+              newMap.delete(taskId);
+              return newMap;
+            });
+            
+            // Remove from active subscriptions
+            setActiveSubscriptions(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(taskId);
+              return newSet;
+            });
+
+            showAlert({
+              type: 'error',
+              title: 'Parsing Failed',
+              message: error || 'Failed to parse resume. Please try again.',
+              buttons: [{ text: 'OK', style: 'default' }],
+            });
+          }
+        );
+      } else if (data.parseResumeAsync.__typename === 'ErrorType') {
         showAlert({
           type: 'error',
           title: 'Upload Failed',
-          message: data.parseAndCreateResume.message || 'Failed to parse resume.',
+          message: data.parseResumeAsync.message || 'Failed to start resume parsing.',
           buttons: [{ text: 'OK', style: 'default' }],
         });
       }
     } catch (error: any) {
-      console.error('Failed to upload resume:', error);
+      console.error('❌ Failed to upload resume:', error);
       showAlert({
         type: 'error',
         title: 'Upload Failed',
-        message: error?.data?.parseAndCreateResume?.message || error?.message || 'Failed to upload and parse resume. Please try again.',
+        message: error?.data?.parseResumeAsync?.message || error?.message || 'Failed to upload resume. Please try again.',
         buttons: [{ text: 'OK', style: 'default' }],
       });
     }
@@ -241,7 +442,7 @@ export const ResumeTab: React.FC = () => {
               </Svg>
             </View>
             <Text className="text-white text-sm font-semibold">
-              {isUploading ? 'Uploading & Parsing...' : 'Upload Resume (PDF/DOCX)'}
+              {isUploading ? 'Uploading...' : 'Upload Resume (PDF/DOCX)'}
             </Text>
           </>
         )}
@@ -252,8 +453,31 @@ export const ResumeTab: React.FC = () => {
         <Text className="text-gray-900 text-base font-semibold mb-1">My Resumes</Text>
         <Text className="text-gray-500 text-xs">
           {resumes.length} {resumes.length === 1 ? 'resume' : 'resumes'} uploaded
+          {pendingTasks.size > 0 && ` • ${pendingTasks.size} processing`}
         </Text>
       </View>
+      
+      {/* Pending Tasks */}
+      {pendingTasks.size > 0 && (
+        <View className="mb-3">
+          <View className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 mb-3">
+            <Text className="text-yellow-800 text-xs">
+              ℹ️ Resumes are being processed on the server. Refresh to see updates.
+            </Text>
+          </View>
+          {Array.from(pendingTasks.entries()).map(([taskId, task]) => (
+            <PendingTaskCard
+              key={taskId}
+              taskId={taskId}
+              fileName={task.fileName}
+              progress={task.progress}
+              stage={task.stage}
+              stageLabel={task.stageLabel}
+              status={task.status}
+            />
+          ))}
+        </View>
+      )}
 
       {/* Loading state */}
       {isLoadingResumes && resumes.length === 0 && (
@@ -277,7 +501,7 @@ export const ResumeTab: React.FC = () => {
       )}
 
       {/* Empty state */}
-      {!isLoadingResumes && resumes.length === 0 && !error && (
+      {!isLoadingResumes && resumes.length === 0 && pendingTasks.size === 0 && !error && (
         <View className="bg-gray-50 rounded-xl p-6 items-center border border-gray-100">
           <View className="bg-blue-100 rounded-full p-3 mb-3">
             <Svg width="32" height="32" viewBox="0 0 24 24" fill="none">
@@ -291,8 +515,8 @@ export const ResumeTab: React.FC = () => {
         </View>
       )}
 
-      {/* Resume list */}
-      {resumes.map((resume) => (
+      {/* Resume list - only show completed resumes */}
+      {resumes.filter(r => r.status === 'completed').map((resume) => (
         <ResumeCard
           key={resume.id}
           resume={resume}

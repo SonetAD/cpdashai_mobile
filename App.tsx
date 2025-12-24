@@ -9,6 +9,7 @@ import { useAppDispatch } from './store/hooks';
 import { logout as logoutAction, updateTokens } from './store/slices/authSlice';
 import { api, useVerifyTokenQuery, useRefreshTokenMutation, useLogoutMutation } from './services/api';
 import { getAccessToken, getRefreshToken, clearTokens, storeTokens } from './utils/authUtils';
+import nativeGoogleSignIn from './services/nativeGoogleSignIn';
 import SplashScreen from './screens/SplashScreen';
 import OnboardingScreen from './screens/OnboardingScreen';
 import CreateAccountScreen from './screens/auth/CreateAccountScreen';
@@ -324,6 +325,15 @@ function AppContent() {
       // Continue with local logout even if backend fails
     }
 
+    // Sign out from Google to clear the session and force account picker on next login
+    try {
+      await nativeGoogleSignIn.signOut();
+      console.log('Google sign-out successful');
+    } catch (error) {
+      console.error('Google sign-out error:', error);
+      // Continue with logout even if Google sign-out fails
+    }
+
     // Clear tokens from secure storage
     await clearTokens();
 
@@ -366,6 +376,7 @@ function AppContent() {
             onSignUp={handleGoToRegister}
             onForgotPassword={handleGoToForgotPassword}
             onLoginSuccess={handleLoginSuccess}
+            showOAuth={selectedRole !== 'recruiter'}
           />
         );
         break;

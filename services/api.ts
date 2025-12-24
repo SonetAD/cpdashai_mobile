@@ -1,6 +1,6 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2:8000';
+export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2:8000';
 
 console.log('API_URL:', API_URL);
 console.log('Environment:', process.env.EXPO_PUBLIC_API_URL);
@@ -247,6 +247,8 @@ export interface CandidateProfile {
   updatedAt?: string;
   education?: CandidateEducation[];
   experience?: CandidateExperience[];
+  certifications?: Certification[];
+  profilePicture?: string;
 }
 
 export interface GetCandidateProfileSuccessType {
@@ -280,7 +282,7 @@ export interface GetCandidateProfileSuccessType {
 }
 
 export interface GetCandidateProfileResponse {
-  candidate: GetCandidateProfileSuccessType | ErrorType;
+  myProfile: GetCandidateProfileSuccessType | ErrorType;
 }
 
 // Recruiter Profile types
@@ -361,6 +363,245 @@ export interface UpdateHobbiesInput {
 
 export interface UpdateHobbiesResponse {
   updateHobbies: SuccessType | ErrorType;
+}
+
+// Preferred Locations management types
+export interface AddPreferredLocationsInput {
+  locations: string[];
+}
+
+export interface AddPreferredLocationsResponse {
+  addPreferredLocations: SuccessType | ErrorType;
+}
+
+export interface UpdatePreferredLocationsInput {
+  locations: string[];
+}
+
+export interface UpdatePreferredLocationsResponse {
+  updatePreferredLocations: SuccessType | ErrorType;
+}
+
+export interface DeletePreferredLocationsInput {
+  locations: string[];
+}
+
+export interface DeletePreferredLocationsResponse {
+  deletePreferredLocations: SuccessType | ErrorType;
+}
+
+// Profile Picture types
+export interface MyProfileResponse {
+  myProfile: CandidateProfileData | RecruiterProfileData;
+}
+
+export interface CandidateProfileData {
+  __typename: 'CandidateType';
+  id: string;
+  profilePicture?: string;
+  profileBanner?: string;
+  certifications?: string | Certification[];
+}
+
+export interface RecruiterProfileData {
+  __typename: 'RecruiterType';
+  id: string;
+  profilePicture?: string;
+  profileBanner?: string;
+}
+
+export interface ProfilePictureInput {
+  profilePictureBase64: string;
+}
+
+export interface ProfilePictureSuccessType {
+  __typename: 'SuccessType';
+  success: boolean;
+  data?: string;
+  message: string;
+}
+
+export interface ProfilePictureErrorType {
+  __typename: 'ErrorType';
+  success: boolean;
+  message: string;
+  errors?: Array<{
+    field: string;
+    message: string;
+  }>;
+}
+
+export interface UploadCandidateProfilePictureResponse {
+  uploadCandidateProfilePicture: ProfilePictureSuccessType | ProfilePictureErrorType;
+}
+
+export interface UploadRecruiterProfilePictureResponse {
+  uploadRecruiterProfilePicture: ProfilePictureSuccessType | ProfilePictureErrorType;
+}
+
+// Profile Banner types
+export interface ProfileBannerInput {
+  profileBannerBase64: string;
+  filename: string;
+}
+
+export interface UploadCandidateProfileBannerResponse {
+  uploadCandidateProfileBanner: ProfilePictureSuccessType | ProfilePictureErrorType;
+}
+
+export interface UploadRecruiterProfileBannerResponse {
+  uploadRecruiterProfileBanner: ProfilePictureSuccessType | ProfilePictureErrorType;
+}
+
+// Certification types
+export interface CertificationInput {
+  name: string;
+  issuingOrganization: string;
+  certificatePdfBase64?: string;
+  credentialId?: string;
+  credentialUrl?: string;
+  description?: string;
+  expiryDate?: string;
+  issueDate?: string;
+}
+
+export interface AddCertificationInput {
+  certification: CertificationInput;
+}
+
+export interface AddCertificationResponse {
+  addCertification: SuccessType | ErrorType;
+}
+
+export interface Certification {
+  id?: string;
+  name: string;
+  issuingOrganization: string;
+  credentialId?: string;
+  credentialUrl?: string;
+  description?: string;
+  issueDate?: string;
+  expiryDate?: string;
+  certificatePdfUrl?: string;
+}
+
+// Delete Certification types
+export interface DeleteCertificationInput {
+  index: number;
+}
+
+export interface DeleteCertificationResponse {
+  deleteCertification: SuccessType | ErrorType;
+}
+
+export interface DeleteCertificatePdfResponse {
+  deleteCertificatePdf: SuccessType | ErrorType;
+}
+
+// Update Certification types
+export interface UpdateCertificationInput {
+  index: number;
+  certification: Partial<CertificationInput>;
+}
+
+export interface UpdateCertificationResponse {
+  updateCertification: SuccessType | ErrorType;
+}
+
+// Extra-curricular types
+export interface ExtraCurricularInput {
+  activity: string;
+  organization: string;
+  role?: string;
+  description?: string;
+  startDate?: string;
+  endDate?: string;
+}
+
+export interface AddExtraCurricularInput {
+  extraCurricular: ExtraCurricularInput;
+}
+
+export interface AddExtraCurricularResponse {
+  addExtraCurricular: SuccessType | ErrorType;
+}
+
+export interface ExtraCurricular {
+  id?: string;
+  activity: string;
+  organization: string;
+  role?: string;
+  description?: string;
+  startDate?: string;
+  endDate?: string;
+}
+
+// Delete Extra-curricular types
+export interface DeleteExtraCurricularInput {
+  index: number;
+}
+
+export interface DeleteExtraCurricularResponse {
+  deleteExtraCurricular: SuccessType | ErrorType;
+}
+
+// Update Extra-curricular types
+export interface UpdateExtraCurricularInput {
+  index: number;
+  extraCurricular: Partial<ExtraCurricularInput>;
+}
+
+export interface UpdateExtraCurricularResponse {
+  updateExtraCurricular: SuccessType | ErrorType;
+}
+
+// Leadership & Social Impact types
+export interface LeadershipSocialInput {
+  title: string;
+  organization: string;
+  role?: string;
+  description?: string;
+  impact?: string;
+  startDate?: string;
+  endDate?: string;
+}
+
+export interface AddLeadershipSocialInput {
+  leadershipSocial: LeadershipSocialInput;
+}
+
+export interface AddLeadershipSocialResponse {
+  addLeadershipSocial: SuccessType | ErrorType;
+}
+
+export interface LeadershipSocial {
+  id?: string;
+  title: string;
+  organization: string;
+  role?: string;
+  description?: string;
+  impact?: string;
+  startDate?: string;
+  endDate?: string;
+}
+
+// Delete Leadership & Social types
+export interface DeleteLeadershipSocialInput {
+  index: number;
+}
+
+export interface DeleteLeadershipSocialResponse {
+  deleteLeadershipSocial: SuccessType | ErrorType;
+}
+
+// Update Leadership & Social types
+export interface UpdateLeadershipSocialInput {
+  index: number;
+  leadershipSocial: Partial<LeadershipSocialInput>;
+}
+
+export interface UpdateLeadershipSocialResponse {
+  updateLeadershipSocial: SuccessType | ErrorType;
 }
 
 // Resume upload types
@@ -520,6 +761,39 @@ export interface ParseAndCreateResumeInput {
 
 export interface ParseAndCreateResumeResponse {
   parseAndCreateResume: ResumeBuilderSuccessType | ErrorType;
+}
+
+// Async Resume Parsing Types
+export interface ParseResumeAsyncInput {
+  fileName: string;
+  fileData: string;
+}
+
+export interface ResumeParsingTaskType {
+  taskId: string;
+  status: string;
+  message: string;
+}
+
+export interface ResumeParsingTaskSuccessType {
+  __typename: 'ResumeParsingTaskSuccessType';
+  success: boolean;
+  message: string;
+  task: ResumeParsingTaskType;
+}
+
+export interface ParseResumeAsyncResponse {
+  parseResumeAsync: ResumeParsingTaskSuccessType | ErrorType;
+}
+
+export interface ResumeParsingProgressType {
+  taskId: string;
+  stage: string;
+  stageLabel: string;
+  progress: number;
+  message?: string;
+  status: string;
+  resumeId?: string;
 }
 
 export interface GenerateProfessionalSummaryInput {
@@ -699,8 +973,503 @@ export interface CreatePortalSessionResponse {
   };
 }
 
+// Google OAuth Types
+export interface GetGoogleOAuthUrlResponse {
+  getGoogleOauthUrl: SuccessType & {
+    data?: string; // JSON string containing auth_url and state
+  } | ErrorType & {
+    errors?: Array<{
+      field: string;
+      message: string;
+    }>;
+  };
+}
+
+export interface GoogleOAuthLoginInput {
+  code: string;
+  redirectUri: string;
+}
+
+export interface GoogleOAuthLoginResponse {
+  googleOauthLogin: LoginSuccessType & {
+    user: User & {
+      authProvider?: string;
+      googleId?: string;
+    };
+  } | ErrorType & {
+    errors?: Array<{
+      field: string;
+      message: string;
+    }>;
+  };
+}
+
+export interface LinkGoogleAccountInput {
+  code: string;
+  redirectUri: string;
+}
+
+export interface LinkGoogleAccountResponse {
+  linkGoogleAccount: {
+    success: boolean;
+    message: string;
+    errors?: Array<{
+      field: string;
+      message: string;
+    }>;
+  };
+}
+
+export interface UnlinkGoogleAccountResponse {
+  unlinkGoogleAccount: {
+    success: boolean;
+    message: string;
+    errors?: Array<{
+      field: string;
+      message: string;
+    }>;
+  };
+}
+
+// Google Calendar Types
+export interface GoogleCalendarAuthType {
+  authorizationUrl?: string;
+  isConnected?: boolean;
+  message: string;
+  success: boolean;
+}
+
+export interface GetGoogleCalendarAuthUrlResponse {
+  getGoogleCalendarAuthUrl: GoogleCalendarAuthType | ErrorType;
+}
+
+export interface ConnectGoogleCalendarInput {
+  code: string;
+  redirectUri: string;
+}
+
+export interface ConnectGoogleCalendarResponse {
+  connectGoogleCalendar: GoogleCalendarAuthType | ErrorType;
+}
+
+export interface DisconnectGoogleCalendarResponse {
+  disconnectGoogleCalendar: {
+    success: boolean;
+    message: string;
+  };
+}
+
+// Interview Scheduling Types
+export interface InterviewSlot {
+  id: string;
+  startTime: string;
+  endTime: string;
+  durationMinutes: number;
+  status: 'available' | 'selected' | 'expired';
+  createdAt: string;
+}
+
+export interface Interview {
+  id: string;
+  startTime: string;
+  endTime: string;
+  durationMinutes: number;
+  interviewType: 'in_person' | 'phone' | 'video_call';
+  location?: string;
+  videoCallLink?: string;
+  additionalNotes?: string;
+  status: 'scheduled' | 'completed' | 'cancelled' | 'no_show';
+  recruiterCalendarEventId?: string;
+  candidateCalendarEventId?: string;
+  createdAt: string;
+  updatedAt: string;
+  application?: {
+    id: string;
+    status: string;
+  };
+}
+
+export interface CreateInterviewSlotsInput {
+  applicationId: string;
+  interviewType: 'in_person' | 'phone' | 'video_call';
+  location?: string;
+  videoCallLink?: string;
+  additionalNotes?: string;
+  durationMinutes: number;
+  slots: Array<{
+    startTime: string;
+    endTime: string;
+  }>;
+}
+
+export interface CreateInterviewSlotsResponse {
+  createInterviewSlots: {
+    success: boolean;
+    message: string;
+    slots?: InterviewSlot[];
+  };
+}
+
+export interface SelectInterviewSlotInput {
+  slotId: string;
+}
+
+export interface SelectInterviewSlotResponse {
+  selectInterviewSlot: {
+    success: boolean;
+    message: string;
+    interview?: Interview;
+  };
+}
+
+export interface CancelInterviewInput {
+  interviewId: string;
+  reason?: string;
+}
+
+export interface CancelInterviewResponse {
+  cancelInterview: {
+    success: boolean;
+    message: string;
+  };
+}
+
+export interface SyncInterviewToCalendarResponse {
+  syncInterviewToCalendar: {
+    success: boolean;
+    message: string;
+  };
+}
+
+export interface InterviewSlotsResponse {
+  interviewSlots: InterviewSlot[];
+}
+
+export interface AllInterviewSlotsResponse {
+  allInterviewSlots: InterviewSlot[];
+}
+
+export interface MyInterviewsResponse {
+  myInterviews: Interview[];
+}
+
+export interface UpcomingInterviewsResponse {
+  upcomingInterviews: Interview[];
+}
+
+export interface ApplicationInterviewResponse {
+  applicationInterview: Interview | null;
+}
+
+export interface InterviewResponse {
+  interview: Interview;
+}
+
 export interface StripePublicKeyResponse {
   stripePublicKey: string;
+}
+
+// ===== JOB MATCH ENGINE TYPES =====
+
+// Job Posting Types
+export interface JobPosting {
+  id: string;
+  title: string;
+  companyName: string;
+  department?: string;
+  description: string;
+  responsibilities: string[];
+  jobType: 'full_time' | 'part_time' | 'contract' | 'internship' | 'freelance';
+  experienceLevel: 'entry' | 'junior' | 'mid' | 'senior' | 'lead' | 'principal';
+  yearsOfExperienceMin: number;
+  yearsOfExperienceMax?: number;
+  location: string;
+  workMode: 'remote' | 'onsite' | 'hybrid';
+  requiredSkills: string[];
+  preferredSkills?: string[];
+  requiredQualifications: string[];
+  certifications?: string[];
+  salaryMin?: number;
+  salaryMax?: number;
+  salaryCurrency?: string;
+  salaryPeriod?: string;
+  benefits?: string[];
+  industry?: string;
+  applicationDeadline?: string;
+  applicationEmail?: string;
+  applicationInstructions?: string;
+  applicationUrl?: string;
+  status: 'draft' | 'active' | 'paused' | 'closed' | 'filled';
+  applicationStatus?: string; // User's application status: pending, reviewed, shortlisted, interview, offered, rejected, withdrawn, accepted
+  applicationId?: string; // The ID of the user's application if they have applied
+  rejectionReason?: string; // Rejection reason if application was rejected
+  viewsCount: number;
+  applicationsCount: number;
+  numberOfOpenings?: number;
+  isFeatured?: boolean;
+  publishedAt?: string;
+  closedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  candidateMatch?: JobMatch; // Match data for the candidate viewing the job
+  recruiter?: {
+    id?: string;
+    organizationName: string;
+    organizationType?: string;
+    companyName?: string;
+    companyWebsite?: string;
+    position?: string;
+    industries?: string[];
+    specializations?: string[];
+    linkedinUrl?: string;
+    profilePicture?: string;
+    isVerified?: boolean;
+    isActive?: boolean;
+    subRole?: string;
+    createdAt?: string;
+    updatedAt?: string;
+    user?: {
+      firstName: string;
+      lastName: string;
+    };
+  };
+}
+
+// Job Match Types
+export interface JobMatch {
+  id: string;
+  matchPercentage: number;
+  skillsMatchScore: number;
+  experienceMatchScore: number;
+  qualificationsMatchScore: number;
+  locationMatchScore: number;
+  matchedSkills: string[];
+  missingSkills: string[];
+  extraSkills: string[];
+  suggestions: string[];
+  strengths: string[];
+  weaknesses: string[];
+  recommendation: string;
+  isSaved: boolean;
+  isApplied: boolean;
+  applicationId?: string;
+  viewedAt?: string;
+  appliedAt?: string;
+  jobPosting: JobPosting;
+}
+
+// Job Application Types
+export interface JobApplication {
+  id: string;
+  status: 'pending' | 'reviewed' | 'shortlisted' | 'interview' | 'offered' | 'rejected' | 'withdrawn' | 'accepted';
+  coverLetter?: string;
+  resumeFile?: string;
+  additionalDocuments?: string[];
+  appliedAt: string;
+  reviewedAt?: string;
+  recruiterNotes?: string;
+  rejectionReason?: string;
+  jobPosting: JobPosting;
+  jobMatch?: JobMatch;
+  candidate?: {
+    user: {
+      firstName: string;
+      lastName: string;
+      email: string;
+    };
+    title?: string;
+    yearsOfExperience?: number;
+  };
+}
+
+// Saved Job Types
+export interface SavedJob {
+  id: string;
+  notes?: string;
+  savedAt: string;
+  jobPosting: JobPosting;
+}
+
+// Job Inputs
+export interface CreateJobPostingInput {
+  title: string;
+  companyName: string;
+  department?: string;
+  description: string;
+  responsibilities: string[];
+  jobType: 'full_time' | 'part_time' | 'contract' | 'internship' | 'freelance';
+  experienceLevel: 'entry' | 'junior' | 'mid' | 'senior' | 'lead' | 'principal';
+  yearsOfExperienceMin: number;
+  yearsOfExperienceMax?: number;
+  location: string;
+  workMode: 'remote' | 'onsite' | 'hybrid';
+  requiredSkills: string[];
+  preferredSkills?: string[];
+  requiredQualifications: string[];
+  certifications?: string[];
+  salaryMin?: number;
+  salaryMax?: number;
+  salaryCurrency?: string;
+  salaryPeriod?: string;
+  benefits?: string[];
+  industry?: string;
+  applicationDeadline?: string;
+  status?: 'draft' | 'active';
+}
+
+export interface UpdateJobPostingInput {
+  jobId: string;
+  title?: string;
+  companyName?: string;
+  department?: string;
+  description?: string;
+  responsibilities?: string[];
+  jobType?: 'full_time' | 'part_time' | 'contract' | 'internship' | 'freelance';
+  experienceLevel?: 'entry' | 'junior' | 'mid' | 'senior' | 'lead' | 'principal';
+  yearsOfExperienceMin?: number;
+  yearsOfExperienceMax?: number;
+  location?: string;
+  workMode?: 'remote' | 'onsite' | 'hybrid';
+  requiredSkills?: string[];
+  preferredSkills?: string[];
+  requiredQualifications?: string[];
+  certifications?: string[];
+  salaryMin?: number;
+  salaryMax?: number;
+  salaryCurrency?: string;
+  salaryPeriod?: string;
+  benefits?: string[];
+  industry?: string;
+  applicationDeadline?: string;
+  status?: 'draft' | 'active' | 'paused' | 'closed' | 'filled';
+}
+
+export interface ApplyToJobInput {
+  jobId: string;
+  coverLetter?: string;
+  resumeBuilderId?: string;
+  additionalDocuments?: string[];
+}
+
+export interface SaveJobInput {
+  jobId: string;
+  notes?: string;
+}
+
+// Job Response Types
+export interface JobPostingSuccessType {
+  __typename: 'JobPostingSuccessType';
+  success: boolean;
+  message: string;
+  jobPosting: JobPosting;
+}
+
+export interface JobApplicationSuccessType {
+  __typename: 'JobApplicationSuccessType';
+  success: boolean;
+  message: string;
+  application: JobApplication;
+}
+
+export interface SavedJobSuccessType {
+  __typename: 'SavedJobSuccessType';
+  success: boolean;
+  message: string;
+  savedJob: SavedJob;
+}
+
+export interface CreateJobPostingResponse {
+  createJobPosting: JobPostingSuccessType | ErrorType;
+}
+
+export interface UpdateJobPostingResponse {
+  updateJobPosting: JobPostingSuccessType | ErrorType;
+}
+
+export interface DeleteJobPostingResponse {
+  deleteJobPosting: SuccessType | ErrorType;
+}
+
+export interface ApplyToJobResponse {
+  applyToJob: JobApplicationSuccessType | ErrorType;
+}
+
+export interface WithdrawApplicationResponse {
+  withdrawApplication: SuccessType | ErrorType;
+}
+
+export interface ShortlistApplicationResponse {
+  shortlistApplication: JobApplicationSuccessType | ErrorType;
+}
+
+export interface RejectApplicationResponse {
+  rejectApplication: JobApplicationSuccessType | ErrorType;
+}
+
+export interface ShortlistApplicationInput {
+  applicationId: string;
+  recruiterNotes?: string;
+}
+
+export interface RejectApplicationInput {
+  applicationId: string;
+  rejectionReason?: string;
+  recruiterNotes?: string;
+}
+
+export interface SaveJobResponse {
+  saveJob: SavedJobSuccessType | ErrorType;
+}
+
+export interface UnsaveJobResponse {
+  unsaveJob: SuccessType | ErrorType;
+}
+
+export interface JobPostingsResponse {
+  jobPostings: JobPosting[];
+}
+
+export interface JobPostingResponse {
+  jobPosting: JobPosting;
+}
+
+export interface MyJobPostingsResponse {
+  myJobPostings: JobPosting[];
+}
+
+export interface MyJobMatchesResponse {
+  myJobMatches: {
+    matches: JobMatch[];
+    totalCount: number;
+    page: number;
+    pageSize: number;
+    hasNext: boolean;
+    hasPrevious: boolean;
+  };
+}
+
+export interface JobMatchResponse {
+  jobMatch: JobMatch;
+}
+
+export interface MyApplicationsResponse {
+  myApplications: JobApplication[];
+}
+
+export interface JobApplicationsResponse {
+  jobApplications: JobApplication[];
+}
+
+export interface ShortlistedApplicationsResponse {
+  shortlistedApplications: JobApplication[];
+}
+
+export interface RejectedApplicationsResponse {
+  rejectedApplications: JobApplication[];
+}
+
+export interface MySavedJobsResponse {
+  mySavedJobs: SavedJob[];
 }
 
 // Create the API
@@ -740,7 +1509,7 @@ export const api = createApi({
       return headers;
     },
   }),
-  tagTypes: ['Auth', 'Profile', 'Resume', 'Subscription'],
+  tagTypes: ['Auth', 'Profile', 'Resume', 'Subscription', 'GoogleCalendar', 'Interviews', 'Jobs', 'JobMatches', 'Applications', 'SavedJobs'],
   endpoints: (builder) => ({
     registerCandidate: builder.mutation<RegisterCandidateResponse, RegisterCandidateInput>({
       query: (input) => {
@@ -1222,6 +1991,7 @@ export const api = createApi({
             query GetMyProfile {
               myProfile {
                 ... on CandidateType {
+                  __typename
                   id
                   createdAt
                   education
@@ -1235,11 +2005,14 @@ export const api = createApi({
                   lookingForJob
                   portfolioUrl
                   preferredLocations
-                  preferredLocationsList
                   resumeUrl
                   skills
                   title
                   updatedAt
+                  profilePicture
+                  certifications
+                  extraCurricular
+                  leadershipSocial
                   user {
                     bio
                     dateJoined
@@ -1286,16 +2059,33 @@ export const api = createApi({
           if (typeof profile.hobbies === 'string') {
             profile.hobbies = profile.hobbies.trim() ? JSON.parse(profile.hobbies) : [];
           }
-          if (typeof profile.preferredLocationsList === 'string') {
-            profile.preferredLocationsList = profile.preferredLocationsList.trim() ? JSON.parse(profile.preferredLocationsList) : [];
+          if (typeof profile.preferredLocations === 'string') {
+            profile.preferredLocations = profile.preferredLocations.trim() ? JSON.parse(profile.preferredLocations) : [];
+          }
+          if (typeof profile.certifications === 'string') {
+            profile.certifications = profile.certifications.trim() ? JSON.parse(profile.certifications) : [];
+            console.log('Parsed certifications data:', profile.certifications);
+          }
+          if (typeof profile.extraCurricular === 'string') {
+            profile.extraCurricular = profile.extraCurricular.trim() ? JSON.parse(profile.extraCurricular) : [];
+            console.log('Parsed extraCurricular data:', profile.extraCurricular);
+          }
+          if (typeof profile.leadershipSocial === 'string') {
+            profile.leadershipSocial = profile.leadershipSocial.trim() ? JSON.parse(profile.leadershipSocial) : [];
+            console.log('Parsed leadershipSocial data:', profile.leadershipSocial);
           }
           console.log('Transformed profile data:', {
             educationCount: profile.education?.length || 0,
             experienceCount: profile.experience?.length || 0,
             skillsCount: profile.skills?.length || 0,
             hobbiesCount: profile.hobbies?.length || 0,
+            certificationsCount: profile.certifications?.length || 0,
+            extraCurricularCount: profile.extraCurricular?.length || 0,
+            leadershipSocialCount: profile.leadershipSocial?.length || 0,
+            preferredLocationsCount: profile.preferredLocations?.length || 0,
           });
-          return { candidate: { __typename: 'CandidateType', ...profile } };
+          console.log('Parsed preferredLocations:', profile.preferredLocations);
+          return { myProfile: { __typename: 'CandidateType', ...profile } };
         }
         return response.data;
       },
@@ -1323,6 +2113,7 @@ export const api = createApi({
                   isActive
                   createdAt
                   updatedAt
+                  profilePicture
                   user {
                     id
                     email
@@ -1594,6 +2385,315 @@ export const api = createApi({
       },
       invalidatesTags: ['Profile'],
     }),
+    // Preferred Locations mutations
+    addPreferredLocations: builder.mutation<AddPreferredLocationsResponse, AddPreferredLocationsInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation AddPreferredLocations($input: AddPreferredLocationsInput!) {
+              addPreferredLocations(input: $input) {
+                ... on SuccessType {
+                  __typename
+                  success
+                  message
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                  errors {
+                    field
+                    message
+                  }
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        console.log('Making addPreferredLocations request to:', `${API_URL}/graphql/`);
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('AddPreferredLocations response received:', response);
+        return response.data;
+      },
+      invalidatesTags: ['Profile'],
+    }),
+    updatePreferredLocations: builder.mutation<UpdatePreferredLocationsResponse, UpdatePreferredLocationsInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation UpdatePreferredLocations($input: UpdatePreferredLocationsInput!) {
+              updatePreferredLocations(input: $input) {
+                ... on SuccessType {
+                  __typename
+                  success
+                  message
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                  errors {
+                    field
+                    message
+                  }
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        console.log('Making updatePreferredLocations request to:', `${API_URL}/graphql/`);
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('UpdatePreferredLocations response received:', response);
+        return response.data;
+      },
+      invalidatesTags: ['Profile'],
+    }),
+    deletePreferredLocations: builder.mutation<DeletePreferredLocationsResponse, DeletePreferredLocationsInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation DeletePreferredLocations($input: DeletePreferredLocationsInput!) {
+              deletePreferredLocations(input: $input) {
+                ... on SuccessType {
+                  __typename
+                  success
+                  message
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                  errors {
+                    field
+                    message
+                  }
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        console.log('Making deletePreferredLocations request to:', `${API_URL}/graphql/`);
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('DeletePreferredLocations response received:', response);
+        return response.data;
+      },
+      invalidatesTags: ['Profile'],
+    }),
+    // Profile Picture mutations
+    getMyProfile: builder.query<MyProfileResponse, void>({
+      query: () => {
+        const body = {
+          query: `
+            query MyProfile {
+              myProfile {
+                ... on CandidateType {
+                  __typename
+                  id
+                  profilePicture
+                  profileBanner
+                  certifications
+                }
+                ... on RecruiterType {
+                  __typename
+                  id
+                  profilePicture
+                  profileBanner
+                }
+              }
+            }
+          `,
+        };
+        console.log('Making myProfile request to:', `${API_URL}/graphql/`);
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('MyProfile response received:', response);
+        return response.data;
+      },
+      providesTags: ['Profile'],
+    }),
+    uploadCandidateProfilePicture: builder.mutation<UploadCandidateProfilePictureResponse, ProfilePictureInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation UploadCandidateProfilePicture($input: UploadProfilePictureInput!) {
+              uploadCandidateProfilePicture(input: $input) {
+                ... on SuccessType {
+                  __typename
+                  success
+                  message
+                  data
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                  errors {
+                    field
+                    message
+                  }
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        console.log('Making uploadCandidateProfilePicture request to:', `${API_URL}/graphql/`);
+        console.log('Upload request body:', { inputLength: input.profilePictureBase64.length });
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('UploadCandidateProfilePicture response received:', response);
+        if (response.data?.uploadCandidateProfilePicture?.data) {
+          console.log('Profile picture data:', response.data.uploadCandidateProfilePicture.data);
+        }
+        return response.data;
+      },
+      invalidatesTags: ['Profile'],
+    }),
+    uploadRecruiterProfilePicture: builder.mutation<UploadRecruiterProfilePictureResponse, ProfilePictureInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation UploadRecruiterProfilePicture($input: UploadProfilePictureInput!) {
+              uploadRecruiterProfilePicture(input: $input) {
+                ... on SuccessType {
+                  __typename
+                  success
+                  message
+                  data
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                  errors {
+                    field
+                    message
+                  }
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        console.log('Making uploadRecruiterProfilePicture request to:', `${API_URL}/graphql/`);
+        console.log('Upload request body:', { inputLength: input.profilePictureBase64.length });
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('UploadRecruiterProfilePicture response received:', response);
+        if (response.data?.uploadRecruiterProfilePicture?.data) {
+          console.log('Profile picture data:', response.data.uploadRecruiterProfilePicture.data);
+        }
+        return response.data;
+      },
+      invalidatesTags: ['Profile'],
+    }),
+    // Profile Banner mutations
+    uploadCandidateProfileBanner: builder.mutation<UploadCandidateProfileBannerResponse, ProfileBannerInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation UploadCandidateProfileBanner($input: UploadProfileBannerInput!) {
+              uploadCandidateProfileBanner(input: $input) {
+                ... on SuccessType {
+                  __typename
+                  success
+                  message
+                  data
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        console.log('Making uploadCandidateProfileBanner request to:', `${API_URL}/graphql/`);
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('UploadCandidateProfileBanner response received:', response);
+        return response.data;
+      },
+      invalidatesTags: ['Profile'],
+    }),
+    uploadRecruiterProfileBanner: builder.mutation<UploadRecruiterProfileBannerResponse, ProfileBannerInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation UploadRecruiterProfileBanner($input: UploadProfileBannerInput!) {
+              uploadRecruiterProfileBanner(input: $input) {
+                ... on SuccessType {
+                  __typename
+                  success
+                  message
+                  data
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        console.log('Making uploadRecruiterProfileBanner request to:', `${API_URL}/graphql/`);
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('UploadRecruiterProfileBanner response received:', response);
+        return response.data;
+      },
+      invalidatesTags: ['Profile'],
+    }),
     // Resume upload mutation
     uploadAndParseResume: builder.mutation<ResumeUploadResponse, ResumeUploadInput>({
       query: (input) => {
@@ -1630,6 +2730,359 @@ export const api = createApi({
       },
       transformResponse: (response: any) => {
         console.log('UploadAndParseResume response received:', response);
+        return response.data;
+      },
+      invalidatesTags: ['Profile'],
+    }),
+    // Certification mutations
+    addCertification: builder.mutation<AddCertificationResponse, AddCertificationInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation AddCertification($input: AddCertificationInput!) {
+              addCertification(input: $input) {
+                ... on SuccessType {
+                  __typename
+                  data
+                  message
+                  success
+                }
+                ... on ErrorType {
+                  __typename
+                  message
+                  success
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        console.log('Making addCertification request to:', `${API_URL}/graphql/`);
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('AddCertification response received:', response);
+        return response.data;
+      },
+      invalidatesTags: ['Profile'],
+    }),
+    // Delete Certification mutation
+    deleteCertification: builder.mutation<DeleteCertificationResponse, DeleteCertificationInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation DeleteCertification($input: DeleteCertificationInput!) {
+              deleteCertification(input: $input) {
+                ... on SuccessType {
+                  __typename
+                  data
+                  message
+                  success
+                }
+                ... on ErrorType {
+                  __typename
+                  message
+                  success
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('DeleteCertification response:', response);
+        return response.data;
+      },
+      invalidatesTags: ['Profile'],
+    }),
+    // Delete Certificate PDF mutation
+    deleteCertificatePdf: builder.mutation<DeleteCertificatePdfResponse, number>({
+      query: (index) => {
+        const body = {
+          query: `
+            mutation DeleteCertificatePdf($index: Int!) {
+              deleteCertificatePdf(index: $index) {
+                ... on SuccessType {
+                  __typename
+                  data
+                  message
+                  success
+                }
+                ... on ErrorType {
+                  __typename
+                  message
+                  success
+                }
+              }
+            }
+          `,
+          variables: { index },
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('DeleteCertificatePdf response:', response);
+        return response.data;
+      },
+      invalidatesTags: ['Profile'],
+    }),
+    // Update Certification mutation
+    updateCertification: builder.mutation<UpdateCertificationResponse, UpdateCertificationInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation UpdateCertification($input: UpdateCertificationInput!) {
+              updateCertification(input: $input) {
+                ... on SuccessType {
+                  __typename
+                  data
+                  message
+                  success
+                }
+                ... on ErrorType {
+                  __typename
+                  message
+                  success
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('UpdateCertification response:', response);
+        return response.data;
+      },
+      invalidatesTags: ['Profile'],
+    }),
+    // Extra-curricular mutations
+    addExtraCurricular: builder.mutation<AddExtraCurricularResponse, AddExtraCurricularInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation AddExtraCurricular($input: AddExtraCurricularInput!) {
+              addExtraCurricular(input: $input) {
+                ... on SuccessType {
+                  __typename
+                  data
+                  message
+                  success
+                }
+                ... on ErrorType {
+                  __typename
+                  message
+                  success
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        console.log('Making addExtraCurricular request to:', `${API_URL}/graphql/`);
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('AddExtraCurricular response received:', response);
+        return response.data;
+      },
+      invalidatesTags: ['Profile'],
+    }),
+    // Delete Extra-curricular mutation
+    deleteExtraCurricular: builder.mutation<DeleteExtraCurricularResponse, DeleteExtraCurricularInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation DeleteExtraCurricular($input: DeleteExtraCurricularInput!) {
+              deleteExtraCurricular(input: $input) {
+                ... on SuccessType {
+                  __typename
+                  data
+                  message
+                  success
+                }
+                ... on ErrorType {
+                  __typename
+                  message
+                  success
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('DeleteExtraCurricular response:', response);
+        return response.data;
+      },
+      invalidatesTags: ['Profile'],
+    }),
+    // Update Extra-curricular mutation
+    updateExtraCurricular: builder.mutation<UpdateExtraCurricularResponse, UpdateExtraCurricularInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation UpdateExtraCurricular($input: UpdateExtraCurricularInput!) {
+              updateExtraCurricular(input: $input) {
+                ... on SuccessType {
+                  __typename
+                  data
+                  message
+                  success
+                }
+                ... on ErrorType {
+                  __typename
+                  message
+                  success
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('UpdateExtraCurricular response:', response);
+        return response.data;
+      },
+      invalidatesTags: ['Profile'],
+    }),
+    // Leadership & Social mutations
+    addLeadershipSocial: builder.mutation<AddLeadershipSocialResponse, AddLeadershipSocialInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation AddLeadershipSocial($input: AddLeadershipSocialInput!) {
+              addLeadershipSocial(input: $input) {
+                ... on SuccessType {
+                  __typename
+                  data
+                  message
+                  success
+                }
+                ... on ErrorType {
+                  __typename
+                  message
+                  success
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        console.log('Making addLeadershipSocial request to:', `${API_URL}/graphql/`);
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('AddLeadershipSocial response received:', response);
+        return response.data;
+      },
+      invalidatesTags: ['Profile'],
+    }),
+    // Delete Leadership & Social mutation
+    deleteLeadershipSocial: builder.mutation<DeleteLeadershipSocialResponse, DeleteLeadershipSocialInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation DeleteLeadershipSocial($input: DeleteLeadershipSocialInput!) {
+              deleteLeadershipSocial(input: $input) {
+                ... on SuccessType {
+                  __typename
+                  data
+                  message
+                  success
+                }
+                ... on ErrorType {
+                  __typename
+                  message
+                  success
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('DeleteLeadershipSocial response:', response);
+        return response.data;
+      },
+      invalidatesTags: ['Profile'],
+    }),
+    // Update Leadership & Social mutation
+    updateLeadershipSocial: builder.mutation<UpdateLeadershipSocialResponse, UpdateLeadershipSocialInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation UpdateLeadershipSocial($input: UpdateLeadershipSocialInput!) {
+              updateLeadershipSocial(input: $input) {
+                ... on SuccessType {
+                  __typename
+                  data
+                  message
+                  success
+                }
+                ... on ErrorType {
+                  __typename
+                  message
+                  success
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('UpdateLeadershipSocial response:', response);
         return response.data;
       },
       invalidatesTags: ['Profile'],
@@ -1908,6 +3361,50 @@ export const api = createApi({
       },
       transformResponse: (response: any) => {
         console.log('ParseAndCreateResume response received:', response);
+        return response.data;
+      },
+      invalidatesTags: [{ type: 'Resume', id: 'LIST' }, 'Profile'],
+    }),
+    parseResumeAsync: builder.mutation<ParseResumeAsyncResponse, ParseResumeAsyncInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation ParseResumeAsync($fileName: String!, $fileData: String!) {
+              parseResumeAsync(fileName: $fileName, fileData: $fileData) {
+                ... on ResumeParsingTaskSuccessType {
+                  __typename
+                  success
+                  message
+                  task {
+                    taskId
+                    status
+                    message
+                  }
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                  errors {
+                    field
+                    message
+                  }
+                }
+              }
+            }
+          `,
+          variables: input,
+        };
+        console.log('Making parseResumeAsync request to:', `${API_URL}/graphql/`);
+        console.log('Parse async input:', { fileName: input.fileName, fileDataLength: input.fileData.length });
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('ParseResumeAsync response received:', response);
         return response.data;
       },
       invalidatesTags: [{ type: 'Resume', id: 'LIST' }, 'Profile'],
@@ -2475,6 +3972,1438 @@ export const api = createApi({
       },
       transformResponse: (response: any) => response.data,
     }),
+    // Google OAuth Mutations
+    getGoogleOAuthUrl: builder.mutation<GetGoogleOAuthUrlResponse, string>({
+      query: (redirectUri) => {
+        const body = {
+          query: `
+            mutation GetGoogleOAuthUrl($redirectUri: String!) {
+              getGoogleOauthUrl(redirectUri: $redirectUri) {
+                ... on SuccessType {
+                  success
+                  message
+                  data
+                }
+                ... on ErrorType {
+                  success
+                  message
+                  errors {
+                    field
+                    message
+                  }
+                }
+              }
+            }
+          `,
+          variables: { redirectUri },
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+    }),
+    googleOAuthLogin: builder.mutation<GoogleOAuthLoginResponse, GoogleOAuthLoginInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation GoogleOAuthLogin($code: String!, $redirectUri: String!) {
+              googleOauthLogin(code: $code, redirectUri: $redirectUri) {
+                ... on LoginSuccessType {
+                  success
+                  message
+                  accessToken
+                  refreshToken
+                  user {
+                    id
+                    email
+                    firstName
+                    lastName
+                    role
+                    authProvider
+                    googleId
+                  }
+                  role
+                }
+                ... on ErrorType {
+                  success
+                  message
+                  errors {
+                    field
+                    message
+                  }
+                }
+              }
+            }
+          `,
+          variables: input,
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      invalidatesTags: ['User'],
+    }),
+    linkGoogleAccount: builder.mutation<LinkGoogleAccountResponse, LinkGoogleAccountInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation LinkGoogleAccount($code: String!, $redirectUri: String!) {
+              linkGoogleAccount(code: $code, redirectUri: $redirectUri) {
+                success
+                message
+                errors {
+                  field
+                  message
+                }
+              }
+            }
+          `,
+          variables: input,
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      invalidatesTags: ['User'],
+    }),
+    unlinkGoogleAccount: builder.mutation<UnlinkGoogleAccountResponse, void>({
+      query: () => {
+        const body = {
+          query: `
+            mutation UnlinkGoogleAccount {
+              unlinkGoogleAccount {
+                success
+                message
+                errors {
+                  field
+                  message
+                }
+              }
+            }
+          `,
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      invalidatesTags: ['User'],
+    }),
+
+    // ===== GOOGLE CALENDAR ENDPOINTS =====
+
+    // Get Google Calendar Authorization URL
+    getGoogleCalendarAuthUrl: builder.mutation<GetGoogleCalendarAuthUrlResponse, void>({
+      query: () => {
+        const redirectUri = `${API_URL}/auth/google/callback`;
+        const body = {
+          query: `
+            mutation GetGoogleCalendarAuthUrl($redirectUri: String!) {
+              getGoogleCalendarAuthUrl(redirectUri: $redirectUri) {
+                ... on GoogleCalendarAuthType {
+                  authorizationUrl
+                  isConnected
+                  message
+                  success
+                }
+                ... on ErrorType {
+                  __typename
+                  message
+                  success
+                }
+              }
+            }
+          `,
+          variables: { redirectUri },
+        };
+        console.log('Getting Google Calendar auth URL with redirectUri:', redirectUri);
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('Google Calendar auth URL response:', response);
+        return response.data;
+      },
+    }),
+
+    // Connect Google Calendar
+    connectGoogleCalendar: builder.mutation<ConnectGoogleCalendarResponse, { code: string }>({
+      query: ({ code }) => {
+        const redirectUri = `${API_URL}/auth/google/callback`;
+        const body = {
+          query: `
+            mutation ConnectGoogleCalendar($input: ConnectGoogleCalendarInput!) {
+              connectGoogleCalendar(input: $input) {
+                ... on GoogleCalendarAuthType {
+                  authorizationUrl
+                  isConnected
+                  message
+                  success
+                }
+                ... on ErrorType {
+                  __typename
+                  message
+                  success
+                }
+              }
+            }
+          `,
+          variables: { input: { code, redirectUri } },
+        };
+        console.log('Connecting Google Calendar with code');
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('Connect Google Calendar response:', response);
+        return response.data;
+      },
+      invalidatesTags: ['GoogleCalendar'],
+    }),
+
+    // Disconnect Google Calendar
+    disconnectGoogleCalendar: builder.mutation<DisconnectGoogleCalendarResponse, void>({
+      query: () => {
+        const body = {
+          query: `
+            mutation DisconnectGoogleCalendar {
+              disconnectGoogleCalendar {
+                ... on SuccessType {
+                  success
+                  message
+                }
+                ... on ErrorType {
+                  success
+                  message
+                }
+              }
+            }
+          `,
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      invalidatesTags: ['GoogleCalendar'],
+    }),
+
+    // Check if Google Calendar is connected
+    isGoogleCalendarConnected: builder.query<boolean, void>({
+      query: () => {
+        const body = {
+          query: `
+            query IsGoogleCalendarConnected {
+              isGoogleCalendarConnected
+            }
+          `,
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data.isGoogleCalendarConnected,
+      providesTags: ['GoogleCalendar'],
+    }),
+
+    // ===== INTERVIEW SCHEDULING ENDPOINTS =====
+
+    // Create interview slots (Recruiter)
+    createInterviewSlots: builder.mutation<CreateInterviewSlotsResponse, CreateInterviewSlotsInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation CreateInterviewSlots($input: CreateInterviewSlotsInput!) {
+              createInterviewSlots(input: $input) {
+                ... on CreateInterviewSlotsSuccessType {
+                  success
+                  message
+                  slots {
+                    id
+                    startTime
+                    endTime
+                    durationMinutes
+                    status
+                    createdAt
+                  }
+                }
+                ... on ErrorType {
+                  success
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        console.log('Creating interview slots:', input);
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('Create interview slots response:', response);
+        return response.data;
+      },
+      invalidatesTags: ['Interviews'],
+    }),
+
+    // Select interview slot (Candidate)
+    selectInterviewSlot: builder.mutation<SelectInterviewSlotResponse, SelectInterviewSlotInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation SelectInterviewSlot($input: SelectInterviewSlotInput!) {
+              selectInterviewSlot(input: $input) {
+                ... on SelectInterviewSlotSuccessType {
+                  success
+                  message
+                  interview {
+                    id
+                    startTime
+                    endTime
+                    durationMinutes
+                    interviewType
+                    location
+                    videoCallLink
+                  additionalNotes
+                  status
+                  recruiterCalendarEventId
+                  candidateCalendarEventId
+                  createdAt
+                  updatedAt
+                }
+              }
+                ... on ErrorType {
+                  success
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        console.log('Selecting interview slot:', input);
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('Select interview slot response:', response);
+        return response.data;
+      },
+      invalidatesTags: ['Interviews'],
+    }),
+
+    // Cancel interview
+    cancelInterview: builder.mutation<CancelInterviewResponse, CancelInterviewInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation CancelInterview($input: CancelInterviewInput!) {
+              cancelInterview(input: $input) {
+                ... on SuccessType {
+                  success
+                  message
+                }
+                ... on ErrorType {
+                  success
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      invalidatesTags: ['Interviews'],
+    }),
+
+    // Sync interview to calendar
+    syncInterviewToCalendar: builder.mutation<SyncInterviewToCalendarResponse, string>({
+      query: (interviewId) => {
+        const body = {
+          query: `
+            mutation SyncInterviewToCalendar($interviewId: ID!) {
+              syncInterviewToCalendar(interviewId: $interviewId) {
+                ... on SuccessType {
+                  success
+                  message
+                }
+                ... on ErrorType {
+                  success
+                  message
+                }
+              }
+            }
+          `,
+          variables: { interviewId },
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      invalidatesTags: ['Interviews'],
+    }),
+
+    // Get interview slots for application (Candidate - only available slots)
+    interviewSlots: builder.query<InterviewSlotsResponse, string>({
+      query: (applicationId) => {
+        const body = {
+          query: `
+            query InterviewSlots($applicationId: ID!) {
+              interviewSlots(applicationId: $applicationId) {
+                id
+                startTime
+                endTime
+                durationMinutes
+                status
+                createdAt
+              }
+            }
+          `,
+          variables: { applicationId },
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      providesTags: ['Interviews'],
+    }),
+
+    // Get all interview slots for application (Recruiter - all slots)
+    allInterviewSlots: builder.query<AllInterviewSlotsResponse, string>({
+      query: (applicationId) => {
+        const body = {
+          query: `
+            query AllInterviewSlots($applicationId: ID!) {
+              allInterviewSlots(applicationId: $applicationId) {
+                id
+                startTime
+                endTime
+                durationMinutes
+                status
+                createdAt
+              }
+            }
+          `,
+          variables: { applicationId },
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      providesTags: ['Interviews'],
+    }),
+
+    // Get my interviews
+    myInterviews: builder.query<MyInterviewsResponse, string | void>({
+      query: (status) => {
+        const body = {
+          query: `
+            query MyInterviews${status ? '($status: String!)' : ''} {
+              myInterviews${status ? '(status: $status)' : ''} {
+                id
+                startTime
+                endTime
+                durationMinutes
+                interviewType
+                location
+                videoCallLink
+                additionalNotes
+                status
+                recruiterCalendarEventId
+                candidateCalendarEventId
+                createdAt
+                updatedAt
+              }
+            }
+          `,
+          variables: status ? { status } : undefined,
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      providesTags: ['Interviews'],
+    }),
+
+    // Get upcoming interviews
+    upcomingInterviews: builder.query<UpcomingInterviewsResponse, void>({
+      query: () => {
+        const body = {
+          query: `
+            query UpcomingInterviews {
+              upcomingInterviews {
+                id
+                startTime
+                endTime
+                durationMinutes
+                interviewType
+                location
+                videoCallLink
+                status
+                createdAt
+              }
+            }
+          `,
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      providesTags: ['Interviews'],
+    }),
+
+    // Get interview for specific application
+    applicationInterview: builder.query<ApplicationInterviewResponse, string>({
+      query: (applicationId) => {
+        const body = {
+          query: `
+            query ApplicationInterview($applicationId: ID!) {
+              applicationInterview(applicationId: $applicationId) {
+                id
+                startTime
+                endTime
+                durationMinutes
+                interviewType
+                location
+                videoCallLink
+                additionalNotes
+                status
+                recruiterCalendarEventId
+                candidateCalendarEventId
+                createdAt
+                updatedAt
+              }
+            }
+          `,
+          variables: { applicationId },
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      providesTags: ['Interviews'],
+    }),
+
+    // Get interview by ID
+    interview: builder.query<InterviewResponse, string>({
+      query: (interviewId) => {
+        const body = {
+          query: `
+            query Interview($interviewId: ID!) {
+              interview(interviewId: $interviewId) {
+                id
+                startTime
+                endTime
+                durationMinutes
+                interviewType
+                location
+                videoCallLink
+                additionalNotes
+                status
+                recruiterCalendarEventId
+                candidateCalendarEventId
+                createdAt
+                updatedAt
+              }
+            }
+          `,
+          variables: { interviewId },
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      providesTags: ['Interviews'],
+    }),
+
+    // ===== JOB MATCH ENGINE ENDPOINTS =====
+
+    // Recruiter - Job Posting Mutations
+    createJobPosting: builder.mutation<CreateJobPostingResponse, CreateJobPostingInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation CreateJobPosting($input: CreateJobPostingInput!) {
+              createJobPosting(input: $input) {
+                ... on JobPostingSuccessType {
+                  success
+                  message
+                  jobPosting {
+                    id
+                    title
+                    companyName
+                    status
+                    createdAt
+                  }
+                }
+                ... on ErrorType {
+                  success
+                  message
+                  errors {
+                    field
+                    message
+                  }
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      invalidatesTags: ['Jobs'],
+    }),
+
+    updateJobPosting: builder.mutation<UpdateJobPostingResponse, UpdateJobPostingInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation UpdateJobPosting($input: UpdateJobPostingInput!) {
+              updateJobPosting(input: $input) {
+                ... on JobPostingSuccessType {
+                  success
+                  message
+                  jobPosting {
+                    id
+                    title
+                    status
+                  }
+                }
+                ... on ErrorType {
+                  success
+                  message
+                  errors {
+                    field
+                    message
+                  }
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      invalidatesTags: ['Jobs'],
+    }),
+
+    deleteJobPosting: builder.mutation<DeleteJobPostingResponse, { jobId: string }>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation DeleteJobPosting($input: DeleteJobPostingInput!) {
+              deleteJobPosting(input: $input) {
+                ... on SuccessType {
+                  success
+                  message
+                }
+                ... on ErrorType {
+                  success
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      invalidatesTags: ['Jobs'],
+    }),
+
+    // Candidate - Job Application Mutations
+    applyToJob: builder.mutation<ApplyToJobResponse, ApplyToJobInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation ApplyToJob($input: ApplyToJobInput!) {
+              applyToJob(input: $input) {
+                ... on JobApplicationSuccessType {
+                  __typename
+                  success
+                  message
+                  application {
+                    id
+                    status
+                    appliedAt
+                    jobPosting {
+                      id
+                      title
+                      companyName
+                    }
+                  }
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        console.log('ApplyToJob mutation body:', JSON.stringify(body, null, 2));
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('ApplyToJob raw response:', JSON.stringify(response, null, 2));
+        return response.data;
+      },
+      invalidatesTags: ['Applications', 'JobMatches'],
+    }),
+
+    withdrawApplication: builder.mutation<WithdrawApplicationResponse, { applicationId: string }>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation WithdrawApplication($input: WithdrawApplicationInput!) {
+              withdrawApplication(input: $input) {
+                ... on SuccessType {
+                  data
+                  success
+                  message
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      invalidatesTags: ['Applications', 'JobMatches'],
+    }),
+
+    // Recruiter - Application Management Mutations
+    shortlistApplication: builder.mutation<ShortlistApplicationResponse, ShortlistApplicationInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation ShortlistApplication($input: ShortlistApplicationInput!) {
+              shortlistApplication(input: $input) {
+                ... on JobApplicationSuccessType {
+                  success
+                  message
+                  application {
+                    id
+                    status
+                  }
+                }
+                ... on ErrorType {
+                  __typename
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      invalidatesTags: ['Applications'],
+    }),
+
+    rejectApplication: builder.mutation<RejectApplicationResponse, RejectApplicationInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation RejectApplication($input: RejectApplicationInput!) {
+              rejectApplication(input: $input) {
+                ... on JobApplicationSuccessType {
+                  success
+                  message
+                  application {
+                    id
+                    status
+                    rejectionReason
+                  }
+                }
+                ... on ErrorType {
+                  __typename
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      invalidatesTags: ['Applications'],
+    }),
+
+    // Candidate - Saved Jobs Mutations
+    saveJob: builder.mutation<SaveJobResponse, SaveJobInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation SaveJob($input: SaveJobInput!) {
+              saveJob(input: $input) {
+                ... on SavedJobSuccessType {
+                  success
+                  message
+                  savedJob {
+                    id
+                    notes
+                    savedAt
+                    jobPosting {
+                      id
+                      title
+                      companyName
+                    }
+                  }
+                }
+                ... on ErrorType {
+                  success
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      invalidatesTags: ['SavedJobs', 'JobMatches'],
+    }),
+
+    unsaveJob: builder.mutation<UnsaveJobResponse, { savedJobId: string }>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation UnsaveJob($input: UnsaveJobInput!) {
+              unsaveJob(input: $input) {
+                ... on SuccessType {
+                  success
+                  message
+                }
+                ... on ErrorType {
+                  success
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      invalidatesTags: ['SavedJobs', 'JobMatches'],
+    }),
+
+    // Job Queries
+    getJobPostings: builder.query<JobPostingsResponse, {
+      status?: string;
+      jobType?: string;
+      experienceLevel?: string;
+      workMode?: string;
+      location?: string;
+      search?: string;
+      limit?: number;
+      offset?: number;
+    }>({
+      query: (params) => {
+        const body = {
+          query: `
+            query GetJobPostings(
+              $status: String
+              $jobType: String
+              $experienceLevel: String
+              $workMode: String
+              $location: String
+              $search: String
+              $limit: Int
+              $offset: Int
+            ) {
+              jobPostings(
+                status: $status
+                jobType: $jobType
+                experienceLevel: $experienceLevel
+                workMode: $workMode
+                location: $location
+                search: $search
+                limit: $limit
+                offset: $offset
+              ) {
+                id
+                title
+                companyName
+                description
+                jobType
+                experienceLevel
+                location
+                workMode
+                requiredSkills
+                preferredSkills
+                salaryMin
+                salaryMax
+                salaryCurrency
+                status
+                applicationStatus
+                publishedAt
+                applicationsCount
+                viewsCount
+              }
+            }
+          `,
+          variables: params,
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      providesTags: ['Jobs'],
+    }),
+
+    getJobPosting: builder.query<JobPostingResponse, { jobId: string }>({
+      query: ({ jobId }) => {
+        const body = {
+          query: `
+            query GetJobPosting($jobId: String!) {
+              jobPosting(jobId: $jobId) {
+                id
+                title
+                companyName
+                department
+                description
+                responsibilities
+                jobType
+                experienceLevel
+                yearsOfExperienceMin
+                yearsOfExperienceMax
+                location
+                workMode
+                requiredSkills
+                preferredSkills
+                requiredQualifications
+                certifications
+                salaryMin
+                salaryMax
+                salaryCurrency
+                salaryPeriod
+                benefits
+                applicationDeadline
+                applicationEmail
+                applicationInstructions
+                applicationUrl
+                status
+                applicationStatus
+                rejectionReason
+                viewsCount
+                applicationsCount
+                publishedAt
+                numberOfOpenings
+                industry
+                isFeatured
+                closedAt
+                createdAt
+                updatedAt
+                candidateMatch {
+                  id
+                  matchPercentage
+                  skillsMatchScore
+                  experienceMatchScore
+                  qualificationsMatchScore
+                  locationMatchScore
+                  matchedSkills
+                  missingSkills
+                  extraSkills
+                  suggestions
+                  strengths
+                  weaknesses
+                  recommendation
+                  isApplied
+                  isSaved
+                }
+                recruiter {
+                  id
+                  organizationName
+                  organizationType
+                  companyName
+                  companyWebsite
+                  position
+                  industries
+                  specializations
+                  linkedinUrl
+                  profilePicture
+                  isVerified
+                  isActive
+                  subRole
+                  createdAt
+                  updatedAt
+                }
+              }
+            }
+          `,
+          variables: { jobId },
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      providesTags: ['Jobs'],
+    }),
+
+    getMyJobPostings: builder.query<MyJobPostingsResponse, { status?: string }>({
+      query: (params) => {
+        const body = {
+          query: `
+            query GetMyJobPostings($status: String) {
+              myJobPostings(status: $status) {
+                id
+                title
+                companyName
+                status
+                viewsCount
+                applicationsCount
+                createdAt
+                publishedAt
+              }
+            }
+          `,
+          variables: params,
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      providesTags: ['Jobs'],
+    }),
+
+    getMyJobMatches: builder.query<MyJobMatchesResponse, {
+      minMatchPercentage?: number;
+      jobType?: string;
+      experienceLevel?: string;
+      workMode?: string;
+      page?: number;
+      pageSize?: number;
+    }>({
+      query: (params) => {
+        const body = {
+          query: `
+            query GetMyJobMatches(
+              $minMatchPercentage: Float
+              $jobType: String
+              $experienceLevel: String
+              $workMode: String
+              $page: Int
+              $pageSize: Int
+            ) {
+              myJobMatches(
+                minMatchPercentage: $minMatchPercentage
+                jobType: $jobType
+                experienceLevel: $experienceLevel
+                workMode: $workMode
+                page: $page
+                pageSize: $pageSize
+              ) {
+                matches {
+                  id
+                  matchPercentage
+                  skillsMatchScore
+                  experienceMatchScore
+                  qualificationsMatchScore
+                  locationMatchScore
+                  matchedSkills
+                  missingSkills
+                  suggestions
+                  strengths
+                  weaknesses
+                  recommendation
+                  isSaved
+                  isApplied
+                  applicationId
+                  appliedAt
+                  jobPosting {
+                    id
+                    title
+                    companyName
+                    description
+                    location
+                    workMode
+                    jobType
+                    experienceLevel
+                    requiredSkills
+                    salaryMin
+                    salaryMax
+                    salaryCurrency
+                  }
+                }
+                totalCount
+                page
+                pageSize
+                hasNext
+                hasPrevious
+              }
+            }
+          `,
+          variables: params,
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      providesTags: ['JobMatches'],
+    }),
+
+    getJobMatch: builder.query<JobMatchResponse, { jobId: string }>({
+      query: ({ jobId }) => {
+        const body = {
+          query: `
+            query GetJobMatch($jobId: String!) {
+              jobMatch(jobId: $jobId) {
+                id
+                matchPercentage
+                skillsMatchScore
+                experienceMatchScore
+                qualificationsMatchScore
+                locationMatchScore
+                matchedSkills
+                missingSkills
+                extraSkills
+                suggestions
+                strengths
+                weaknesses
+                recommendation
+                isSaved
+                isApplied
+                applicationId
+                appliedAt
+              }
+            }
+          `,
+          variables: { jobId },
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      providesTags: ['JobMatches'],
+    }),
+
+    getMyApplications: builder.query<MyApplicationsResponse, { status?: string }>({
+      query: (params) => {
+        const body = {
+          query: `
+            query GetMyApplications($status: String) {
+              myApplications(status: $status) {
+                id
+                status
+                coverLetter
+                appliedAt
+                reviewedAt
+                jobPosting {
+                  id
+                  title
+                  companyName
+                  location
+                  workMode
+                }
+                jobMatch {
+                  matchPercentage
+                }
+              }
+            }
+          `,
+          variables: params,
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      providesTags: ['Applications'],
+    }),
+
+    getJobApplications: builder.query<JobApplicationsResponse, { jobId: string; status?: string }>({
+      query: (params) => {
+        const body = {
+          query: `
+            query GetJobApplications($jobId: String!, $status: String) {
+              jobApplications(jobId: $jobId, status: $status) {
+                id
+                status
+                appliedAt
+                reviewedAt
+                coverLetter
+                recruiterNotes
+                rejectionReason
+                candidate {
+                  user {
+                    firstName
+                    lastName
+                    email
+                  }
+                  title
+                  yearsOfExperience
+                }
+                jobMatch {
+                  matchPercentage
+                  skillsMatchScore
+                  experienceMatchScore
+                  qualificationsMatchScore
+                  locationMatchScore
+                  matchedSkills
+                  missingSkills
+                  extraSkills
+                  strengths
+                  weaknesses
+                  recommendation
+                }
+                jobPosting {
+                  id
+                  title
+                }
+              }
+            }
+          `,
+          variables: params,
+        };
+        console.log('GetJobApplications query params:', params);
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('GetJobApplications response:', JSON.stringify(response, null, 2));
+        return response.data;
+      },
+      providesTags: ['Applications'],
+    }),
+
+    getShortlistedApplications: builder.query<ShortlistedApplicationsResponse, { jobId: string }>({
+      query: (params) => {
+        const body = {
+          query: `
+            query GetShortlistedApplications($jobId: String!) {
+              shortlistedApplications(jobId: $jobId) {
+                id
+                status
+                appliedAt
+                reviewedAt
+                recruiterNotes
+                candidate {
+                  user {
+                    firstName
+                    lastName
+                    email
+                  }
+                  title
+                  yearsOfExperience
+                }
+                jobPosting {
+                  id
+                  title
+                }
+              }
+            }
+          `,
+          variables: params,
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      providesTags: ['Applications'],
+    }),
+
+    getRejectedApplications: builder.query<RejectedApplicationsResponse, { jobId: string }>({
+      query: (params) => {
+        const body = {
+          query: `
+            query GetRejectedApplications($jobId: String!) {
+              rejectedApplications(jobId: $jobId) {
+                id
+                status
+                rejectionReason
+                appliedAt
+                candidate {
+                  user {
+                    firstName
+                    lastName
+                    email
+                  }
+                  title
+                  yearsOfExperience
+                }
+                jobPosting {
+                  id
+                  title
+                }
+              }
+            }
+          `,
+          variables: params,
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      providesTags: ['Applications'],
+    }),
+
+    getMySavedJobs: builder.query<MySavedJobsResponse, void>({
+      query: () => {
+        const body = {
+          query: `
+            query GetMySavedJobs {
+              mySavedJobs {
+                id
+                notes
+                savedAt
+                jobPosting {
+                  id
+                  title
+                  companyName
+                  location
+                  workMode
+                  jobType
+                  salaryMin
+                  salaryMax
+                  salaryCurrency
+                }
+              }
+            }
+          `,
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      providesTags: ['SavedJobs'],
+    }),
   }),
 });
 
@@ -2499,12 +5428,36 @@ export const {
   useAddHobbyMutation,
   useRemoveHobbyMutation,
   useUpdateHobbiesMutation,
+  // Preferred Locations hooks
+  useAddPreferredLocationsMutation,
+  useUpdatePreferredLocationsMutation,
+  useDeletePreferredLocationsMutation,
+  // Profile Picture hooks
+  useGetMyProfileQuery,
+  useUploadCandidateProfilePictureMutation,
+  useUploadRecruiterProfilePictureMutation,
+  // Profile Banner hooks
+  useUploadCandidateProfileBannerMutation,
+  useUploadRecruiterProfileBannerMutation,
   useUploadAndParseResumeMutation,
+  // Certification hooks
+  useAddCertificationMutation,
+  useDeleteCertificationMutation,
+  useDeleteCertificatePdfMutation,
+  useUpdateCertificationMutation,
+  // Extra-curricular and Leadership hooks
+  useAddExtraCurricularMutation,
+  useDeleteExtraCurricularMutation,
+  useUpdateExtraCurricularMutation,
+  useAddLeadershipSocialMutation,
+  useDeleteLeadershipSocialMutation,
+  useUpdateLeadershipSocialMutation,
   // CV Builder hooks
   useCreateResumeMutation,
   useUpdateResumeMutation,
   useDeleteResumeMutation,
   useParseAndCreateResumeMutation,
+  useParseResumeAsyncMutation,
   useGenerateProfessionalSummaryMutation,
   useImproveContentMutation,
   useAddKeywordsMutation,
@@ -2522,4 +5475,46 @@ export const {
   useCancelSubscriptionMutation,
   useReactivateSubscriptionMutation,
   useCreatePortalSessionMutation,
+  // Google OAuth hooks
+  useGetGoogleOAuthUrlMutation,
+  useGoogleOAuthLoginMutation,
+  useLinkGoogleAccountMutation,
+  useUnlinkGoogleAccountMutation,
+  // Google Calendar hooks
+  useGetGoogleCalendarAuthUrlMutation,
+  useConnectGoogleCalendarMutation,
+  useDisconnectGoogleCalendarMutation,
+  useIsGoogleCalendarConnectedQuery,
+  // Interview Scheduling hooks
+  useCreateInterviewSlotsMutation,
+  useSelectInterviewSlotMutation,
+  useCancelInterviewMutation,
+  useSyncInterviewToCalendarMutation,
+  useInterviewSlotsQuery,
+  useAllInterviewSlotsQuery,
+  useMyInterviewsQuery,
+  useUpcomingInterviewsQuery,
+  useApplicationInterviewQuery,
+  useInterviewQuery,
+  // Job Match Engine hooks - Recruiter
+  useCreateJobPostingMutation,
+  useUpdateJobPostingMutation,
+  useDeleteJobPostingMutation,
+  useGetMyJobPostingsQuery,
+  useGetJobApplicationsQuery,
+  useGetShortlistedApplicationsQuery,
+  useGetRejectedApplicationsQuery,
+  useShortlistApplicationMutation,
+  useRejectApplicationMutation,
+  // Job Match Engine hooks - Candidate
+  useApplyToJobMutation,
+  useWithdrawApplicationMutation,
+  useSaveJobMutation,
+  useUnsaveJobMutation,
+  useGetJobPostingsQuery,
+  useGetJobPostingQuery,
+  useGetMyJobMatchesQuery,
+  useGetJobMatchQuery,
+  useGetMyApplicationsQuery,
+  useGetMySavedJobsQuery,
 } = api;

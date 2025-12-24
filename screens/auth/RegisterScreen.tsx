@@ -17,6 +17,9 @@ import { setCredentials } from '../../store/slices/authSlice';
 import { storeTokens } from '../../utils/authUtils';
 import { useAlert } from '../../contexts/AlertContext';
 
+// Import NATIVE Google Sign-In service
+import nativeGoogleSignIn from '../../services/nativeGoogleSignIn';
+
 // Import icons from assets
 import BackArrowIcon from '../../assets/images/arrowLeft.svg';
 import UserIcon from '../../assets/images/userIcon.svg';
@@ -174,6 +177,7 @@ export default function RegisterScreen({ role, onBack, onLogin, onRegisterSucces
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [showSuccessPopup, setShowSuccessPopup] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [registerCandidate, { isLoading: isCandidateLoading }] = useRegisterCandidateMutation();
   const [registerRecruiter, { isLoading: isRecruiterLoading }] = useRegisterRecruiterMutation();
   const dispatch = useAppDispatch();
@@ -338,6 +342,68 @@ export default function RegisterScreen({ role, onBack, onLogin, onRegisterSucces
         buttons: [{ text: 'OK', style: 'default' }],
       });
       console.log('Registration error:', errorMessage);
+    }
+  };
+
+  /**
+   * NATIVE Google Sign-In Handler for Registration
+   * This shows the native account selector popup - NO BROWSER!
+   */
+  const handleGoogleSignIn = async () => {
+    try {
+      setIsGoogleLoading(true);
+      console.log('Starting NATIVE Google Sign-In for registration (popup, no browser)...');
+
+      // Use the native Google Sign-In service
+      const result = await nativeGoogleSignIn.signInAndAuthenticate();
+
+      if (result.success) {
+        console.log('Native Google Sign-In successful for registration!');
+
+        // Normalize role to lowercase
+        const normalizedRole = (result.role?.toLowerCase() || (role || 'candidate')) as 'candidate' | 'recruiter';
+
+        // Store tokens securely
+        await storeTokens(result.accessToken, result.refreshToken);
+
+        // Store credentials in Redux
+        dispatch(setCredentials({
+          user: {
+            id: result.user.id,
+            email: result.user.email,
+            firstName: result.user.firstName,
+            lastName: result.user.lastName,
+            phoneNumber: result.user.phoneNumber,
+            role: normalizedRole,
+            isVerified: result.user.isVerified,
+          },
+          token: result.accessToken,
+          refreshToken: result.refreshToken,
+        }));
+
+        console.log('Google registration complete');
+        setShowSuccessPopup(true);
+      } else if (result.cancelled) {
+        console.log('User cancelled Google Sign-In');
+        // Don't show error for cancellation
+      } else {
+        showAlert({
+          type: 'error',
+          title: 'Google Sign-In Failed',
+          message: result.message || 'Failed to sign in with Google. Please try again.',
+          buttons: [{ text: 'OK', style: 'default' }],
+        });
+      }
+    } catch (error: any) {
+      console.error('Google Sign-In error:', error);
+      showAlert({
+        type: 'error',
+        title: 'Sign-In Error',
+        message: 'An error occurred during Google sign-in. Please try again.',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
+    } finally {
+      setIsGoogleLoading(false);
     }
   };
 
@@ -651,25 +717,46 @@ export default function RegisterScreen({ role, onBack, onLogin, onRegisterSucces
           Sign Up
         </Button>
 
-        {/* OR Divider */}
-        <View className="flex-row items-center mb-6">
-          <View className="flex-1 h-px bg-gray-300" />
-          <Text className="mx-4 text-gray-400">OR</Text>
-          <View className="flex-1 h-px bg-gray-300" />
-        </View>
+        {/* OAuth Social Login - Only for Candidates */}
+        {role !== 'recruiter' && (
+          <>
+            {/* OR Divider */}
+            <View className="flex-row items-center mb-6">
+              <View className="flex-1 h-px bg-gray-300" />
+              <Text className="mx-4 text-gray-400">OR</Text>
+              <View className="flex-1 h-px bg-gray-300" />
+            </View>
 
-        {/* Social Login Buttons */}
-        <View className="flex-row justify-between mb-6">
-          <TouchableOpacity className="flex-1 bg-white border border-gray-300 rounded-xl py-3 flex-row items-center justify-center mr-3">
-            <GoogleIcon />
-            <Text className="ml-2 text-gray-700 font-medium">Google</Text>
-          </TouchableOpacity>
+            {/* Social Login Buttons */}
+            <View className="flex-row justify-between mb-6">
+              <TouchableOpacity
+                onPress={handleGoogleSignIn}
+                disabled={isGoogleLoading}
+                className={`flex-1 bg-white border border-gray-300 rounded-xl py-3 flex-row items-center justify-center mr-3 ${
+                  isGoogleLoading ? 'opacity-50' : ''
+                }`}
+              >
+                <GoogleIcon />
+                <Text className="ml-2 text-gray-700 font-medium">
+                  {isGoogleLoading ? 'Signing in...' : 'Google'}
+                </Text>
+              </TouchableOpacity>
 
-          <TouchableOpacity className="flex-1 bg-white border border-gray-300 rounded-xl py-3 flex-row items-center justify-center">
-            <LinkedInIcon />
-            <Text className="ml-2 text-gray-700 font-medium">LinkedIn</Text>
-          </TouchableOpacity>
-        </View>
+              <TouchableOpacity
+                className="flex-1 bg-white border border-gray-300 rounded-xl py-3 flex-row items-center justify-center"
+                onPress={() => showAlert({
+                  type: 'info',
+                  title: 'Coming Soon',
+                  message: 'LinkedIn registration will be available soon.',
+                  buttons: [{ text: 'OK', style: 'default' }],
+                })}
+              >
+                <LinkedInIcon />
+                <Text className="ml-2 text-gray-700 font-medium">LinkedIn</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
 
         {/* Already have account */}
         <View className="flex-row justify-center mb-8">

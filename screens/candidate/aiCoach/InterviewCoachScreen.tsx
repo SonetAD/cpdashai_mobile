@@ -10,6 +10,7 @@ interface InterviewCoachScreenProps {
   activeTab?: string;
   onTabChange?: (tabId: string) => void;
   onClaraPress?: () => void;
+  onAIInterviewPress?: () => void;
 }
 
 interface QuestionItemProps {
@@ -35,6 +36,7 @@ export default function InterviewCoachScreen({
   activeTab = 'aiCoach',
   onTabChange,
   onClaraPress,
+  onAIInterviewPress,
 }: InterviewCoachScreenProps) {
   const [textInput, setTextInput] = useState('');
 
@@ -101,6 +103,15 @@ export default function InterviewCoachScreen({
           {/* Get AI Feedback Button */}
           <TouchableOpacity className="bg-primary-blue rounded-xl py-4 items-center mb-4">
             <Text className="text-white text-base font-semibold">Get AI FeedBack</Text>
+          </TouchableOpacity>
+
+          {/* AI Interview Button */}
+          <TouchableOpacity
+            className="bg-gradient-to-r from-purple-600 to-blue-600 rounded-xl py-4 items-center mb-4"
+            style={{ backgroundColor: '#8B5CF6' }}
+            onPress={onAIInterviewPress}
+          >
+            <Text className="text-white text-base font-semibold">AI Interview Practice</Text>
           </TouchableOpacity>
 
           {/* Clara Interview Button */}
