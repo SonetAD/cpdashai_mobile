@@ -64,4 +64,4 @@ The APK will be generated in your project directory.
 
 ## License
 
-Copyright © 2025 Chawla Solutions. All rights reserved.
+Copyright © 2025 CPDASH-AI. All rights reserved.

@@ -1,6 +1,13 @@
-import { Platform } from 'react-native';
+import { Platform, Dimensions } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
+
+// Check if device is a tablet (screen width > 600dp is typically tablet)
+const isTablet = () => {
+  const { width, height } = Dimensions.get('window');
+  const screenSize = Math.min(width, height);
+  return screenSize >= 600;
+};
 
 // Type definitions for profile picture operations
 export interface ProfilePictureUploadInput {
@@ -147,15 +154,23 @@ export const pickImageFromLibrary = async (): Promise<string | null> => {
     return null;
   }
 
+  // On tablets, skip built-in editing as it may not show buttons properly
+  // We'll crop the image programmatically instead
+  const useBuiltInEditing = !isTablet();
+
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ImagePicker.MediaTypeOptions.Images,
-    allowsEditing: true,
+    allowsEditing: useBuiltInEditing,
     aspect: [1, 1],
     quality: 0.8,
     base64: false, // We'll handle base64 in processImage
   });
 
   if (!result.canceled && result.assets[0]) {
+    // If we skipped built-in editing (tablet), crop to square programmatically
+    if (!useBuiltInEditing) {
+      return await processImageWithCrop(result.assets[0].uri, result.assets[0].type);
+    }
     return await processImage(result.assets[0].uri, result.assets[0].type);
   }
 
@@ -170,22 +185,30 @@ export const takePhotoWithCamera = async (): Promise<string | null> => {
     return null;
   }
 
+  // On tablets, skip built-in editing as it may not show buttons properly
+  // We'll crop the image programmatically instead
+  const useBuiltInEditing = !isTablet();
+
   const result = await ImagePicker.launchCameraAsync({
-    allowsEditing: true,
+    allowsEditing: useBuiltInEditing,
     aspect: [1, 1],
     quality: 0.8,
     base64: false, // We'll handle base64 in processImage
   });
 
   if (!result.canceled && result.assets[0]) {
+    // If we skipped built-in editing (tablet), crop to square programmatically
+    if (!useBuiltInEditing) {
+      return await processImageWithCrop(result.assets[0].uri, 'image');
+    }
     return await processImage(result.assets[0].uri, 'image');
   }
 
   return null;
 };
 
-// Process and compress image with 5MB size limit
-const processImage = async (uri: string, type?: string | null): Promise<string> => {
+// Process image with automatic center crop to square (for tablets)
+const processImageWithCrop = async (uri: string, type?: string | null): Promise<string> => {
   try {
     // Determine the format based on the URI or type
     let format = ImageManipulator.SaveFormat.JPEG;
@@ -199,12 +222,29 @@ const processImage = async (uri: string, type?: string | null): Promise<string> 
       mimeType = 'image/webp';
     }
 
-    // First, get the original image to check its size
-    let manipulatedImage = await ImageManipulator.manipulateAsync(
+    // First get original image dimensions
+    const originalImage = await ImageManipulator.manipulateAsync(
       uri,
       [],
+      { compress: 1, format }
+    );
+
+    const { width, height } = originalImage;
+
+    // Calculate center crop to make it square
+    const size = Math.min(width, height);
+    const originX = (width - size) / 2;
+    const originY = (height - size) / 2;
+
+    // Crop to square from center and resize to standard size
+    let manipulatedImage = await ImageManipulator.manipulateAsync(
+      uri,
+      [
+        { crop: { originX, originY, width: size, height: size } },
+        { resize: { width: 800, height: 800 } }
+      ],
       {
-        compress: 1,
+        compress: 0.8,
         format,
         base64: true
       }
@@ -214,24 +254,24 @@ const processImage = async (uri: string, type?: string | null): Promise<string> 
       throw new Error('Failed to convert image to base64');
     }
 
-    // Calculate base64 size (approximately 4/3 * original binary size)
+    // Check size and compress more if needed
     let base64Size = manipulatedImage.base64.length;
     const maxBase64Size = 5242880 * 1.37; // 5MB limit with base64 overhead
 
-    // If image is too large, resize and compress
     if (base64Size > maxBase64Size) {
-      // Try progressively smaller sizes and compression
       const attempts = [
-        { width: 1024, height: 1024, compress: 0.8 },
-        { width: 800, height: 800, compress: 0.7 },
-        { width: 600, height: 600, compress: 0.6 },
-        { width: 400, height: 400, compress: 0.5 }
+        { width: 600, height: 600, compress: 0.7 },
+        { width: 400, height: 400, compress: 0.6 },
+        { width: 300, height: 300, compress: 0.5 }
       ];
 
       for (const attempt of attempts) {
         manipulatedImage = await ImageManipulator.manipulateAsync(
           uri,
-          [{ resize: { width: attempt.width, height: attempt.height } }],
+          [
+            { crop: { originX, originY, width: size, height: size } },
+            { resize: { width: attempt.width, height: attempt.height } }
+          ],
           {
             compress: attempt.compress,
             format,
@@ -247,9 +287,88 @@ const processImage = async (uri: string, type?: string | null): Promise<string> 
         }
       }
 
-      // Final check
       if (base64Size > maxBase64Size) {
         throw new Error('Unable to compress image below 5MB limit. Please choose a smaller image.');
+      }
+    }
+
+    return `data:${mimeType};base64,${manipulatedImage.base64}`;
+  } catch (error) {
+    console.error('Error processing image with crop:', error);
+    throw error;
+  }
+};
+
+// Process and compress image with size limit
+// Note: nginx may have a lower limit than backend (5MB), so we target ~2.5MB max
+const processImage = async (uri: string, type?: string | null): Promise<string> => {
+  try {
+    // Determine the format based on the URI or type
+    let format = ImageManipulator.SaveFormat.JPEG;
+    let mimeType = 'image/jpeg';
+
+    if (type === 'png' || uri.toLowerCase().includes('.png')) {
+      format = ImageManipulator.SaveFormat.PNG;
+      mimeType = 'image/png';
+    } else if (uri.toLowerCase().includes('.webp')) {
+      format = ImageManipulator.SaveFormat.WEBP;
+      mimeType = 'image/webp';
+    }
+
+    // Target max size ~2MB to stay well under nginx limits (base64 adds ~33% overhead)
+    // 2MB binary = ~2.7MB base64, which is safe for most server configs
+    const targetMaxSize = 2 * 1024 * 1024 * 1.37; // ~2.7MB in base64
+
+    // Always resize and compress for profile pictures to ensure fast uploads
+    // Start with a reasonable size for profile pictures
+    let manipulatedImage = await ImageManipulator.manipulateAsync(
+      uri,
+      [{ resize: { width: 800, height: 800 } }],
+      {
+        compress: 0.8,
+        format,
+        base64: true
+      }
+    );
+
+    if (!manipulatedImage.base64) {
+      throw new Error('Failed to convert image to base64');
+    }
+
+    // Check size and compress more if needed
+    let base64Size = manipulatedImage.base64.length;
+
+    if (base64Size > targetMaxSize) {
+      // Try progressively smaller sizes and compression
+      const attempts = [
+        { width: 600, height: 600, compress: 0.7 },
+        { width: 500, height: 500, compress: 0.6 },
+        { width: 400, height: 400, compress: 0.5 },
+        { width: 300, height: 300, compress: 0.4 }
+      ];
+
+      for (const attempt of attempts) {
+        manipulatedImage = await ImageManipulator.manipulateAsync(
+          uri,
+          [{ resize: { width: attempt.width, height: attempt.height } }],
+          {
+            compress: attempt.compress,
+            format,
+            base64: true
+          }
+        );
+
+        if (manipulatedImage.base64) {
+          base64Size = manipulatedImage.base64.length;
+          if (base64Size <= targetMaxSize) {
+            break;
+          }
+        }
+      }
+
+      // Final check
+      if (base64Size > targetMaxSize) {
+        throw new Error('Unable to compress image to a suitable size. Please choose a smaller image.');
       }
     }
 

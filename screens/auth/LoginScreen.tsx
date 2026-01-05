@@ -1,21 +1,44 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, TextInput, Platform, UIManager } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import Svg, { Path } from 'react-native-svg';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as Haptics from 'expo-haptics';
 import { Input } from '../../components/ui/Input';
 import { Checkbox } from '../../components/ui/Checkbox';
-import { useLoginMutation } from '../../services/api';
+import {
+  useLoginMutation,
+  useAcceptAllConsentsMutation,
+  useRejectOptionalConsentsMutation,
+  useUpdateAllConsentsMutation,
+  useLazyHasGivenConsentQuery,
+} from '../../services/api';
 import { useAppDispatch } from '../../store/hooks';
 import { setCredentials } from '../../store/slices/authSlice';
 import SuccessPopup from '../../components/SuccessPopup';
+import KeyboardDismissWrapper from '../../components/KeyboardDismissWrapper';
+import GDPRConsentBanner, { ConsentPreferences, POLICY_VERSION } from '../../components/GDPRConsentBanner';
 import { storeTokens } from '../../utils/authUtils';
 import { useAlert } from '../../contexts/AlertContext';
 
-// Import NATIVE Google Sign-In service (NOT expo-auth-session!)
+// Import NATIVE Google Sign-In service
 import nativeGoogleSignIn from '../../services/nativeGoogleSignIn';
+
+// Import icons from assets
+import BackArrowIcon from '../../assets/images/arrowLeft.svg';
+import MailIcon from '../../assets/images/mailIcon.svg';
+import LockIcon from '../../assets/images/lockIcon.svg';
+import EyeSlashIcon from '../../assets/images/eyeSlash.svg';
+import EyeIcon from '../../assets/images/eye.svg';
+import GoogleIcon from '../../assets/images/googleIcon.svg';
+import LinkedInIcon from '../../assets/images/linkedinIcon.svg';
+
+// Enable LayoutAnimation on Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 const loginSchema = z.object({
   emailOrPhone: z.string().min(1, 'Email or phone number is required'),
@@ -23,42 +46,12 @@ const loginSchema = z.object({
   rememberMe: z.boolean().optional(),
 });
 
-const GoogleIcon = () => (
-  <Svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-    <Path
-      d="M19.6 10.227c0-.709-.064-1.39-.182-2.045H10v3.868h5.382a4.6 4.6 0 0 1-1.996 3.018l3.232 2.504c1.891-1.741 2.982-4.304 2.982-7.345z"
-      fill="#4285F4"
-    />
-    <Path
-      d="M10 20c2.7 0 4.964-.895 6.618-2.427l-3.232-2.505c-.895.6-2.04.955-3.386.955-2.605 0-4.81-1.755-5.595-4.114l-3.323 2.564A9.996 9.996 0 0 0 10 20z"
-      fill="#34A853"
-    />
-    <Path
-      d="M4.405 11.909A6.002 6.002 0 0 1 4.09 10c0-.659.114-1.3.314-1.909L1.082 5.527A9.996 9.996 0 0 0 0 10c0 1.614.386 3.14 1.082 4.473l3.323-2.564z"
-      fill="#FBBC04"
-    />
-    <Path
-      d="M10 3.977c1.468 0 2.786.505 3.823 1.496l2.868-2.869C14.959.992 12.695 0 10 0 6.09 0 2.71 2.24 1.082 5.527l3.322 2.564C5.19 5.732 7.395 3.977 10 3.977z"
-      fill="#E94235"
-    />
-  </Svg>
-);
-
-const LinkedInIcon = () => (
-  <Svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-    <Path
-      d="M18.52 0H1.477C.66 0 0 .645 0 1.441v17.118C0 19.355.66 20 1.477 20H18.52c.816 0 1.48-.645 1.48-1.441V1.441C20 .645 19.336 0 18.52 0zM5.934 17.043H2.96V7.496h2.974v9.547zM4.449 6.195a1.72 1.72 0 1 1 0-3.44 1.72 1.72 0 0 1 0 3.44zM17.043 17.043h-2.968v-4.64c0-1.11-.02-2.536-1.547-2.536-1.547 0-1.785 1.21-1.785 2.46v4.716H7.777V7.496h2.848v1.305h.039c.398-.754 1.371-1.547 2.82-1.547 3.016 0 3.57 1.984 3.57 4.566v5.223h-.011z"
-      fill="#0077B5"
-    />
-  </Svg>
-);
-
 interface LoginScreenProps {
   onBack?: () => void;
   onForgotPassword?: () => void;
   onSignUp?: () => void;
   onLoginSuccess?: () => void;
-  showOAuth?: boolean; // Optional prop to show/hide OAuth buttons
+  showOAuth?: boolean;
 }
 
 type FormData = z.infer<typeof loginSchema>;
@@ -67,9 +60,18 @@ export default function LoginScreen({ onBack, onForgotPassword, onSignUp, onLogi
   const [showPassword, setShowPassword] = useState(false);
   const [showSuccessPopup, setShowSuccessPopup] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [showConsentBanner, setShowConsentBanner] = useState(false);
   const [login, { isLoading }] = useLoginMutation();
+  const [checkConsent] = useLazyHasGivenConsentQuery();
+  const [acceptAllConsents] = useAcceptAllConsentsMutation();
+  const [rejectOptionalConsents] = useRejectOptionalConsentsMutation();
+  const [updateAllConsents] = useUpdateAllConsentsMutation();
   const dispatch = useAppDispatch();
   const { showAlert } = useAlert();
+
+  // Input refs for form navigation
+  const emailRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
 
   const { control, handleSubmit, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(loginSchema),
@@ -80,29 +82,95 @@ export default function LoginScreen({ onBack, onForgotPassword, onSignUp, onLogi
     },
   });
 
+  // Save consent after login
+  const saveConsent = async (consentAction: 'acceptAll' | 'rejectAll' | 'custom', customPreferences?: ConsentPreferences) => {
+    try {
+      if (consentAction === 'acceptAll') {
+        await acceptAllConsents({ policyVersion: POLICY_VERSION }).unwrap();
+      } else if (consentAction === 'rejectAll') {
+        await rejectOptionalConsents().unwrap();
+      } else if (consentAction === 'custom' && customPreferences) {
+        await updateAllConsents({
+          ...customPreferences,
+          policyVersion: POLICY_VERSION,
+        }).unwrap();
+      }
+      console.log('Consent saved successfully');
+    } catch (error) {
+      console.error('Failed to save consent:', error);
+    }
+  };
+
+  // Handle consent acceptance
+  const handleConsentAcceptAll = async () => {
+    // Immediately hide consent banner to prevent race condition
+    setShowConsentBanner(false);
+    await saveConsent('acceptAll');
+    setShowSuccessPopup(true);
+  };
+
+  const handleConsentRejectAll = async () => {
+    // Don't allow login to proceed if user rejects consent - log them out
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    setShowConsentBanner(false);
+
+    // Clear credentials since they rejected consent
+    dispatch(setCredentials({
+      user: null,
+      token: null,
+      refreshToken: null,
+    }));
+
+    showAlert({
+      type: 'info',
+      title: 'Consent Required',
+      message: 'You need to accept our terms and privacy policy to use the app.',
+      buttons: [{ text: 'OK', style: 'default' }],
+    });
+  };
+
+  const handleConsentCustom = async (preferences: ConsentPreferences) => {
+    // Immediately hide consent banner to prevent race condition
+    setShowConsentBanner(false);
+
+    // Check if required consents are accepted
+    if (!preferences.privacyPolicy || !preferences.termsOfService || !preferences.dataProcessing) {
+      // Required consents not accepted - log out user
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      dispatch(setCredentials({
+        user: null,
+        token: null,
+        refreshToken: null,
+      }));
+      showAlert({
+        type: 'info',
+        title: 'Consent Required',
+        message: 'You must accept the Privacy Policy, Terms of Service, and Data Processing to use the app.',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
+      return;
+    }
+    await saveConsent('custom', preferences);
+    setShowSuccessPopup(true);
+  };
+
   const onSubmit = async (data: FormData) => {
     try {
-      // Detect if input is email or phone
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
       const isEmail = data.emailOrPhone.includes('@');
       const loginInput = isEmail
         ? { email: data.emailOrPhone, password: data.password }
         : { phoneNumber: data.emailOrPhone, password: data.password };
 
       const result = await login(loginInput).unwrap();
-
       const response = result.login;
 
       if (response.success && response.__typename === 'LoginSuccessType') {
-        console.log('Login - Role from API:', response.role);
-        console.log('Login - Full user data:', response.user);
-
-        // Normalize role to lowercase to ensure consistency
         const normalizedRole = (response.role?.toLowerCase() || 'candidate') as 'candidate' | 'recruiter';
 
-        // Store tokens securely in SecureStore
         await storeTokens(response.accessToken, response.refreshToken);
 
-        // Store the credentials in Redux with full user data
         dispatch(setCredentials({
           user: {
             id: response.user.id,
@@ -117,23 +185,30 @@ export default function LoginScreen({ onBack, onForgotPassword, onSignUp, onLogi
           refreshToken: response.refreshToken,
         }));
 
-        console.log('Login successful:', response);
-        console.log('Access Token:', response.accessToken);
-        console.log('Tokens stored securely in SecureStore');
-        console.log('Role normalized and stored:', normalizedRole);
+        // Check if user has given consent
+        try {
+          const consentResult = await checkConsent().unwrap();
+          if (!consentResult?.hasGivenConsent) {
+            // Show consent banner for existing users who haven't given consent
+            setShowConsentBanner(true);
+            return;
+          }
+        } catch (consentError) {
+          console.log('Consent check failed, proceeding without consent check:', consentError);
+        }
 
-        // Show success popup
         setShowSuccessPopup(true);
       } else {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         showAlert({
           type: 'error',
           title: 'Login Failed',
           message: response.message || 'Login failed. Please try again.',
           buttons: [{ text: 'OK', style: 'default' }],
         });
-        console.log('Login failed:', response.message);
       }
     } catch (error: any) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       const errorMessage = error?.data?.login?.message || error?.data?.message || 'Login failed. Please check your credentials.';
       showAlert({
         type: 'error',
@@ -141,40 +216,25 @@ export default function LoginScreen({ onBack, onForgotPassword, onSignUp, onLogi
         message: errorMessage,
         buttons: [{ text: 'OK', style: 'default' }],
       });
-      console.log('Login error:', errorMessage);
     }
   };
 
-  /**
-   * NATIVE Google Sign-In Handler
-   * This shows the native account selector popup - NO BROWSER!
-   */
   const handleGoogleSignIn = async () => {
     try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setIsGoogleLoading(true);
-      console.log('Starting NATIVE Google Sign-In (popup, no browser)...');
 
-      // Use the native Google Sign-In service
       const result = await nativeGoogleSignIn.signInAndAuthenticate();
 
-      // Handle cancellation first (user pressed cancel or back button)
       if (result.cancelled) {
-        console.log('User cancelled Google Sign-In - no account created');
-        // Don't show error, just exit gracefully
         return;
       }
 
-      // Handle successful sign-in
       if (result.success && result.accessToken) {
-        console.log('Native Google Sign-In successful!');
-
-        // Normalize role to lowercase
         const normalizedRole = (result.role?.toLowerCase() || 'candidate') as 'candidate' | 'recruiter';
 
-        // Store tokens securely
         await storeTokens(result.accessToken, result.refreshToken);
 
-        // Store credentials in Redux
         dispatch(setCredentials({
           user: {
             id: result.user.id,
@@ -189,10 +249,21 @@ export default function LoginScreen({ onBack, onForgotPassword, onSignUp, onLogi
           refreshToken: result.refreshToken,
         }));
 
-        console.log('Google authentication complete');
+        // Check if user has given consent
+        try {
+          const consentResult = await checkConsent().unwrap();
+          if (!consentResult?.hasGivenConsent) {
+            // Show consent banner for existing users who haven't given consent
+            setShowConsentBanner(true);
+            return;
+          }
+        } catch (consentError) {
+          console.log('Consent check failed, proceeding without consent check:', consentError);
+        }
+
         setShowSuccessPopup(true);
       } else {
-        // Show error only if it's not a cancellation
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         showAlert({
           type: 'error',
           title: 'Google Sign-In Failed',
@@ -201,7 +272,7 @@ export default function LoginScreen({ onBack, onForgotPassword, onSignUp, onLogi
         });
       }
     } catch (error: any) {
-      console.error('Google Sign-In error:', error);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       showAlert({
         type: 'error',
         title: 'Sign-In Error',
@@ -213,208 +284,226 @@ export default function LoginScreen({ onBack, onForgotPassword, onSignUp, onLogi
     }
   };
 
-  // Initialize Google Sign-In when component mounts
   useEffect(() => {
-    // The configuration is done in the service constructor
     console.log('Native Google Sign-In initialized');
   }, []);
 
-  // Initialize Google Sign-In on mount (configuration is done in service)
-  // Success popup is now handled by the onContinue callback
-
   return (
-    <>
-      <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-gray-50" edges={['top', 'bottom']}>
+      <KeyboardDismissWrapper>
         <ScrollView
-          contentContainerStyle={{ flexGrow: 1 }}
-          showsVerticalScrollIndicator={false}
+          className="flex-1"
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: 20 }}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
-          <View className="flex-1 px-6 py-4">
-            {/* Header */}
-            <View className="flex-row items-center justify-between mb-8">
-              {onBack && (
-                <TouchableOpacity onPress={onBack} className="p-2 -ml-2">
-                  <Svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                    <Path
-                      d="M15 18L9 12L15 6"
-                      stroke="#111827"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </Svg>
+          {/* Back Button */}
+          <View className="px-4 pt-4">
+            <TouchableOpacity
+              className="w-12 h-12 bg-white rounded-full items-center justify-center"
+              style={styles.backButton}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                onBack?.();
+              }}
+              accessibilityLabel="Go back"
+              accessibilityRole="button"
+            >
+              <BackArrowIcon />
+            </TouchableOpacity>
+          </View>
+
+          {/* White Card Container */}
+          <View className="mx-4 mt-4 bg-white rounded-3xl p-6" style={styles.card}>
+            <Text className="text-2xl font-bold text-gray-900 mb-2">
+              Sign In
+            </Text>
+            <Text className="text-sm text-gray-500 mb-6">
+              Log in to access your personalized AI dashboard
+            </Text>
+
+            {/* Email Input */}
+            <Controller
+              control={control}
+              name="emailOrPhone"
+              render={({ field: { onChange, value } }) => (
+                <Input
+                  ref={emailRef}
+                  leftIcon={<MailIcon />}
+                  placeholder="Enter your Email"
+                  value={value}
+                  onChangeText={onChange}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  error={errors.emailOrPhone?.message}
+                  containerClassName="mb-4"
+                  returnKeyType="next"
+                  onSubmitEditing={() => passwordRef.current?.focus()}
+                />
+              )}
+            />
+
+            {/* Password Input */}
+            <Controller
+              control={control}
+              name="password"
+              render={({ field: { onChange, value } }) => (
+                <Input
+                  ref={passwordRef}
+                  leftIcon={<LockIcon />}
+                  placeholder="Enter your Password"
+                  value={value}
+                  onChangeText={onChange}
+                  secureTextEntry={!showPassword}
+                  rightIcon={showPassword ? <EyeIcon /> : <EyeSlashIcon />}
+                  onRightIconPress={() => setShowPassword(!showPassword)}
+                  error={errors.password?.message}
+                  containerClassName="mb-4"
+                  returnKeyType="done"
+                />
+              )}
+            />
+          </View>
+
+          {/* Remember Me & Forgot Password - Outside Card */}
+          <View className="mx-4 mt-4 flex-row items-center justify-between">
+            <Controller
+              control={control}
+              name="rememberMe"
+              render={({ field: { onChange, value } }) => (
+                <TouchableOpacity
+                  className="flex-row items-center"
+                  style={{ gap: 10 }}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    onChange(!value);
+                  }}
+                  accessibilityLabel="Remember me"
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: value || false }}
+                >
+                  <Checkbox
+                    checked={value || false}
+                    onCheckedChange={(newValue) => {
+                      Haptics.selectionAsync();
+                      onChange(newValue);
+                    }}
+                  />
+                  <Text className="text-sm text-gray-700">Remember Me</Text>
                 </TouchableOpacity>
               )}
-              <View className="flex-1" />
-            </View>
-
-            {/* Title */}
-            <View className="mb-8">
-              <Text className="text-3xl font-bold text-gray-900 mb-2">Welcome Back</Text>
-              <Text className="text-gray-500">Sign in to continue to CP-DashAI</Text>
-            </View>
-
-            {/* Form */}
-            <View className="space-y-4 mb-6">
-              {/* Email or Phone Input */}
-              <View>
-                <Text className="text-gray-700 mb-2 font-medium">Email or Phone Number</Text>
-                <Controller
-                  control={control}
-                  name="emailOrPhone"
-                  render={({ field: { onChange, onBlur, value } }) => (
-                    <Input
-                      placeholder="Enter your email or phone"
-                      value={value}
-                      onChangeText={onChange}
-                      onBlur={onBlur}
-                      autoCapitalize="none"
-                      keyboardType="email-address"
-                      error={errors.emailOrPhone?.message}
-                    />
-                  )}
-                />
-              </View>
-
-              {/* Password Input */}
-              <View>
-                <Text className="text-gray-700 mb-2 font-medium">Password</Text>
-                <Controller
-                  control={control}
-                  name="password"
-                  render={({ field: { onChange, onBlur, value } }) => (
-                    <Input
-                      placeholder="Enter your password"
-                      value={value}
-                      onChangeText={onChange}
-                      onBlur={onBlur}
-                      secureTextEntry={!showPassword}
-                      error={errors.password?.message}
-                      rightIcon={
-                        <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                          <Svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                            {showPassword ? (
-                              <Path
-                                d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"
-                                stroke="#6B7280"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                            ) : (
-                              <>
-                                <Path
-                                  d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"
-                                  stroke="#6B7280"
-                                  strokeWidth="2"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                />
-                                <Path
-                                  d="M1 1l22 22"
-                                  stroke="#6B7280"
-                                  strokeWidth="2"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                />
-                              </>
-                            )}
-                          </Svg>
-                        </TouchableOpacity>
-                      }
-                    />
-                  )}
-                />
-              </View>
-
-              {/* Remember Me & Forgot Password */}
-              <View className="flex-row items-center justify-between">
-                <Controller
-                  control={control}
-                  name="rememberMe"
-                  render={({ field: { onChange, value } }) => (
-                    <View className="flex-row items-center">
-                      <Checkbox
-                        checked={value || false}
-                        onCheckedChange={onChange}
-                      />
-                      <Text className="text-gray-700 ml-2">Remember me</Text>
-                    </View>
-                  )}
-                />
-                {onForgotPassword && (
-                  <TouchableOpacity onPress={onForgotPassword}>
-                    <Text className="text-primary-blue text-sm font-medium">Forgot Password?</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-
-            {/* Login Button */}
-            <TouchableOpacity
-              onPress={handleSubmit(onSubmit)}
-              disabled={isLoading}
-              className={`py-4 rounded-xl items-center ${isLoading ? 'bg-primary-blue/80' : 'bg-primary-blue'}`}
-            >
-              <Text className="text-white font-semibold text-lg">
-                {isLoading ? 'Signing in...' : 'Sign In'}
-              </Text>
-            </TouchableOpacity>
-
-            {/* OAuth Social Login - Conditionally shown */}
-            {showOAuth && (
-              <>
-                {/* Divider */}
-                <View className="flex-row items-center my-6">
-                  <View className="flex-1 h-px bg-gray-300" />
-                  <Text className="text-gray-400 mx-4">OR</Text>
-                  <View className="flex-1 h-px bg-gray-300" />
-                </View>
-
-                {/* Social Login Buttons */}
-                <View className="space-y-3">
-                  <TouchableOpacity
-                    onPress={handleGoogleSignIn}
-                    disabled={isGoogleLoading}
-                    className={`flex-row items-center justify-center py-3 rounded-xl border bg-white ${
-                      isGoogleLoading ? 'border-gray-300 opacity-50' : 'border-gray-300'
-                    }`}
-                  >
-                    <GoogleIcon />
-                    <Text className="text-gray-700 ml-3 font-medium">
-                      {isGoogleLoading ? 'Signing in...' : 'Sign in with Google'}
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    className="flex-row items-center justify-center py-3 rounded-xl border border-gray-300 bg-white"
-                    onPress={() => showAlert({
-                      type: 'info',
-                      title: 'Coming Soon',
-                      message: 'LinkedIn login will be available soon.',
-                      buttons: [{ text: 'OK', style: 'default' }],
-                    })}
-                  >
-                    <LinkedInIcon />
-                    <Text className="text-gray-700 ml-3 font-medium">Sign in with LinkedIn</Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
-
-            {/* Sign Up Link */}
-            {onSignUp && (
-              <View className="flex-row items-center justify-center mt-8 mb-4">
-                <Text className="text-gray-600">Don't have an account? </Text>
-                <TouchableOpacity onPress={onSignUp}>
-                  <Text className="text-primary-blue font-semibold">Sign Up</Text>
-                </TouchableOpacity>
-              </View>
+            />
+            {onForgotPassword && (
+              <TouchableOpacity
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  onForgotPassword();
+                }}
+                accessibilityLabel="Forgot password"
+                accessibilityRole="link"
+              >
+                <Text className="text-primary-blue text-sm font-medium">Forgot Password?</Text>
+              </TouchableOpacity>
             )}
           </View>
+
+          {/* Gradient Sign In Button */}
+          <View className="mx-4 mt-6 mb-4">
+            <TouchableOpacity
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                handleSubmit(onSubmit)();
+              }}
+              disabled={isLoading}
+              activeOpacity={0.8}
+              accessibilityLabel="Sign in"
+              accessibilityRole="button"
+              accessibilityState={{ disabled: isLoading }}
+            >
+              <LinearGradient
+                colors={['#06B6D4', '#3B82F6', '#6366F1', '#8B5CF6']}
+                locations={[0, 0.35, 0.65, 1]}
+                start={{ x: 0.5, y: 0 }}
+                end={{ x: 0.5, y: 1 }}
+                style={[styles.gradientButton, isLoading && { opacity: 0.7 }]}
+              >
+                <Text className="text-white font-semibold text-base">
+                  {isLoading ? 'Signing In...' : 'Sign In'}
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+
+          {/* OAuth Social Login */}
+          {showOAuth && (
+            <>
+              {/* Divider */}
+              <View className="flex-row items-center mx-4 my-4">
+                <View className="flex-1 h-px bg-gray-300" />
+                <Text className="text-gray-400 mx-4 text-sm">OR</Text>
+                <View className="flex-1 h-px bg-gray-300" />
+              </View>
+
+              {/* Social Login Buttons - Side by Side */}
+              <View className="mx-4 flex-row" style={{ gap: 12 }}>
+                {/* Google Button */}
+                <TouchableOpacity
+                  style={[styles.socialButton, styles.socialButtonShadow]}
+                  onPress={handleGoogleSignIn}
+                  disabled={isGoogleLoading}
+                  activeOpacity={0.8}
+                  accessibilityLabel="Sign in with Google"
+                  accessibilityRole="button"
+                >
+                  <GoogleIcon width={20} height={20} />
+                  <Text className="text-gray-800 font-medium ml-2">Google</Text>
+                </TouchableOpacity>
+
+                {/* LinkedIn Button */}
+                <TouchableOpacity
+                  style={[styles.socialButton, styles.socialButtonShadow]}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    showAlert({
+                      type: 'info',
+                      title: 'Available in Milestone 3',
+                      message: 'LinkedIn login will be available in Milestone 3.',
+                      buttons: [{ text: 'OK', style: 'default' }],
+                    });
+                  }}
+                  activeOpacity={0.8}
+                  accessibilityLabel="Sign in with LinkedIn"
+                  accessibilityRole="button"
+                >
+                  <LinkedInIcon width={20} height={20} />
+                  <Text className="text-gray-800 font-medium ml-2">LinkedIn</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+
+          {/* Spacer to push Sign Up link to bottom */}
+          <View className="flex-1" />
+
+          {/* Sign Up Link */}
+          {onSignUp && (
+            <View className="flex-row items-center justify-center mt-8 mb-4">
+              <Text className="text-gray-600">Don't have an account? </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  onSignUp();
+                }}
+                accessibilityLabel="Sign up for new account"
+                accessibilityRole="link"
+              >
+                <Text className="text-primary-blue font-semibold">Sign Up</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </ScrollView>
-      </SafeAreaView>
+      </KeyboardDismissWrapper>
 
       {/* Success Popup */}
       <SuccessPopup
@@ -426,6 +515,63 @@ export default function LoginScreen({ onBack, onForgotPassword, onSignUp, onLogi
           onLoginSuccess?.();
         }}
       />
-    </>
+
+      {/* GDPR Consent Banner for existing users */}
+      <GDPRConsentBanner
+        visible={showConsentBanner}
+        onAcceptAll={handleConsentAcceptAll}
+        onRejectAll={handleConsentRejectAll}
+        onSavePreferences={handleConsentCustom}
+      />
+    </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  backButton: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  card: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  gradientButton: {
+    height: 50,
+    borderRadius: 33.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    // Glass effect shadow
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  socialButton: {
+    flex: 1,
+    height: 50,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(200, 205, 215, 0.6)',
+  },
+  socialButtonShadow: {
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+});

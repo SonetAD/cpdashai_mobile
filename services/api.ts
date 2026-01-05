@@ -197,6 +197,84 @@ export interface DeleteExperienceResponse {
   deleteExperience: SuccessType | ErrorType;
 }
 
+// GDPR Consent types
+export interface ConsentStatus {
+  essential: boolean;
+  analytics: boolean;
+  marketing: boolean;
+  personalization: boolean;
+  thirdParty: boolean;
+  dataProcessing: boolean;
+  privacyPolicy: boolean;
+  termsOfService: boolean;
+}
+
+export interface ConsentSuccessType {
+  __typename: 'ConsentSuccessType';
+  success: boolean;
+  message: string;
+}
+
+export interface HasGivenConsentResponse {
+  hasGivenConsent: boolean;
+}
+
+export interface RequiresConsentUpdateResponse {
+  requiresConsentUpdate: boolean;
+}
+
+export interface AcceptAllConsentsInput {
+  policyVersion: string;
+}
+
+export interface UpdateAllConsentsInput {
+  essential: boolean;
+  analytics: boolean;
+  marketing: boolean;
+  personalization: boolean;
+  thirdParty: boolean;
+  dataProcessing: boolean;
+  privacyPolicy: boolean;
+  termsOfService: boolean;
+  policyVersion: string;
+}
+
+export interface AcceptAllConsentsResponse {
+  acceptAllConsents: ConsentSuccessType | ErrorType;
+}
+
+export interface RejectOptionalConsentsResponse {
+  rejectOptionalConsents: ConsentSuccessType | ErrorType;
+}
+
+export interface UpdateAllConsentsResponse {
+  updateAllConsents: ConsentSuccessType | ErrorType;
+}
+
+// GDPR Data Export types
+export interface DataExportSuccessType {
+  __typename: 'DataExportSuccessType';
+  success: boolean;
+  message: string;
+  exportData: string; // JSON string containing all user data
+}
+
+export interface ExportMyDataResponse {
+  exportMyData: DataExportSuccessType | ErrorType;
+}
+
+// GDPR Data Deletion types
+export interface DeleteAccountSuccessType {
+  __typename: 'SuccessType';
+  success: boolean;
+  message: string;
+  data?: string;
+}
+
+export interface DeleteAccountResponse {
+  deleteAccount: DeleteAccountSuccessType | ErrorType;
+}
+
 // Candidate profile types
 export interface CandidateExperience {
   company: string;
@@ -921,6 +999,7 @@ export interface Subscription {
   plan: string;
   status: string;
   isActive: boolean;
+  cancelAtPeriodEnd: boolean;
   currentPeriodStart: string;
   currentPeriodEnd: string;
   aiResumeParsesUsed: number;
@@ -958,11 +1037,19 @@ export interface CancelSubscriptionInput {
 }
 
 export interface CancelSubscriptionResponse {
-  cancelSubscription: SuccessType | ErrorType;
+  cancelSubscription: {
+    success: boolean;
+    message: string;
+    canceledAt: string | null;
+    accessEndsAt: string | null;
+  };
 }
 
 export interface ReactivateSubscriptionResponse {
-  reactivateSubscription: SuccessType | ErrorType;
+  reactivateSubscription: {
+    success: boolean;
+    message: string;
+  };
 }
 
 export interface CreatePortalSessionResponse {
@@ -970,6 +1057,134 @@ export interface CreatePortalSessionResponse {
     success: boolean;
     message: string;
     portalUrl: string | null;
+  };
+}
+
+// Billing History Types
+export interface BillingHistoryInput {
+  limit?: number;
+  startingAfter?: string;
+}
+
+export interface InvoiceLineItem {
+  id: string;
+  description: string;
+  quantity: number;
+  unitAmount: number;
+  amount: number;
+  currency: string;
+}
+
+export interface InvoicePaymentMethod {
+  brand: string;       // "visa", "mastercard", etc.
+  last4: string;       // "4242"
+  expMonth: number;    // 12
+  expYear: number;     // 2025
+}
+
+export interface Invoice {
+  id: string;
+  number: string | null;
+  status: string;
+  currency: string;
+  created: string;
+
+  // Amounts (all in cents)
+  subtotal: number;
+  tax: number | null;
+  total: number;
+  amountPaid: number;
+  amountDue: number;
+  discount: number | null;
+
+  // Period
+  periodStart: string;
+  periodEnd: string;
+
+  // Customer
+  customerName: string | null;
+  customerEmail: string | null;
+
+  // Line items
+  lineItems: InvoiceLineItem[];
+
+  // Payment method used
+  paymentMethod: InvoicePaymentMethod | null;
+
+  // External URLs (fallback)
+  invoiceUrl: string | null;
+  invoicePdf: string | null;
+}
+
+export interface BillingHistoryResponse {
+  billingHistory: {
+    success: boolean;
+    invoices: Invoice[];
+    hasMore: boolean;
+    totalCount: number;
+  };
+}
+
+// Sync Subscription Status Types
+export interface SyncSubscriptionStatusResponse {
+  syncSubscriptionStatus: {
+    status: string;
+    planId: string | null;
+    planName: string | null;
+    currentPeriodEnd: string | null;
+    cancelAtPeriodEnd: boolean;
+    message: string;
+  };
+}
+
+// Change Plan Types
+export interface ChangePlanInput {
+  newPriceId: string;
+}
+
+export interface ChangePlanResponse {
+  changePlan: {
+    success: boolean;
+    message: string;
+    subscription: {
+      id: string;
+      status: string;
+      plan: string;
+      currentPeriodEnd: string;
+    } | null;
+    prorationAmount: number | null;
+  };
+}
+
+// Stripe PaymentSheet Types (for in-app payments)
+export interface CreatePaymentIntentInput {
+  priceId: string;
+}
+
+export interface PaymentIntentResponse {
+  createPaymentIntent: {
+    success: boolean;
+    message?: string;
+    paymentIntentClientSecret?: string;
+    ephemeralKey?: string;
+    customerId?: string;
+    publishableKey?: string;
+  };
+}
+
+export interface CreateSubscriptionSetupInput {
+  priceId: string;
+}
+
+export interface SetupIntentResponse {
+  createSubscriptionSetup: {
+    success: boolean;
+    message?: string;
+    setupIntentClientSecret?: string;
+    ephemeralKey?: string;
+    customerId?: string;
+    publishableKey?: string;
+    priceId?: string;
   };
 }
 
@@ -1096,6 +1311,7 @@ export interface CreateInterviewSlotsInput {
   videoCallLink?: string;
   additionalNotes?: string;
   durationMinutes: number;
+  timezone?: string; // IANA timezone string (e.g., "Asia/Karachi", "America/New_York")
   slots: Array<{
     startTime: string;
     endTime: string;
@@ -1129,6 +1345,23 @@ export interface CancelInterviewInput {
 
 export interface CancelInterviewResponse {
   cancelInterview: {
+    success: boolean;
+    message: string;
+  };
+}
+
+export interface RescheduleInterviewInput {
+  interviewId: string;
+  newSlots: {
+    startTime: string;
+    endTime: string;
+  };
+  reason?: string;
+  timezone?: string; // IANA timezone string (e.g., "Asia/Karachi", "America/New_York")
+}
+
+export interface RescheduleInterviewResponse {
+  rescheduleInterview: {
     success: boolean;
     message: string;
   };
@@ -1472,6 +1705,286 @@ export interface MySavedJobsResponse {
   mySavedJobs: SavedJob[];
 }
 
+// ==================== Interview Coach Types ====================
+
+export interface InterviewCoachQuestion {
+  id: string;
+  questionText: string;
+  questionType: string;
+  questionCategory: string;
+  difficulty: string;
+  orderIndex: number;
+  expectedKeywords?: string[];
+  idealResponsePoints?: string[];
+  evaluationCriteria?: {
+    strongAnswerIndicators?: string[];
+    weakAnswerIndicators?: string[];
+  };
+  response?: InterviewCoachResponse;
+}
+
+export interface InterviewCoachVoiceMetrics {
+  fillerAssessment: string;
+  fillerWordCount: number;
+  fillerWordsDetected: string[];
+  paceAssessment: string;
+  speakingPaceWpm: number;
+  voiceConfidenceScore: number;
+}
+
+export interface InterviewCoachAnalysis {
+  contentScore: number;
+  relevanceScore: number;
+  clarityScore: number;
+  specificityScore: number;
+  starMethodScore?: number;
+  keywordsUsed?: string[];
+  keywordsMissed?: string[];
+  // Legacy nested fields for backward compatibility with UI
+  keywordAnalysis?: {
+    keywordsUsed?: string[];
+    keywordsMissed?: string[];
+  };
+  feedback?: {
+    strengths?: string[];
+    improvements?: string[];
+    suggestions?: string[];
+  };
+}
+
+export interface InterviewCoachResponse {
+  id: string;
+  responseText: string;
+  audioFileUrl?: string;
+  durationSeconds?: number;
+  isVoiceResponse: boolean;
+  voiceMetrics?: InterviewCoachVoiceMetrics;
+  submittedAt: string;
+  analysis?: InterviewCoachAnalysis;
+}
+
+export interface InterviewCoachSession {
+  id: string;
+  interviewType: string;
+  jobRole: string;
+  industry: string;
+  difficulty: string;
+  mode: string;
+  status: string;
+  totalQuestions: number;
+  overallScore?: number;
+  createdAt: string;
+  completedAt?: string;
+  questions?: InterviewCoachQuestion[];
+  report?: InterviewCoachSessionReport;
+}
+
+export interface InterviewCoachSessionReport {
+  id: string;
+  overallScore: number;
+  contentAverage: number;
+  communicationAverage: number;
+  voiceAverage?: number | null;
+  strongAreas: string[];
+  weakAreas: string[];
+  questionTypeScores: Record<string, number>;
+  topImprovements: string[];
+  practiceSuggestions: string[];
+  resources?: string[];
+  executiveSummary: string;
+  detailedAnalysis: string;
+  industryBenchmark?: number;
+  percentileRank?: number;
+  generatedAt?: string;
+  createdAt?: string;
+}
+
+export interface InterviewCoachStats {
+  totalSessions: number;
+  completedSessions: number;
+  averageScore: number | null;
+  bestScore: number | null;
+  totalQuestionsAnswered: number;
+}
+
+export interface InterviewTypeOption {
+  value: string;
+  label: string;
+  description: string;
+}
+
+export interface DifficultyLevelOption {
+  value: string;
+  label: string;
+  description: string;
+}
+
+export interface VoiceOption {
+  id: string;
+  name: string;
+  description: string;
+}
+
+// Interview Coach Input Types
+export interface StartInterviewSessionInput {
+  interviewType: string;
+  jobRole: string;
+  industry: string;
+  difficulty?: string;
+  numQuestions?: number;
+  mode?: string;
+}
+
+export interface SubmitTextResponseInput {
+  sessionId: string;
+  questionId: string;
+  responseText: string;
+}
+
+export interface SubmitVoiceResponseInput {
+  sessionId: string;
+  questionId: string;
+  audioBase64: string;
+}
+
+export interface SpeechToSpeechInput {
+  audioBase64: string;
+  targetVoiceId?: string;
+  removeBackgroundNoise?: boolean;
+  stability?: number;
+  similarityBoost?: number;
+  style?: number;
+}
+
+// Interview Coach Response Types
+export interface StartInterviewSessionResponse {
+  startInterviewSession: {
+    __typename: 'InterviewCoachSessionSuccessType' | 'ErrorType';
+    success: boolean;
+    message: string;
+    questions?: Array<{
+      id: string;
+      questionText: string;
+      questionType: string;
+      questionCategory: string;
+      difficulty: string;
+      orderIndex: number;
+      idealResponsePoints?: string[];
+    }>;
+    session?: {
+      id: string;
+      interviewType: string;
+      jobRole: string;
+      industry: string;
+      difficulty: string;
+      mode: string;
+      status: string;
+      totalQuestions: number;
+      completedQuestions: number;
+      overallScore: number | null;
+      startedAt: string;
+      completedAt: string | null;
+      createdAt: string;
+      updatedAt: string;
+    };
+  } | null;
+}
+
+export interface SubmitTextResponseResponse {
+  submitTextResponse: {
+    __typename: string;
+    success: boolean;
+    message: string;
+  };
+}
+
+export interface SubmitVoiceResponseResponse {
+  submitVoiceResponse: {
+    __typename: string;
+    success?: boolean;
+    message?: string;
+    voiceMetrics?: InterviewCoachVoiceMetrics;
+  };
+}
+
+export interface SessionReport {
+  id: string;
+  overallScore: number;
+  contentAverage: number;
+  communicationAverage: number;
+  voiceAverage: number | null;
+  strongAreas: string[];
+  weakAreas: string[];
+  questionTypeScores: Record<string, number>;
+  topImprovements: string[];
+  practiceSuggestions: string[];
+  resources: string[];
+  executiveSummary: string;
+  detailedAnalysis: string;
+  industryBenchmark: number;
+  percentileRank: number;
+  generatedAt: string;
+  createdAt: string;
+}
+
+export interface CompleteSessionResponse {
+  completeSessionAndGenerateReport: {
+    __typename: string;
+    success: boolean;
+    message: string;
+    report?: SessionReport;
+  };
+}
+
+export interface AbandonSessionResponse {
+  abandonSession: {
+    __typename: string;
+    success?: boolean;
+    message?: string;
+  };
+}
+
+export interface ConvertVoiceResponse {
+  convertVoice: {
+    __typename: string;
+    success?: boolean;
+    message?: string;
+    originalAudioSize?: number;
+    convertedAudioSize?: number;
+    convertedAudioBase64?: string;
+    targetVoiceId?: string;
+    targetVoiceName?: string;
+  };
+}
+
+export interface InterviewCoachSessionsResponse {
+  interviewCoachSessions: InterviewCoachSession[];
+}
+
+export interface InterviewCoachSessionResponse {
+  interviewCoachSession: InterviewCoachSession;
+}
+
+export interface GetNextQuestionResponse {
+  getNextQuestion: InterviewCoachQuestion | null;
+}
+
+export interface InterviewCoachStatsResponse {
+  interviewCoachStats: InterviewCoachStats;
+}
+
+export interface AvailableInterviewTypesResponse {
+  availableInterviewTypes: string[];
+}
+
+export interface AvailableDifficultyLevelsResponse {
+  availableDifficultyLevels: string[];
+}
+
+export interface AvailableVoicesResponse {
+  availableVoices: VoiceOption[];
+}
+
 // Create the API
 export const api = createApi({
   reducerPath: 'api',
@@ -1509,7 +2022,7 @@ export const api = createApi({
       return headers;
     },
   }),
-  tagTypes: ['Auth', 'Profile', 'Resume', 'Subscription', 'GoogleCalendar', 'Interviews', 'Jobs', 'JobMatches', 'Applications', 'SavedJobs'],
+  tagTypes: ['Auth', 'Profile', 'Resume', 'Subscription', 'GoogleCalendar', 'Interviews', 'Jobs', 'JobMatches', 'Applications', 'SavedJobs', 'InterviewCoach'],
   endpoints: (builder) => ({
     registerCandidate: builder.mutation<RegisterCandidateResponse, RegisterCandidateInput>({
       query: (input) => {
@@ -2694,6 +3207,65 @@ export const api = createApi({
       },
       invalidatesTags: ['Profile'],
     }),
+    // Delete Profile Picture mutations
+    deleteCandidateProfilePicture: builder.mutation<{ deleteCandidateProfilePicture: SuccessType | ErrorType }, void>({
+      query: () => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation DeleteCandidateProfilePicture {
+              deleteCandidateProfilePicture {
+                ... on SuccessType {
+                  __typename
+                  success
+                  message
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                }
+              }
+            }
+          `,
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('DeleteCandidateProfilePicture response:', response);
+        return response.data;
+      },
+      invalidatesTags: ['Profile'],
+    }),
+    deleteRecruiterProfilePicture: builder.mutation<{ deleteRecruiterProfilePicture: SuccessType | ErrorType }, void>({
+      query: () => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation DeleteRecruiterProfilePicture {
+              deleteRecruiterProfilePicture {
+                ... on SuccessType {
+                  __typename
+                  success
+                  message
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                }
+              }
+            }
+          `,
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('DeleteRecruiterProfilePicture response:', response);
+        return response.data;
+      },
+      invalidatesTags: ['Profile'],
+    }),
     // Resume upload mutation
     uploadAndParseResume: builder.mutation<ResumeUploadResponse, ResumeUploadInput>({
       query: (input) => {
@@ -3849,6 +4421,7 @@ export const api = createApi({
                 plan
                 status
                 isActive
+                cancelAtPeriodEnd
                 currentPeriodStart
                 currentPeriodEnd
                 aiResumeParsesUsed
@@ -3895,20 +4468,63 @@ export const api = createApi({
       transformResponse: (response: any) => response.data,
       invalidatesTags: ['Subscription'],
     }),
+    // Stripe PaymentSheet mutations (for in-app payments)
+    createPaymentIntent: builder.mutation<PaymentIntentResponse, CreatePaymentIntentInput>({
+      query: (input) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation CreatePaymentIntent($input: CreatePaymentIntentInput!) {
+              createPaymentIntent(input: $input) {
+                success
+                message
+                paymentIntentClientSecret
+                ephemeralKey
+                customerId
+                publishableKey
+              }
+            }
+          `,
+          variables: { input },
+        },
+      }),
+      transformResponse: (response: any) => response.data,
+    }),
+    createSubscriptionSetup: builder.mutation<SetupIntentResponse, CreateSubscriptionSetupInput>({
+      query: (input) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation CreateSubscriptionSetup($input: CreateSubscriptionSetupInput!) {
+              createSubscriptionSetup(input: $input) {
+                success
+                message
+                setupIntentClientSecret
+                ephemeralKey
+                customerId
+                publishableKey
+                priceId
+              }
+            }
+          `,
+          variables: { input },
+        },
+      }),
+      transformResponse: (response: any) => response.data,
+      invalidatesTags: ['Subscription'],
+    }),
     cancelSubscription: builder.mutation<CancelSubscriptionResponse, CancelSubscriptionInput>({
       query: (input) => {
         const body = {
           query: `
             mutation CancelSubscription($input: CancelSubscriptionInput!) {
               cancelSubscription(input: $input) {
-                ... on SuccessType {
-                  success
-                  message
-                }
-                ... on ErrorType {
-                  success
-                  message
-                }
+                success
+                message
+                canceledAt
+                accessEndsAt
               }
             }
           `,
@@ -3929,14 +4545,8 @@ export const api = createApi({
           query: `
             mutation ReactivateSubscription {
               reactivateSubscription {
-                ... on SuccessType {
-                  success
-                  message
-                }
-                ... on ErrorType {
-                  success
-                  message
-                }
+                success
+                message
               }
             }
           `,
@@ -3971,6 +4581,119 @@ export const api = createApi({
         };
       },
       transformResponse: (response: any) => response.data,
+    }),
+    // Billing History Query
+    getBillingHistory: builder.query<BillingHistoryResponse, BillingHistoryInput | void>({
+      query: (input) => {
+        const body = {
+          query: `
+            query BillingHistory($limit: Int, $startingAfter: String) {
+              billingHistory(limit: $limit, startingAfter: $startingAfter) {
+                success
+                hasMore
+                totalCount
+                invoices {
+                  id
+                  number
+                  status
+                  currency
+                  created
+                  subtotal
+                  tax
+                  total
+                  amountPaid
+                  amountDue
+                  discount
+                  periodStart
+                  periodEnd
+                  customerName
+                  customerEmail
+                  lineItems {
+                    id
+                    description
+                    quantity
+                    unitAmount
+                    amount
+                    currency
+                  }
+                  paymentMethod {
+                    brand
+                    last4
+                    expMonth
+                    expYear
+                  }
+                  invoiceUrl
+                  invoicePdf
+                }
+              }
+            }
+          `,
+          variables: input || {},
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      providesTags: ['Subscription'],
+    }),
+    // Sync Subscription Status Query
+    syncSubscriptionStatus: builder.query<SyncSubscriptionStatusResponse, void>({
+      query: () => {
+        const body = {
+          query: `
+            query SyncSubscriptionStatus {
+              syncSubscriptionStatus {
+                status
+                planId
+                planName
+                currentPeriodEnd
+                cancelAtPeriodEnd
+                message
+              }
+            }
+          `,
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      providesTags: ['Subscription'],
+    }),
+    // Change Plan Mutation
+    changePlan: builder.mutation<ChangePlanResponse, ChangePlanInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation ChangePlan($input: ChangePlanInput!) {
+              changePlan(input: $input) {
+                success
+                message
+                subscription {
+                  id
+                  status
+                  plan
+                  currentPeriodEnd
+                }
+                prorationAmount
+              }
+            }
+          `,
+          variables: { input },
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      invalidatesTags: ['Subscription'],
     }),
     // Google OAuth Mutations
     getGoogleOAuthUrl: builder.mutation<GetGoogleOAuthUrlResponse, string>({
@@ -4236,17 +4959,9 @@ export const api = createApi({
           query: `
             mutation CreateInterviewSlots($input: CreateInterviewSlotsInput!) {
               createInterviewSlots(input: $input) {
-                ... on CreateInterviewSlotsSuccessType {
+                ... on InterviewSlotSuccessType {
                   success
                   message
-                  slots {
-                    id
-                    startTime
-                    endTime
-                    durationMinutes
-                    status
-                    createdAt
-                  }
                 }
                 ... on ErrorType {
                   success
@@ -4278,25 +4993,10 @@ export const api = createApi({
           query: `
             mutation SelectInterviewSlot($input: SelectInterviewSlotInput!) {
               selectInterviewSlot(input: $input) {
-                ... on SelectInterviewSlotSuccessType {
+                ... on InterviewSuccessType {
                   success
                   message
-                  interview {
-                    id
-                    startTime
-                    endTime
-                    durationMinutes
-                    interviewType
-                    location
-                    videoCallLink
-                  additionalNotes
-                  status
-                  recruiterCalendarEventId
-                  candidateCalendarEventId
-                  createdAt
-                  updatedAt
                 }
-              }
                 ... on ErrorType {
                   success
                   message
@@ -4328,6 +5028,36 @@ export const api = createApi({
             mutation CancelInterview($input: CancelInterviewInput!) {
               cancelInterview(input: $input) {
                 ... on SuccessType {
+                  success
+                  message
+                }
+                ... on ErrorType {
+                  success
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      invalidatesTags: ['Interviews'],
+    }),
+
+    // Reschedule interview
+    rescheduleInterview: builder.mutation<RescheduleInterviewResponse, RescheduleInterviewInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation RescheduleInterview($input: RescheduleInterviewInput!) {
+              rescheduleInterview(input: $input) {
+                ... on InterviewSlotSuccessType {
                   success
                   message
                 }
@@ -4385,7 +5115,7 @@ export const api = createApi({
       query: (applicationId) => {
         const body = {
           query: `
-            query InterviewSlots($applicationId: ID!) {
+            query InterviewSlots($applicationId: String!) {
               interviewSlots(applicationId: $applicationId) {
                 id
                 startTime
@@ -4393,18 +5123,23 @@ export const api = createApi({
                 durationMinutes
                 status
                 createdAt
+                updatedAt
               }
             }
           `,
           variables: { applicationId },
         };
+        console.log('Fetching interview slots for applicationId:', applicationId);
         return {
           url: '/graphql/',
           method: 'POST',
           body,
         };
       },
-      transformResponse: (response: any) => response.data,
+      transformResponse: (response: any) => {
+        console.log('Interview slots response:', response);
+        return response.data;
+      },
       providesTags: ['Interviews'],
     }),
 
@@ -5404,6 +6139,594 @@ export const api = createApi({
       transformResponse: (response: any) => response.data,
       providesTags: ['SavedJobs'],
     }),
+
+    // ==================== Interview Coach Mutations ====================
+
+    startInterviewSession: builder.mutation<StartInterviewSessionResponse, StartInterviewSessionInput>({
+      query: (input) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation StartInterviewSession($input: StartInterviewSessionInput!) {
+              startInterviewSession(input: $input) {
+                ... on InterviewCoachSessionSuccessType {
+                  __typename
+                  success
+                  message
+                  questions {
+                    id
+                    questionText
+                    questionType
+                    questionCategory
+                    difficulty
+                    orderIndex
+                    idealResponsePoints
+                  }
+                  session {
+                    id
+                    interviewType
+                    jobRole
+                    industry
+                    difficulty
+                    mode
+                    status
+                    totalQuestions
+                    completedQuestions
+                    overallScore
+                    startedAt
+                    completedAt
+                    createdAt
+                    updatedAt
+                  }
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input },
+        },
+      }),
+      transformResponse: (response: any) => response.data,
+      invalidatesTags: ['InterviewCoach'],
+    }),
+
+    submitTextResponse: builder.mutation<SubmitTextResponseResponse, SubmitTextResponseInput>({
+      query: (input) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation SubmitTextResponse($input: SubmitTextResponseInput!) {
+              submitTextResponse(input: $input) {
+                ... on SubmitResponseSuccessType {
+                  __typename
+                  success
+                  message
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input },
+        },
+      }),
+      transformResponse: (response: any) => response.data,
+      invalidatesTags: ['InterviewCoach'],
+    }),
+
+    submitVoiceResponse: builder.mutation<SubmitVoiceResponseResponse, SubmitVoiceResponseInput>({
+      query: ({ sessionId, questionId, audioBase64 }) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation SubmitVoiceResponse($sessionId: String!, $questionId: String!, $audioBase64: String!) {
+              submitVoiceResponse(input: {sessionId: $sessionId, questionId: $questionId, audioBase64: $audioBase64}) {
+                __typename
+                ... on SubmitResponseSuccessType {
+                  __typename
+                  success
+                  message
+                  voiceMetrics {
+                    fillerAssessment
+                    fillerWordCount
+                    fillerWordsDetected
+                    paceAssessment
+                    speakingPaceWpm
+                    voiceConfidenceScore
+                  }
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                }
+              }
+            }
+          `,
+          variables: { sessionId, questionId, audioBase64 },
+        },
+      }),
+      transformResponse: (response: any) => response.data,
+      invalidatesTags: ['InterviewCoach'],
+    }),
+
+    completeInterviewSession: builder.mutation<CompleteSessionResponse, string>({
+      query: (sessionId) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation CompleteSession($sessionId: String!) {
+              completeSessionAndGenerateReport(sessionId: $sessionId) {
+                ... on SessionReportSuccessType {
+                  __typename
+                  success
+                  message
+                  report {
+                    id
+                    overallScore
+                    contentAverage
+                    communicationAverage
+                    voiceAverage
+                    strongAreas
+                    weakAreas
+                    questionTypeScores
+                    topImprovements
+                    practiceSuggestions
+                    resources
+                    executiveSummary
+                    detailedAnalysis
+                    industryBenchmark
+                    percentileRank
+                    generatedAt
+                    createdAt
+                  }
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                }
+              }
+            }
+          `,
+          variables: { sessionId },
+        },
+      }),
+      transformResponse: (response: any) => response.data,
+      invalidatesTags: ['InterviewCoach'],
+    }),
+
+    abandonInterviewSession: builder.mutation<AbandonSessionResponse, string>({
+      query: (sessionId) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation AbandonSession($sessionId: String!) {
+              abandonSession(sessionId: $sessionId) {
+                __typename
+                ... on SuccessType {
+                  success
+                  message
+                }
+                ... on ErrorType {
+                  message
+                }
+              }
+            }
+          `,
+          variables: { sessionId },
+        },
+      }),
+      transformResponse: (response: any) => response.data,
+      invalidatesTags: ['InterviewCoach'],
+    }),
+
+    convertVoice: builder.mutation<ConvertVoiceResponse, SpeechToSpeechInput>({
+      query: (input) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation ConvertVoice($input: SpeechToSpeechInput!) {
+              convertVoice(input: $input) {
+                __typename
+                ... on SpeechToSpeechResultType {
+                  success
+                  message
+                  originalAudioSize
+                  convertedAudioSize
+                  convertedAudioBase64
+                  targetVoiceId
+                  targetVoiceName
+                }
+                ... on ErrorType {
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input },
+        },
+      }),
+      transformResponse: (response: any) => response.data,
+    }),
+
+    // ==================== Interview Coach Queries ====================
+
+    getInterviewCoachSessions: builder.query<InterviewCoachSessionsResponse, { status?: string; limit?: number; offset?: number }>({
+      query: ({ status, limit, offset }) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            query GetInterviewSessions($status: String, $limit: Int, $offset: Int) {
+              interviewCoachSessions(status: $status, limit: $limit, offset: $offset) {
+                id
+                interviewType
+                jobRole
+                industry
+                difficulty
+                mode
+                status
+                totalQuestions
+                overallScore
+                createdAt
+                completedAt
+              }
+            }
+          `,
+          variables: { status, limit, offset },
+        },
+      }),
+      transformResponse: (response: any) => response.data,
+      providesTags: ['InterviewCoach'],
+    }),
+
+    getInterviewCoachSession: builder.query<InterviewCoachSessionResponse, string>({
+      query: (sessionId) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            query GetInterviewSession($sessionId: String!) {
+              interviewCoachSession(sessionId: $sessionId) {
+                id
+                interviewType
+                jobRole
+                industry
+                difficulty
+                mode
+                status
+                totalQuestions
+                overallScore
+                createdAt
+                completedAt
+                questions {
+                  id
+                  questionText
+                  questionType
+                  questionCategory
+                  difficulty
+                  orderIndex
+                }
+                report {
+                  id
+                  overallScore
+                  contentAverage
+                  communicationAverage
+                  voiceAverage
+                  strongAreas
+                  weakAreas
+                  questionTypeScores
+                  topImprovements
+                  practiceSuggestions
+                  resources
+                  executiveSummary
+                  detailedAnalysis
+                  industryBenchmark
+                  percentileRank
+                  generatedAt
+                  createdAt
+                }
+              }
+            }
+          `,
+          variables: { sessionId },
+        },
+      }),
+      transformResponse: (response: any) => response.data,
+      providesTags: ['InterviewCoach'],
+    }),
+
+    getNextInterviewQuestion: builder.query<GetNextQuestionResponse, string>({
+      query: (sessionId) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            query GetNextQuestion($sessionId: String!) {
+              getNextQuestion(sessionId: $sessionId) {
+                id
+                questionText
+                questionType
+                questionCategory
+                difficulty
+                orderIndex
+              }
+            }
+          `,
+          variables: { sessionId },
+        },
+      }),
+      transformResponse: (response: any) => response.data,
+      providesTags: ['InterviewCoach'],
+    }),
+
+    getInterviewCoachStats: builder.query<InterviewCoachStatsResponse, void>({
+      query: () => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            query GetInterviewStats {
+              interviewCoachStats {
+                totalSessions
+                completedSessions
+                averageScore
+                bestScore
+                totalQuestionsAnswered
+              }
+            }
+          `,
+        },
+      }),
+      transformResponse: (response: any) => response.data,
+      providesTags: ['InterviewCoach'],
+    }),
+
+    getAvailableInterviewTypes: builder.query<AvailableInterviewTypesResponse, void>({
+      query: () => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            query GetInterviewTypes {
+              availableInterviewTypes
+            }
+          `,
+        },
+      }),
+      transformResponse: (response: any) => response.data,
+    }),
+
+    getAvailableDifficultyLevels: builder.query<AvailableDifficultyLevelsResponse, void>({
+      query: () => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            query GetDifficultyLevels {
+              availableDifficultyLevels
+            }
+          `,
+        },
+      }),
+      transformResponse: (response: any) => response.data,
+    }),
+
+    getAvailableVoices: builder.query<AvailableVoicesResponse, void>({
+      query: () => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            query GetVoices {
+              availableVoices {
+                id
+                name
+                description
+              }
+            }
+          `,
+        },
+      }),
+      transformResponse: (response: any) => response.data,
+    }),
+
+    // GDPR Consent Endpoints
+    hasGivenConsent: builder.query<HasGivenConsentResponse, void>({
+      query: () => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            query {
+              hasGivenConsent
+            }
+          `,
+        },
+      }),
+      transformResponse: (response: any) => response.data,
+    }),
+
+    requiresConsentUpdate: builder.query<RequiresConsentUpdateResponse, string>({
+      query: (currentVersion) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            query RequiresConsentUpdate($currentVersion: String!) {
+              requiresConsentUpdate(currentVersion: $currentVersion)
+            }
+          `,
+          variables: { currentVersion },
+        },
+      }),
+      transformResponse: (response: any) => response.data,
+    }),
+
+    acceptAllConsents: builder.mutation<AcceptAllConsentsResponse, AcceptAllConsentsInput>({
+      query: (input) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation AcceptAllConsents($input: AcceptAllConsentsInput!) {
+              acceptAllConsents(input: $input) {
+                ... on ConsentSuccessType {
+                  __typename
+                  success
+                  message
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input },
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('AcceptAllConsents response:', response);
+        return response.data;
+      },
+    }),
+
+    rejectOptionalConsents: builder.mutation<RejectOptionalConsentsResponse, void>({
+      query: () => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation {
+              rejectOptionalConsents {
+                ... on ConsentSuccessType {
+                  __typename
+                  success
+                  message
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                }
+              }
+            }
+          `,
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('RejectOptionalConsents response:', response);
+        return response.data;
+      },
+    }),
+
+    updateAllConsents: builder.mutation<UpdateAllConsentsResponse, UpdateAllConsentsInput>({
+      query: (input) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation UpdateAllConsents($input: UpdateAllConsentsInput!) {
+              updateAllConsents(input: $input) {
+                ... on ConsentSuccessType {
+                  __typename
+                  success
+                  message
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input },
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('UpdateAllConsents response:', response);
+        return response.data;
+      },
+    }),
+
+    // GDPR Data Export
+    exportMyData: builder.mutation<ExportMyDataResponse, void>({
+      query: () => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation {
+              exportMyData {
+                ... on DataExportSuccessType {
+                  __typename
+                  success
+                  message
+                  exportData
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                }
+              }
+            }
+          `,
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('ExportMyData response:', response);
+        return response.data;
+      },
+    }),
+
+    // GDPR Data Deletion - Delete Account
+    deleteAccount: builder.mutation<DeleteAccountResponse, void>({
+      query: () => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation {
+              deleteAccount {
+                ... on SuccessType {
+                  __typename
+                  success
+                  message
+                  data
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                }
+              }
+            }
+          `,
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('DeleteAccount response:', response);
+        return response.data;
+      },
+    }),
   }),
 });
 
@@ -5436,6 +6759,8 @@ export const {
   useGetMyProfileQuery,
   useUploadCandidateProfilePictureMutation,
   useUploadRecruiterProfilePictureMutation,
+  useDeleteCandidateProfilePictureMutation,
+  useDeleteRecruiterProfilePictureMutation,
   // Profile Banner hooks
   useUploadCandidateProfileBannerMutation,
   useUploadRecruiterProfileBannerMutation,
@@ -5472,9 +6797,14 @@ export const {
   useCheckSubscriptionStatusQuery,
   useGetMySubscriptionQuery,
   useCreateCheckoutSessionMutation,
+  useCreatePaymentIntentMutation,
+  useCreateSubscriptionSetupMutation,
   useCancelSubscriptionMutation,
   useReactivateSubscriptionMutation,
   useCreatePortalSessionMutation,
+  useGetBillingHistoryQuery,
+  useLazySyncSubscriptionStatusQuery,
+  useChangePlanMutation,
   // Google OAuth hooks
   useGetGoogleOAuthUrlMutation,
   useGoogleOAuthLoginMutation,
@@ -5489,6 +6819,7 @@ export const {
   useCreateInterviewSlotsMutation,
   useSelectInterviewSlotMutation,
   useCancelInterviewMutation,
+  useRescheduleInterviewMutation,
   useSyncInterviewToCalendarMutation,
   useInterviewSlotsQuery,
   useAllInterviewSlotsQuery,
@@ -5517,4 +6848,29 @@ export const {
   useGetJobMatchQuery,
   useGetMyApplicationsQuery,
   useGetMySavedJobsQuery,
+  // Interview Coach hooks
+  useStartInterviewSessionMutation,
+  useSubmitTextResponseMutation,
+  useSubmitVoiceResponseMutation,
+  useCompleteInterviewSessionMutation,
+  useAbandonInterviewSessionMutation,
+  useConvertVoiceMutation,
+  useGetInterviewCoachSessionsQuery,
+  useGetInterviewCoachSessionQuery,
+  useGetNextInterviewQuestionQuery,
+  useGetInterviewCoachStatsQuery,
+  useGetAvailableInterviewTypesQuery,
+  useGetAvailableDifficultyLevelsQuery,
+  useGetAvailableVoicesQuery,
+  // GDPR Consent hooks
+  useHasGivenConsentQuery,
+  useLazyHasGivenConsentQuery,
+  useRequiresConsentUpdateQuery,
+  useLazyRequiresConsentUpdateQuery,
+  useAcceptAllConsentsMutation,
+  useRejectOptionalConsentsMutation,
+  useUpdateAllConsentsMutation,
+  // GDPR Data Export & Deletion hooks
+  useExportMyDataMutation,
+  useDeleteAccountMutation,
 } = api;

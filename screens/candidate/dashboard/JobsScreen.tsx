@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, TextInput, RefreshControl, ActivityIndicator } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import SearchIcon from '../../../assets/images/searchGray.svg';
 import IdeaIcon from '../../../assets/images/homepage/idea.svg';
 import CandidateLayout from '../../../components/layouts/CandidateLayout';
+import SearchModal from '../../../components/SearchModal';
 import { 
   useGetMyJobMatchesQuery, 
   useGetJobPostingsQuery,
@@ -16,10 +17,12 @@ import {
 interface JobsScreenProps {
   activeTab?: string;
   onTabChange?: (tabId: string) => void;
+  onAIAssistantPress?: () => void;
   userName?: string;
   onJobPress?: (jobId: string) => void;
   onApplicationTrackerPress?: () => void;
   onCVUploadPress?: () => void;
+  onSearchNavigate?: (route: string) => void;
 }
 
 interface FilterButtonProps {
@@ -197,14 +200,55 @@ const JobCard: React.FC<JobCardProps> = ({ jobMatch, onPress, onSave, onApply, a
 export default function JobsScreen({
   activeTab = 'jobs',
   onTabChange,
+  onAIAssistantPress,
   userName = 'User',
   onJobPress,
   onApplicationTrackerPress,
   onCVUploadPress,
+  onSearchNavigate,
 }: JobsScreenProps) {
   const [activeFilter, setActiveFilter] = useState<string | undefined>(undefined);
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(1);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [showSearchModal, setShowSearchModal] = useState(false);
+
+  // Debounce search query
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery.trim().toLowerCase());
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Filter function for jobs
+  const filterJobs = (jobs: any[], query: string) => {
+    if (!query) return jobs;
+
+    return jobs.filter((item: any) => {
+      const job = item.jobPosting || item;
+      const searchLower = query.toLowerCase();
+
+      // Search in title
+      if (job.title?.toLowerCase().includes(searchLower)) return true;
+      // Search in company name
+      if (job.companyName?.toLowerCase().includes(searchLower)) return true;
+      // Search in location
+      if (job.location?.toLowerCase().includes(searchLower)) return true;
+      // Search in description
+      if (job.description?.toLowerCase().includes(searchLower)) return true;
+      // Search in skills
+      if (job.requiredSkills?.some((skill: string) =>
+        skill.toLowerCase().includes(searchLower)
+      )) return true;
+      // Search in work mode
+      if (job.workMode?.toLowerCase().includes(searchLower)) return true;
+      // Search in job type
+      if (job.jobType?.toLowerCase().replace('_', ' ').includes(searchLower)) return true;
+
+      return false;
+    });
+  };
 
   // Get work mode based on active filter
   const getWorkMode = () => {
@@ -253,6 +297,18 @@ export default function JobsScreen({
   const useMatchData = hasMatches || !jobsData;
   const isLoading = matchesLoading || jobsLoading;
   const error = matchesError || jobsError;
+
+  // Filter matched jobs based on search
+  const filteredMatches = useMemo(() => {
+    const matches = matchesData?.myJobMatches?.matches || [];
+    return filterJobs(matches, debouncedSearch);
+  }, [matchesData?.myJobMatches?.matches, debouncedSearch]);
+
+  // Filter regular job postings based on search
+  const filteredJobs = useMemo(() => {
+    const jobs = jobsData?.jobPostings || [];
+    return filterJobs(jobs.map((job: any) => ({ jobPosting: job })), debouncedSearch);
+  }, [jobsData?.jobPostings, debouncedSearch]);
   
   const refetch = () => {
     refetchMatches();
@@ -307,14 +363,13 @@ export default function JobsScreen({
   };
 
   return (
+    <>
     <CandidateLayout
-      userName={userName}
-      onSearchPress={() => console.log('Search pressed')}
-      activeTab={activeTab}
-      onTabChange={onTabChange}
+      onSearchPress={() => setShowSearchModal(true)}
     >
       <ScrollView
         className="flex-1"
+        contentContainerStyle={{ paddingBottom: 100 }}
         refreshControl={
           <RefreshControl refreshing={isLoading} onRefresh={refetch} />
         }
@@ -326,9 +381,11 @@ export default function JobsScreen({
               {useMatchData ? 'Job Matches' : 'Available Jobs'}
             </Text>
             <Text className="text-gray-500 text-sm">
-              {useMatchData 
-                ? `${matchesData?.myJobMatches?.totalCount || 0} jobs sorted by your best career fit`
-                : `${jobsData?.jobPostings?.length || 0} active job postings`
+              {debouncedSearch
+                ? `${filteredMatches.length + filteredJobs.length} results found`
+                : useMatchData
+                  ? `${matchesData?.myJobMatches?.totalCount || 0} jobs sorted by your best career fit`
+                  : `${jobsData?.jobPostings?.length || 0} active job postings`
               }
             </Text>
           </View>
@@ -337,12 +394,19 @@ export default function JobsScreen({
           <View className="bg-white rounded-xl px-4 py-3 flex-row items-center mb-4 shadow-sm">
             <SearchIcon width={20} height={20} />
             <TextInput
-              placeholder="Search something..."
+              placeholder="Search jobs, companies, skills..."
               placeholderTextColor="#9CA3AF"
               className="flex-1 ml-2 text-gray-900 text-sm"
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')} className="ml-2">
+                <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+                  <Path d="M18 6L6 18M6 6L18 18" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" />
+                </Svg>
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* Filter Buttons */}
@@ -429,20 +493,39 @@ export default function JobsScreen({
             </View>
           )}
 
+          {/* No Search Results State */}
+          {!isLoading && !error && debouncedSearch &&
+           filteredMatches.length === 0 && filteredJobs.length === 0 && (
+            <View className="bg-gray-50 rounded-xl p-6 items-center">
+              <Text className="text-gray-600 text-base font-semibold mb-2">
+                No results for "{searchQuery}"
+              </Text>
+              <Text className="text-gray-500 text-sm text-center mb-3">
+                Try different keywords or clear your search
+              </Text>
+              <TouchableOpacity
+                onPress={() => setSearchQuery('')}
+                className="bg-primary-blue rounded-lg py-2 px-4"
+              >
+                <Text className="text-white text-sm font-semibold">Clear Search</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* No Jobs State */}
-          {!isLoading && !error && 
-           (matchesData?.myJobMatches?.matches?.length === 0) && 
+          {!isLoading && !error && !debouncedSearch &&
+           (matchesData?.myJobMatches?.matches?.length === 0) &&
            (jobsData?.jobPostings?.length === 0 || !jobsData) && (
             <View className="bg-gray-50 rounded-xl p-6 items-center">
               <Text className="text-gray-600 text-base font-semibold mb-2">No Jobs Available</Text>
               <Text className="text-gray-500 text-sm text-center mb-3">
-                {useMatchData 
+                {useMatchData
                   ? 'Complete your profile to get personalized job recommendations'
                   : 'Check back later for new opportunities'
                 }
               </Text>
-              <TouchableOpacity 
-                onPress={refetch} 
+              <TouchableOpacity
+                onPress={refetch}
                 className="bg-primary-blue rounded-lg py-2 px-4"
               >
                 <Text className="text-white text-sm font-semibold">Refresh</Text>
@@ -450,8 +533,8 @@ export default function JobsScreen({
             </View>
           )}
 
-          {/* Job Listings - Show matches if available, otherwise show general jobs */}
-          {!isLoading && useMatchData && matchesData?.myJobMatches?.matches?.map((jobMatch: any) => (
+          {/* Job Listings - Show filtered matches if available */}
+          {!isLoading && useMatchData && filteredMatches.map((jobMatch: any) => (
             <JobCard
               key={jobMatch.id}
               jobMatch={jobMatch}
@@ -462,8 +545,9 @@ export default function JobsScreen({
             />
           ))}
 
-          {/* Fallback: Show general job postings without match data */}
-          {!isLoading && !useMatchData && jobsData?.jobPostings?.map((job: any) => {
+          {/* Fallback: Show filtered general job postings without match data */}
+          {!isLoading && !useMatchData && filteredJobs.map((item: any) => {
+            const job = item.jobPosting;
             // Transform job posting to match expected format
             const jobMatch = {
               id: job.id,
@@ -512,5 +596,14 @@ export default function JobsScreen({
         </View>
       </ScrollView>
     </CandidateLayout>
+    <SearchModal
+      visible={showSearchModal}
+      onClose={() => setShowSearchModal(false)}
+      onNavigate={(route) => {
+        setShowSearchModal(false);
+        onSearchNavigate?.(route);
+      }}
+    />
+    </>
   );
 }

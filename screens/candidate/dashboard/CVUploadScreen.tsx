@@ -5,9 +5,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as Haptics from 'expo-haptics';
 import { useSelector } from 'react-redux';
 import LogoWhite from '../../../assets/images/logoWhite.svg';
-import BottomNavBar from '../../../components/BottomNavBar';
+import CandidateNavBar from '../../../components/CandidateNavBar';
 import ResumeParsingProgressModal from '../../../components/ResumeParsingProgressModal';
 import {
   useGetMyResumesQuery,
@@ -77,7 +78,10 @@ const CVCard: React.FC<CVCardProps> = ({ resume, onEdit, onDelete, onDownload, o
 
   return (
     <TouchableOpacity
-      onPress={onViewDetails}
+      onPress={() => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        onViewDetails();
+      }}
       className="bg-white rounded-2xl p-5 mb-4 shadow-lg border border-gray-100"
       activeOpacity={0.7}
     >
@@ -122,6 +126,7 @@ const CVCard: React.FC<CVCardProps> = ({ resume, onEdit, onDelete, onDownload, o
           className="items-center justify-center flex-1"
           onPress={(e) => {
             e.stopPropagation();
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             onEdit();
           }}
         >
@@ -138,6 +143,7 @@ const CVCard: React.FC<CVCardProps> = ({ resume, onEdit, onDelete, onDownload, o
           className="items-center justify-center flex-1"
           onPress={(e) => {
             e.stopPropagation();
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             onDownload();
           }}
         >
@@ -197,6 +203,7 @@ const CVCard: React.FC<CVCardProps> = ({ resume, onEdit, onDelete, onDownload, o
           className="items-center justify-center flex-1"
           onPress={(e) => {
             e.stopPropagation();
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             onDelete();
           }}
         >
@@ -235,6 +242,7 @@ export default function CVUploadScreen({
   const [parsingStage, setParsingStage] = useState('');
   const [parsingStageLabel, setParsingStageLabel] = useState('');
   const [parsingMessage, setParsingMessage] = useState('');
+  const [parsingStatus, setParsingStatus] = useState('');
   const accessToken = useSelector((state: any) => state.auth.token);
   const userEmail = useSelector((state: any) => state.auth.user?.email);
   const { showAlert } = useAlert();
@@ -926,18 +934,33 @@ export default function CVUploadScreen({
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
       {/* Header */}
       <LinearGradient
-        colors={['#437EF4', '#437EF4']}
+        colors={['#4F7DF3', '#5B7FF2']}
         start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        className="px-6 py-4"
+        end={{ x: 1, y: 1 }}
+        className="px-5 py-4"
       >
         <View className="flex-row items-center">
-          <LogoWhite width={39} height={33} />
-          <View className="flex-1 ml-4">
+          {/* Back Button */}
+          <TouchableOpacity
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              onBack?.();
+            }}
+            className="mr-4"
+          >
+            <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+              <Path
+                d="M15 18l-6-6 6-6"
+                stroke="white"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </Svg>
+          </TouchableOpacity>
+          <View className="flex-1">
             <Text className="text-white text-lg font-bold">CV Manager</Text>
-            <Text className="text-white/90 text-xs mt-0.5">
-              Manage, update, and improve your resumes
-            </Text>
+            <Text className="text-white/80 text-sm">Manage, update, and improve your resumes</Text>
           </View>
         </View>
       </LinearGradient>
@@ -946,6 +969,7 @@ export default function CVUploadScreen({
       <ScrollView
         className="flex-1 px-6"
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 100 }}
         refreshControl={
           <RefreshControl refreshing={isLoading} onRefresh={refetch} />
         }
@@ -962,7 +986,10 @@ export default function CVUploadScreen({
             <TouchableOpacity
               className="bg-primary-blue rounded-full px-5 py-2.5 flex-row items-center shadow-md"
               style={{ backgroundColor: '#437EF4' }}
-              onPress={onCreateCV}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                onCreateCV?.();
+              }}
             >
               <Svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                 <Path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" fill="#FFFFFF"/>
@@ -1007,7 +1034,10 @@ export default function CVUploadScreen({
               <TouchableOpacity
                 className="bg-primary-blue rounded-xl py-3 px-8 shadow-md"
                 style={{ backgroundColor: '#437EF4' }}
-                onPress={onCreateCV}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  onCreateCV?.();
+                }}
               >
                 <Text className="text-white text-sm font-bold">+ Create Your First Resume</Text>
               </TouchableOpacity>
@@ -1110,7 +1140,10 @@ export default function CVUploadScreen({
             <TouchableOpacity
               className="bg-primary-blue rounded-xl py-3 items-center flex-row justify-center"
               style={{ backgroundColor: '#437EF4' }}
-              onPress={onCreateCV}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                onCreateCV?.();
+              }}
             >
               <Svg width="18" height="18" viewBox="0 0 24 24" fill="none">
                 <Path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" fill="#FFFFFF"/>
@@ -1185,7 +1218,7 @@ export default function CVUploadScreen({
       </ScrollView>
 
       {/* Bottom Nav Bar */}
-      <BottomNavBar activeTab={activeTab} onTabPress={onTabChange} />
+      <CandidateNavBar activeTab={activeTab} onTabPress={onTabChange} />
 
       {/* Analysis Loading Modal */}
       <Modal

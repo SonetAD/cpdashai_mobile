@@ -1,122 +1,238 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Switch, ActivityIndicator, Linking } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useRef, useEffect, useState } from 'react';
+import { View, Text, ScrollView, StyleSheet, Animated, Pressable, ActivityIndicator, Platform, Share, TouchableOpacity, Modal, Dimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, Circle } from 'react-native-svg';
-import { useSelector } from 'react-redux';
-import { RootState } from '../../../store/store';
-import { useGetMySubscriptionQuery, useCancelSubscriptionMutation, useReactivateSubscriptionMutation, useCreatePortalSessionMutation } from '../../../services/api';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+import * as Haptics from 'expo-haptics';
+import * as FileSystem from 'expo-file-system/legacy';
+import CandidateLayout from '../../../components/layouts/CandidateLayout';
 import { useAlert } from '../../../contexts/AlertContext';
-import LogoWhite from '../../../assets/images/logoWhite.svg';
-import BottomNavBar from '../../../components/BottomNavBar';
+import { useAppDispatch } from '../../../store/hooks';
+import { logout } from '../../../store/slices/authSlice';
+import { clearTokens } from '../../../utils/authUtils';
+import {
+  useGetMySubscriptionQuery,
+  useCheckSubscriptionStatusQuery,
+  useCancelSubscriptionMutation,
+  useReactivateSubscriptionMutation,
+  useExportMyDataMutation,
+  useDeleteAccountMutation,
+  useCreateSubscriptionSetupMutation,
+  useGetAvailablePlansQuery,
+} from '../../../services/api';
+import { processPayment } from '../../../services/stripePayment';
 
 interface SettingsScreenProps {
   activeTab?: string;
   onTabChange?: (tabId: string) => void;
   onBack?: () => void;
   onViewPricing?: () => void;
+  onViewBillingHistory?: () => void;
 }
 
-const BackIcon = () => (
-  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-    <Path d="M15 18l-6-6 6-6" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-  </Svg>
-);
-
+// Chevron Right Icon
 const ChevronRightIcon = () => (
   <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-    <Path d="M9 18l6-6-6-6" stroke="#9CA3AF" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    <Path
+      d="M9 18l6-6-6-6"
+      stroke="#9CA3AF"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
   </Svg>
 );
 
-const SettingItem = ({
-  icon,
-  title,
-  description,
-  onPress,
-  showSwitch = false,
-  switchValue = false,
-  onSwitchChange
-}: {
-  icon: React.ReactNode;
-  title: string;
-  description?: string;
-  onPress?: () => void;
-  showSwitch?: boolean;
-  switchValue?: boolean;
-  onSwitchChange?: (value: boolean) => void;
-}) => (
-  <TouchableOpacity
-    className="bg-white rounded-2xl p-4 mb-3 shadow-sm border border-gray-100 flex-row items-center"
-    onPress={onPress}
-    activeOpacity={showSwitch ? 1 : 0.7}
-    disabled={showSwitch}
-  >
-    <View className="bg-primary-blue/10 rounded-full p-3 mr-4">
-      {icon}
-    </View>
-    <View className="flex-1">
-      <Text className="text-gray-900 text-base font-semibold mb-1">{title}</Text>
-      {description && <Text className="text-gray-500 text-xs">{description}</Text>}
-    </View>
-    {showSwitch ? (
-      <Switch
-        value={switchValue}
-        onValueChange={onSwitchChange}
-        trackColor={{ false: '#D1D5DB', true: '#437EF4' }}
-        thumbColor="#FFFFFF"
-      />
-    ) : (
-      <ChevronRightIcon />
-    )}
-  </TouchableOpacity>
-);
+// Menu Item Component with animations
+interface MenuItemProps {
+  label: string;
+  onPress: () => void;
+  isLast?: boolean;
+}
+
+const MenuItem: React.FC<MenuItemProps> = ({ label, onPress, isLast = false }) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.98,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
+  };
+
+  return (
+    <Pressable
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      onPress={() => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        onPress();
+      }}
+    >
+      <Animated.View
+        className={`flex-row items-center justify-between py-4 ${!isLast ? 'border-b border-gray-100' : ''}`}
+        style={{ transform: [{ scale: scaleAnim }] }}
+      >
+        <Text className="text-gray-600 text-base">{label}</Text>
+        <ChevronRightIcon />
+      </Animated.View>
+    </Pressable>
+  );
+};
 
 export default function SettingsScreen({
   activeTab = 'profile',
   onTabChange,
   onBack,
   onViewPricing,
+  onViewBillingHistory,
 }: SettingsScreenProps) {
-  const user = useSelector((state: RootState) => state.auth.user);
-  const [pushNotifications, setPushNotifications] = useState(true);
-  const [emailNotifications, setEmailNotifications] = useState(true);
-  const [jobAlerts, setJobAlerts] = useState(true);
-  const [biometricAuth, setBiometricAuth] = useState(false);
-  const [twoFactorAuth, setTwoFactorAuth] = useState(false);
+  const { showAlert } = useAlert();
+  const dispatch = useAppDispatch();
   const [actionLoading, setActionLoading] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelStep, setCancelStep] = useState<'choose' | 'confirm-period' | 'confirm-immediate'>('choose');
+  const cancelModalAnim = useRef(new Animated.Value(0)).current;
 
+  // Subscription queries and mutations
   const { data: subData, isLoading: subLoading, refetch: refetchSubscription } = useGetMySubscriptionQuery();
+  const { refetch: refetchSubscriptionStatus } = useCheckSubscriptionStatusQuery();
+  const { data: plansData } = useGetAvailablePlansQuery();
   const [cancelSub] = useCancelSubscriptionMutation();
   const [reactivateSub] = useReactivateSubscriptionMutation();
-  const [createPortal] = useCreatePortalSessionMutation();
-  const { showAlert } = useAlert();
+  const [createSubscriptionSetup] = useCreateSubscriptionSetupMutation();
+
+  // GDPR mutations
+  const [exportMyData] = useExportMyDataMutation();
+  const [deleteAccount] = useDeleteAccountMutation();
 
   const subscription = subData?.mySubscription;
 
+  // Helper to refresh all subscription data
+  const refreshSubscriptionData = async () => {
+    try {
+      await Promise.all([
+        refetchSubscription(),
+        refetchSubscriptionStatus(),
+      ]);
+    } catch (error) {
+      console.log('Error refreshing subscription data:', error);
+    }
+  };
+
+  // Animation values
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+
+  // Entrance animations
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 400,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+
+  // Subscription handlers
   const handleManagePayment = async () => {
     try {
       setActionLoading(true);
-      const result = await createPortal('cpdash://settings').unwrap();
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-      if (result.createPortalSession.success && result.createPortalSession.portalUrl) {
-        const canOpen = await Linking.canOpenURL(result.createPortalSession.portalUrl);
-        if (canOpen) {
-          await Linking.openURL(result.createPortalSession.portalUrl);
-        }
-      } else {
+      // Get the current plan's stripePriceId
+      const currentPlanKey = subscription?.plan?.toLowerCase();
+      const currentPlan = plansData?.availablePlans?.plans?.find(
+        (p) => p.planKey.toLowerCase() === currentPlanKey
+      );
+
+      if (!currentPlan?.stripePriceId) {
         showAlert({
           type: 'error',
           title: 'Error',
-          message: 'Failed to open payment portal',
+          message: 'Unable to find your current plan. Please contact support.',
+          buttons: [{ text: 'OK', style: 'default' }],
+        });
+        setActionLoading(false);
+        return;
+      }
+
+      // Create a SetupIntent to update payment method in-app
+      const result = await createSubscriptionSetup({
+        priceId: currentPlan.stripePriceId,
+      }).unwrap();
+
+      const setupData = result?.createSubscriptionSetup;
+
+      if (!setupData?.success || !setupData?.setupIntentClientSecret) {
+        showAlert({
+          type: 'error',
+          title: 'Error',
+          message: setupData?.message || 'Failed to initialize payment update. Please try again.',
+          buttons: [{ text: 'OK', style: 'default' }],
+        });
+        setActionLoading(false);
+        return;
+      }
+
+      // Process payment with PaymentSheet (in-app)
+      const paymentResult = await processPayment({
+        setupIntentClientSecret: setupData.setupIntentClientSecret,
+        ephemeralKey: setupData.ephemeralKey!,
+        customerId: setupData.customerId!,
+        publishableKey: setupData.publishableKey!,
+        merchantDisplayName: 'CP Dash AI',
+      });
+
+      if (paymentResult.success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        showAlert({
+          type: 'success',
+          title: 'Payment Method Updated',
+          message: 'Your payment method has been successfully updated.',
+          buttons: [{ text: 'OK', style: 'default' }],
+        });
+        // Refresh subscription data
+        refreshSubscriptionData();
+      } else if (paymentResult.cancelled) {
+        // User cancelled - no action needed
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      } else {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        showAlert({
+          type: 'error',
+          title: 'Update Failed',
+          message: paymentResult.error || 'Could not update payment method. Please try again.',
           buttons: [{ text: 'OK', style: 'default' }],
         });
       }
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Manage payment error:', error);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       showAlert({
         type: 'error',
         title: 'Error',
-        message: 'Failed to open payment portal',
+        message: error?.data?.createSubscriptionSetup?.message || 'An error occurred. Please try again.',
         buttons: [{ text: 'OK', style: 'default' }],
       });
     } finally {
@@ -124,70 +240,336 @@ export default function SettingsScreen({
     }
   };
 
-  const handleCancelSubscription = async () => {
-    showAlert({
-      type: 'warning',
-      title: 'Cancel Subscription',
-      message: 'Are you sure you want to cancel your subscription? Your access will continue until the end of the billing period.',
-      buttons: [
-        { text: 'No', style: 'cancel' },
-        {
-          text: 'Yes, Cancel',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setActionLoading(true);
-              const result = await cancelSub({
-                cancelAtPeriodEnd: true,
-                reason: 'User requested cancellation',
-              }).unwrap();
+  // Handler for viewing billing history
+  const handleViewBillingHistory = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onViewBillingHistory?.();
+  };
 
-              if (result.cancelSubscription.success) {
-                showAlert({
-                  type: 'success',
-                  title: 'Success',
-                  message: 'Subscription will be canceled at the end of the billing period',
-                  buttons: [{ text: 'OK', style: 'default' }],
-                });
-                refetchSubscription();
-              } else {
-                showAlert({
-                  type: 'error',
-                  title: 'Error',
-                  message: result.cancelSubscription.message || 'Failed to cancel subscription',
-                  buttons: [{ text: 'OK', style: 'default' }],
-                });
-              }
-            } catch (error) {
-              showAlert({
-                type: 'error',
-                title: 'Error',
-                message: 'Failed to cancel subscription',
-                buttons: [{ text: 'OK', style: 'default' }],
-              });
-            } finally {
-              setActionLoading(false);
-            }
-          },
-        },
-      ],
+  // Open cancel modal
+  const openCancelModal = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    setCancelStep('choose');
+    setShowCancelModal(true);
+    Animated.spring(cancelModalAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      tension: 65,
+      friction: 10,
+    }).start();
+  };
+
+  // Close cancel modal
+  const closeCancelModal = () => {
+    Animated.timing(cancelModalAnim, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => {
+      setShowCancelModal(false);
+      setCancelStep('choose');
     });
+  };
+
+  // Process the actual cancellation
+  const processCancellation = async (cancelAtPeriodEnd: boolean) => {
+    try {
+      setActionLoading(true);
+      const result = await cancelSub({
+        cancelAtPeriodEnd,
+        reason: cancelAtPeriodEnd ? 'User requested cancellation' : 'User requested immediate cancellation',
+      }).unwrap();
+
+      closeCancelModal();
+
+      if (result.cancelSubscription.success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        const accessEndsAt = result.cancelSubscription.accessEndsAt
+          ? new Date(result.cancelSubscription.accessEndsAt).toLocaleDateString()
+          : null;
+
+        if (cancelAtPeriodEnd && accessEndsAt) {
+          showAlert({
+            type: 'success',
+            title: 'Subscription Canceled',
+            message: `Your subscription will end on ${accessEndsAt}. You'll keep access until then.`,
+            buttons: [{ text: 'OK', style: 'default' }],
+          });
+        } else {
+          showAlert({
+            type: 'success',
+            title: 'Subscription Canceled',
+            message: 'Your subscription has been canceled. Access has been removed.',
+            buttons: [{ text: 'OK', style: 'default' }],
+          });
+        }
+        refreshSubscriptionData();
+      } else {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        showAlert({
+          type: 'error',
+          title: 'Error',
+          message: result.cancelSubscription.message || 'Failed to cancel subscription',
+          buttons: [{ text: 'OK', style: 'default' }],
+        });
+      }
+    } catch {
+      closeCancelModal();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      showAlert({
+        type: 'error',
+        title: 'Error',
+        message: 'Failed to cancel subscription',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleCancelSubscription = () => {
+    openCancelModal();
+  };
+
+  // Get formatted period end date
+  const periodEndDate = subscription?.currentPeriodEnd
+    ? new Date(subscription.currentPeriodEnd).toLocaleDateString('en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+      })
+    : null;
+
+  // Cancel Modal Content
+  const renderCancelModalContent = () => {
+    if (cancelStep === 'choose') {
+      return (
+        <>
+          {/* Header */}
+          <View style={cancelModalStyles.header}>
+            <View style={cancelModalStyles.iconContainer}>
+              <Svg width={32} height={32} viewBox="0 0 24 24" fill="none">
+                <Circle cx="12" cy="12" r="10" stroke="#F59E0B" strokeWidth={2} />
+                <Path d="M12 8v4M12 16h.01" stroke="#F59E0B" strokeWidth={2} strokeLinecap="round" />
+              </Svg>
+            </View>
+            <Text style={cancelModalStyles.title}>Cancel Subscription</Text>
+            <Text style={cancelModalStyles.subtitle}>Choose how you'd like to cancel</Text>
+          </View>
+
+          {/* Options */}
+          <View style={cancelModalStyles.optionsContainer}>
+            {/* Keep Access Option (Recommended) */}
+            <TouchableOpacity
+              style={[cancelModalStyles.optionCard, cancelModalStyles.recommendedOption]}
+              activeOpacity={0.7}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setCancelStep('confirm-period');
+              }}
+            >
+              <View style={cancelModalStyles.recommendedBadge}>
+                <Text style={cancelModalStyles.recommendedText}>RECOMMENDED</Text>
+              </View>
+              <View style={cancelModalStyles.optionIconContainer}>
+                <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+                  <Path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" stroke="#059669" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                </Svg>
+              </View>
+              <Text style={cancelModalStyles.optionTitle}>Keep Access Until Period End</Text>
+              <Text style={cancelModalStyles.optionDescription}>
+                {periodEndDate
+                  ? `Continue using all features until ${periodEndDate}`
+                  : 'Continue using all features until your billing period ends'}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Cancel Immediately Option */}
+            <TouchableOpacity
+              style={[cancelModalStyles.optionCard, cancelModalStyles.immediateOption]}
+              activeOpacity={0.7}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                setCancelStep('confirm-immediate');
+              }}
+            >
+              <View style={cancelModalStyles.optionIconContainer}>
+                <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+                  <Path d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" stroke="#DC2626" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                </Svg>
+              </View>
+              <Text style={[cancelModalStyles.optionTitle, { color: '#DC2626' }]}>Cancel Immediately</Text>
+              <Text style={cancelModalStyles.optionDescription}>
+                Lose access right away. No refund will be provided.
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Keep Subscription Button */}
+          <TouchableOpacity
+            style={cancelModalStyles.keepButton}
+            activeOpacity={0.7}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              closeCancelModal();
+            }}
+          >
+            <Text style={cancelModalStyles.keepButtonText}>Keep My Subscription</Text>
+          </TouchableOpacity>
+        </>
+      );
+    }
+
+    if (cancelStep === 'confirm-period') {
+      return (
+        <>
+          <View style={cancelModalStyles.header}>
+            <View style={[cancelModalStyles.iconContainer, { backgroundColor: '#ECFDF5' }]}>
+              <Svg width={32} height={32} viewBox="0 0 24 24" fill="none">
+                <Path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" stroke="#059669" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+              </Svg>
+            </View>
+            <Text style={cancelModalStyles.title}>Confirm Cancellation</Text>
+            <Text style={cancelModalStyles.subtitle}>
+              {periodEndDate
+                ? `You'll keep access until ${periodEndDate}`
+                : "You'll keep access until your billing period ends"}
+            </Text>
+          </View>
+
+          <View style={cancelModalStyles.confirmInfo}>
+            <View style={cancelModalStyles.infoRow}>
+              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+                <Path d="M5 13l4 4L19 7" stroke="#059669" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+              </Svg>
+              <Text style={cancelModalStyles.infoText}>All features remain available</Text>
+            </View>
+            <View style={cancelModalStyles.infoRow}>
+              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+                <Path d="M5 13l4 4L19 7" stroke="#059669" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+              </Svg>
+              <Text style={cancelModalStyles.infoText}>No charges after cancellation</Text>
+            </View>
+            <View style={cancelModalStyles.infoRow}>
+              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+                <Path d="M5 13l4 4L19 7" stroke="#059669" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+              </Svg>
+              <Text style={cancelModalStyles.infoText}>Can reactivate anytime</Text>
+            </View>
+          </View>
+
+          <View style={cancelModalStyles.buttonGroup}>
+            <TouchableOpacity
+              style={cancelModalStyles.backButton}
+              activeOpacity={0.7}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setCancelStep('choose');
+              }}
+            >
+              <Text style={cancelModalStyles.backButtonText}>Go Back</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[cancelModalStyles.confirmButton, actionLoading && { opacity: 0.7 }]}
+              activeOpacity={0.7}
+              disabled={actionLoading}
+              onPress={() => processCancellation(true)}
+            >
+              {actionLoading ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <Text style={cancelModalStyles.confirmButtonText}>Confirm Cancellation</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </>
+      );
+    }
+
+    if (cancelStep === 'confirm-immediate') {
+      return (
+        <>
+          <View style={cancelModalStyles.header}>
+            <View style={[cancelModalStyles.iconContainer, { backgroundColor: '#FEF2F2' }]}>
+              <Svg width={32} height={32} viewBox="0 0 24 24" fill="none">
+                <Path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" stroke="#DC2626" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+              </Svg>
+            </View>
+            <Text style={cancelModalStyles.title}>Cancel Immediately?</Text>
+            <Text style={[cancelModalStyles.subtitle, { color: '#DC2626' }]}>
+              This action cannot be undone
+            </Text>
+          </View>
+
+          <View style={[cancelModalStyles.confirmInfo, { backgroundColor: '#FEF2F2', borderColor: '#FECACA' }]}>
+            <View style={cancelModalStyles.infoRow}>
+              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+                <Path d="M6 18L18 6M6 6l12 12" stroke="#DC2626" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+              </Svg>
+              <Text style={[cancelModalStyles.infoText, { color: '#991B1B' }]}>Access removed immediately</Text>
+            </View>
+            <View style={cancelModalStyles.infoRow}>
+              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+                <Path d="M6 18L18 6M6 6l12 12" stroke="#DC2626" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+              </Svg>
+              <Text style={[cancelModalStyles.infoText, { color: '#991B1B' }]}>No refund for unused time</Text>
+            </View>
+            <View style={cancelModalStyles.infoRow}>
+              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+                <Path d="M6 18L18 6M6 6l12 12" stroke="#DC2626" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+              </Svg>
+              <Text style={[cancelModalStyles.infoText, { color: '#991B1B' }]}>Premium features disabled</Text>
+            </View>
+          </View>
+
+          <View style={cancelModalStyles.buttonGroup}>
+            <TouchableOpacity
+              style={cancelModalStyles.backButton}
+              activeOpacity={0.7}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setCancelStep('choose');
+              }}
+            >
+              <Text style={cancelModalStyles.backButtonText}>Go Back</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[cancelModalStyles.dangerButton, actionLoading && { opacity: 0.7 }]}
+              activeOpacity={0.7}
+              disabled={actionLoading}
+              onPress={() => processCancellation(false)}
+            >
+              {actionLoading ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <Text style={cancelModalStyles.confirmButtonText}>Cancel Now</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </>
+      );
+    }
+
+    return null;
   };
 
   const handleReactivate = async () => {
     try {
       setActionLoading(true);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       const result = await reactivateSub().unwrap();
 
       if (result.reactivateSubscription.success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         showAlert({
           type: 'success',
           title: 'Success',
           message: 'Subscription reactivated successfully',
           buttons: [{ text: 'OK', style: 'default' }],
         });
-        refetchSubscription();
+        refreshSubscriptionData();
       } else {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         showAlert({
           type: 'error',
           title: 'Error',
@@ -195,7 +577,8 @@ export default function SettingsScreen({
           buttons: [{ text: 'OK', style: 'default' }],
         });
       }
-    } catch (error) {
+    } catch {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       showAlert({
         type: 'error',
         title: 'Error',
@@ -207,382 +590,754 @@ export default function SettingsScreen({
     }
   };
 
+  // Handle menu item presses
+  const handleChangePassword = () => {
+    showAlert({
+      type: 'info',
+      title: 'Change Password',
+      message: 'Password change functionality will be available in Milestone 3.',
+      buttons: [{ text: 'OK', style: 'default' }],
+    });
+  };
+
+  const handleTwoFactor = () => {
+    showAlert({
+      type: 'info',
+      title: 'Two-Factor Authentication',
+      message: 'Two-factor authentication setup will be available in Milestone 3.',
+      buttons: [{ text: 'OK', style: 'default' }],
+    });
+  };
+
+  const handleActiveSessions = () => {
+    showAlert({
+      type: 'info',
+      title: 'Active Sessions',
+      message: 'View and manage your active sessions. Available in Milestone 3.',
+      buttons: [{ text: 'OK', style: 'default' }],
+    });
+  };
+
+  const handleProfileUpdate = () => {
+    showAlert({
+      type: 'info',
+      title: 'Profile Update',
+      message: 'Profile update settings will be available in Milestone 3.',
+      buttons: [{ text: 'OK', style: 'default' }],
+    });
+  };
+
+  const handleTerms = () => {
+    showAlert({
+      type: 'info',
+      title: 'Terms & Conditions',
+      message: 'Terms and conditions will be displayed here.',
+      buttons: [{ text: 'OK', style: 'default' }],
+    });
+  };
+
+  const handlePrivacyPolicy = () => {
+    showAlert({
+      type: 'info',
+      title: 'Privacy Policy',
+      message: 'Privacy policy will be displayed here.',
+      buttons: [{ text: 'OK', style: 'default' }],
+    });
+  };
+
+  const handleVersion = () => {
+    showAlert({
+      type: 'info',
+      title: 'Version Info',
+      message: 'CPDashAI Version 1.0.0\nBuild: 2024.12.30',
+      buttons: [{ text: 'OK', style: 'default' }],
+    });
+  };
+
+  const handleReviewConsent = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    showAlert({
+      type: 'info',
+      title: 'Manage Consent',
+      message: 'Review and manage your data consent preferences. Available in Milestone 3.',
+      buttons: [{ text: 'OK', style: 'default' }],
+    });
+  };
+
+  // Handle data export (GDPR - Data Portability)
+  const handleExportData = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    showAlert({
+      type: 'info',
+      title: 'Export Your Data',
+      message: 'This will download all your personal data stored in CPDashAI. The export includes your profile, applications, interviews, and more.',
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Export',
+          style: 'default',
+          onPress: async () => {
+            try {
+              setExportLoading(true);
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+              const result = await exportMyData().unwrap();
+
+              if (result.exportMyData.__typename === 'DataExportSuccessType' && result.exportMyData.success) {
+                const exportData = result.exportMyData.exportData;
+                const fileName = `cpdash-data-export-${new Date().toISOString().split('T')[0]}.json`;
+
+                // Format JSON with indentation
+                const formattedData = JSON.stringify(JSON.parse(exportData), null, 2);
+
+                // Save to file system
+                const fileUri = `${FileSystem.documentDirectory}${fileName}`;
+                await FileSystem.writeAsStringAsync(fileUri, formattedData);
+
+                // Use native Share API to share/save the data
+                try {
+                  await Share.share({
+                    message: formattedData,
+                    title: 'CPDashAI Data Export',
+                  });
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                } catch (shareError) {
+                  // If share fails, show success message with file location
+                  showAlert({
+                    type: 'success',
+                    title: 'Export Complete',
+                    message: `Your data has been saved to: ${fileUri}`,
+                    buttons: [{ text: 'OK', style: 'default' }],
+                  });
+                }
+              } else {
+                const errorMessage = result.exportMyData.__typename === 'ErrorType'
+                  ? result.exportMyData.message
+                  : 'Failed to export data';
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                showAlert({
+                  type: 'error',
+                  title: 'Export Failed',
+                  message: errorMessage,
+                  buttons: [{ text: 'OK', style: 'default' }],
+                });
+              }
+            } catch (error) {
+              console.error('Export error:', error);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+              showAlert({
+                type: 'error',
+                title: 'Export Failed',
+                message: 'An error occurred while exporting your data. Please try again.',
+                buttons: [{ text: 'OK', style: 'default' }],
+              });
+            } finally {
+              setExportLoading(false);
+            }
+          },
+        },
+      ],
+    });
+  };
+
+  // State to track delete confirmation step
+  const [deleteStep, setDeleteStep] = useState<'idle' | 'confirming' | 'deleting'>('idle');
+
+  // Handle account deletion (GDPR - Right to be Forgotten)
+  const handleDeleteAccount = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    setDeleteStep('confirming');
+
+    // Single confirmation with clear consent message
+    showAlert({
+      type: 'warning',
+      title: 'Delete Account Permanently?',
+      message: 'This action cannot be undone. All your data will be permanently removed:\n\n• Profile and resume\n• Job applications\n• Interview sessions\n• Saved jobs and matches\n• Subscription data\n\nBy clicking "Delete Forever", you consent to permanent deletion.',
+      buttons: [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+          onPress: () => {
+            setDeleteStep('idle');
+          }
+        },
+        {
+          text: 'Delete Forever',
+          style: 'destructive',
+          onPress: () => {
+            setDeleteStep('deleting');
+            // Use setTimeout to ensure alert closes before mutation runs
+            setTimeout(() => {
+              executeAccountDeletion();
+            }, 100);
+          },
+        },
+      ],
+    });
+  };
+
+  const executeAccountDeletion = async () => {
+    try {
+      setDeleteLoading(true);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+
+      const result = await deleteAccount().unwrap();
+
+      if (result.deleteAccount.__typename === 'SuccessType' && result.deleteAccount.success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+        // Clear auth immediately
+        await clearTokens();
+        dispatch(logout());
+
+        showAlert({
+          type: 'success',
+          title: 'Account Deleted',
+          message: result.deleteAccount.message || 'Your account has been successfully deleted. We\'re sorry to see you go.',
+          buttons: [{ text: 'OK', style: 'default' }],
+        });
+      } else {
+        const errorMessage = result.deleteAccount.__typename === 'ErrorType'
+          ? result.deleteAccount.message
+          : 'Failed to delete account';
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        showAlert({
+          type: 'error',
+          title: 'Deletion Failed',
+          message: errorMessage,
+          buttons: [{ text: 'OK', style: 'default' }],
+        });
+      }
+    } catch (error: any) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      showAlert({
+        type: 'error',
+        title: 'Deletion Failed',
+        message: error?.data?.message || error?.message || 'An error occurred while deleting your account. Please try again or contact support.',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
+    } finally {
+      setDeleteLoading(false);
+      setDeleteStep('idle');
+    }
+  };
+
   return (
-    <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {/* Header */}
-      <LinearGradient
-        colors={['#437EF4', '#437EF4']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        className="px-6 py-4"
+    <CandidateLayout
+      activeTab={activeTab}
+      onTabChange={onTabChange}
+      showBackButton={true}
+      onBack={onBack}
+      headerTitle="Settings & Privacy"
+      showSearch={false}
+    >
+      <ScrollView
+        className="flex-1 bg-gray-50"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 140 }}
       >
-        <View className="flex-row items-center justify-between">
-          <TouchableOpacity onPress={onBack} className="p-2 -ml-2">
-            <BackIcon />
-          </TouchableOpacity>
-          <LogoWhite width={39} height={33} />
-          <View className="flex-1 mx-4">
-            <Text className="text-white text-xl font-bold">Settings</Text>
-          </View>
-        </View>
-      </LinearGradient>
-
-      {/* Content */}
-      <ScrollView className="flex-1 px-6 pt-6" showsVerticalScrollIndicator={false}>
-        {/* Account Settings Section */}
-        <View className="mb-6">
-          <Text className="text-gray-900 text-lg font-bold mb-4">Account Settings</Text>
-
-          <SettingItem
-            icon={
-              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-                <Circle cx="12" cy="8" r="4" stroke="#437EF4" strokeWidth={2} />
-                <Path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" stroke="#437EF4" strokeWidth={2} strokeLinecap="round" />
-              </Svg>
-            }
-            title="Edit Profile"
-            description="Update your personal information"
-            onPress={() => console.log('Edit Profile')}
-          />
-
-          <SettingItem
-            icon={
-              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-                <Path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="#437EF4" strokeWidth={2} fill="none" />
-                <Path d="m22 6-10 7L2 6" stroke="#437EF4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-              </Svg>
-            }
-            title="Email"
-            description={user?.email || 'Not set'}
-            onPress={() => console.log('Change Email')}
-          />
-
-          <SettingItem
-            icon={
-              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-                <Path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" stroke="#437EF4" strokeWidth={2} fill="none" />
-              </Svg>
-            }
-            title="Phone Number"
-            description={user?.phoneNumber || 'Not set'}
-            onPress={() => console.log('Change Phone')}
-          />
-
-          <SettingItem
-            icon={
-              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-                <Path d="M12 15v5M7 10h10M7 10a5 5 0 0 1 5-5m-5 5a5 5 0 0 0 5 5m5-5a5 5 0 0 0-5-5m5 5a5 5 0 0 1-5 5m0-10V1m0 14v5" stroke="#437EF4" strokeWidth={2} strokeLinecap="round" />
-              </Svg>
-            }
-            title="Change Password"
-            description="Update your password"
-            onPress={() => console.log('Change Password')}
-          />
-        </View>
-
-        {/* Subscription Settings Section */}
-        <View className="mb-6">
-          <Text className="text-gray-900 text-lg font-bold mb-4">Subscription</Text>
-
-          {subLoading ? (
-            <View className="bg-gray-50 rounded-xl p-4">
-              <Text className="text-gray-500 text-center">Loading subscription details...</Text>
+        <Animated.View
+          style={{
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }],
+          }}
+        >
+          {/* Manage Consent Card */}
+          <View className="px-4 pt-6">
+            <View className="bg-white rounded-2xl p-5" style={styles.card}>
+              <Text className="text-gray-900 text-xl font-bold mb-2">Manage Consent</Text>
+              <Text className="text-gray-500 text-sm mb-5">
+                Review what data CPDashAI uses to personalize your experience.
+              </Text>
+              <Pressable
+                onPress={handleReviewConsent}
+                style={({ pressed }) => [{ opacity: pressed ? 0.9 : 1 }]}
+              >
+                <LinearGradient
+                  colors={['#4F7DF3', '#3B5FD4']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.consentButton}
+                >
+                  <Text className="text-white font-semibold text-base">Review Consent</Text>
+                </LinearGradient>
+              </Pressable>
             </View>
-          ) : subscription ? (
-            <>
-              <View className="bg-blue-50 rounded-xl p-4 mb-3 border border-blue-200">
-                <View className="flex-row justify-between items-center mb-2">
-                  <Text className="text-gray-700 text-sm font-semibold">Current Plan</Text>
-                  {subscription.isActive && (
-                    <View className="bg-green-500 rounded-full px-2 py-0.5">
-                      <Text className="text-white text-xs font-bold">ACTIVE</Text>
+          </View>
+
+          {/* Subscription Section */}
+          <View className="px-4 pt-6">
+            <Text className="text-gray-900 text-lg font-bold mb-3">Subscription</Text>
+            <View className="bg-white rounded-2xl px-4" style={styles.card}>
+              {subLoading ? (
+                <View className="py-6 items-center">
+                  <ActivityIndicator size="small" color="#4F7DF3" />
+                  <Text className="text-gray-500 text-sm mt-2">Loading...</Text>
+                </View>
+              ) : subscription && subscription.plan !== 'free' && subscription.isActive ? (
+                <>
+                  {/* Period End Cancellation Banner - Still Has Access */}
+                  {subscription.cancelAtPeriodEnd && subscription.isActive && (
+                    <View style={{
+                      backgroundColor: '#FEF3C7',
+                      borderWidth: 1,
+                      borderColor: '#FCD34D',
+                      borderRadius: 12,
+                      padding: 12,
+                      marginTop: 12,
+                      marginBottom: 4,
+                    }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+                        <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+                          <Path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" stroke="#D97706" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                        </Svg>
+                        <Text style={{ fontSize: 14, fontWeight: '700', color: '#92400E', marginLeft: 8 }}>
+                          Subscription Canceled
+                        </Text>
+                      </View>
+                      <Text style={{ fontSize: 13, color: '#92400E', lineHeight: 18 }}>
+                        Your subscription won't renew. You'll have access until{' '}
+                        <Text style={{ fontWeight: '600' }}>
+                          {new Date(subscription.currentPeriodEnd).toLocaleDateString('en-US', {
+                            month: 'long',
+                            day: 'numeric',
+                            year: 'numeric',
+                          })}
+                        </Text>
+                        .
+                      </Text>
                     </View>
                   )}
-                </View>
-                <Text className="text-blue-900 text-xl font-bold capitalize mb-2">
-                  {subscription.plan} Plan
-                </Text>
 
-                {/* AI Usage Stats */}
-                <View className="mt-3 pt-3 border-t border-blue-200">
-                  <View className="flex-row justify-between mb-2">
-                    <Text className="text-gray-600 text-xs">AI Resume Parses</Text>
-                    <Text className="text-gray-900 text-xs font-semibold">
-                      {subscription.aiResumeParsesUsed}/{subscription.aiResumeParsesLimit === -1 ? '∞' : subscription.aiResumeParsesLimit}
+                  {/* Current Plan Row */}
+                  <View className="flex-row items-center justify-between py-4 border-b border-gray-100">
+                    <Text className="text-gray-600 text-base">Current Plan</Text>
+                    <View className="flex-row items-center">
+                      <Text className="text-gray-900 text-base font-semibold capitalize mr-2">
+                        {subscription.plan}
+                      </Text>
+                      {!subscription.isActive ? (
+                        <View style={{ backgroundColor: '#FEF2F2', borderRadius: 4, paddingHorizontal: 8, paddingVertical: 2 }}>
+                          <Text style={{ color: '#DC2626', fontSize: 11, fontWeight: '700' }}>CANCELED</Text>
+                        </View>
+                      ) : subscription.cancelAtPeriodEnd ? (
+                        <View style={{ backgroundColor: '#FEF3C7', borderRadius: 4, paddingHorizontal: 8, paddingVertical: 2 }}>
+                          <Text style={{ color: '#D97706', fontSize: 11, fontWeight: '700' }}>CANCELING</Text>
+                        </View>
+                      ) : (
+                        <View className="bg-green-500 rounded px-2 py-0.5">
+                          <Text className="text-white text-xs font-bold">ACTIVE</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+
+                  {/* Next Billing / Access End Date - Only show if still active */}
+                  {subscription.isActive && (
+                    <View className="flex-row items-center justify-between py-4 border-b border-gray-100">
+                      <Text className="text-gray-600 text-base">
+                        {subscription.cancelAtPeriodEnd ? 'Access Until' : 'Next Billing'}
+                    </Text>
+                    <Text style={{
+                      fontSize: 14,
+                      fontWeight: '600',
+                      color: subscription.cancelAtPeriodEnd || subscription.status === 'canceled' ? '#D97706' : '#374151'
+                    }}>
+                      {new Date(subscription.currentPeriodEnd).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })}
                     </Text>
                   </View>
-                  <View className="flex-row justify-between">
-                    <Text className="text-gray-600 text-xs">AI Content Improvements</Text>
-                    <Text className="text-gray-900 text-xs font-semibold">
-                      {subscription.aiContentImprovementsUsed}/{subscription.aiContentImprovementsLimit === -1 ? '∞' : subscription.aiContentImprovementsLimit}
-                    </Text>
-                  </View>
-                </View>
+                  )}
 
-                {/* Billing Info */}
-                {subscription.plan !== 'free' && (
-                  <View className="mt-3 pt-3 border-t border-blue-200">
-                    {subscription.lastPaymentAmount && (
-                      <View className="flex-row justify-between mb-1">
-                        <Text className="text-gray-600 text-xs">Last Payment</Text>
-                        <Text className="text-gray-900 text-xs">
-                          ${(subscription.lastPaymentAmount / 100).toFixed(2)}
-                        </Text>
-                      </View>
-                    )}
-                    {subscription.currentPeriodEnd && (
-                      <View className="flex-row justify-between">
-                        <Text className="text-gray-600 text-xs">
-                          {subscription.status === 'canceled' ? 'Access Until' : 'Next Billing'}
-                        </Text>
-                        <Text className="text-gray-900 text-xs">
-                          {new Date(subscription.currentPeriodEnd).toLocaleDateString()}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                )}
+                  {/* Update Payment Method - only show if not canceled */}
+                  {!subscription.cancelAtPeriodEnd && subscription.status !== 'canceled' && (
+                    <Pressable
+                      onPress={handleManagePayment}
+                      disabled={actionLoading}
+                      className="flex-row items-center justify-between py-4 border-b border-gray-100"
+                      style={({ pressed }) => [{ opacity: pressed || actionLoading ? 0.7 : 1 }]}
+                    >
+                      <Text className="text-primary-blue text-base">
+                        {actionLoading ? 'Loading...' : 'Update Payment Method'}
+                      </Text>
+                      <ChevronRightIcon />
+                    </Pressable>
+                  )}
 
-                {/* Cancellation Notice */}
-                {subscription.status === 'canceled' && (
-                  <View className="mt-3 p-2 bg-yellow-50 rounded-lg border border-yellow-200">
-                    <Text className="text-yellow-800 text-xs text-center">
-                      Subscription canceled - Access continues until end of billing period
-                    </Text>
-                  </View>
-                )}
-              </View>
+                  {/* Billing History */}
+                  <TouchableOpacity
+                    onPress={handleViewBillingHistory}
+                    activeOpacity={0.7}
+                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' }}
+                  >
+                    <Text className="text-primary-blue text-base">Billing History</Text>
+                    <ChevronRightIcon />
+                  </TouchableOpacity>
 
-              {/* Action Buttons */}
-              {subscription.plan !== 'free' && (
-                <View className="gap-3">
-                  <SettingItem
-                    icon={
-                      <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-                        <Path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="#437EF4" strokeWidth={2} />
-                        <Path d="M12 11v6M8 11v6M16 11v6" stroke="#437EF4" strokeWidth={2} strokeLinecap="round" />
-                      </Svg>
-                    }
-                    title="Manage Payment Method"
-                    description="Update your billing information"
-                    onPress={handleManagePayment}
-                    loading={actionLoading}
-                  />
-
-                  {subscription.status === 'active' ? (
-                    <SettingItem
-                      icon={
-                        <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-                          <Circle cx="12" cy="12" r="10" stroke="#EF4444" strokeWidth={2} />
-                          <Path d="M15 9l-6 6M9 9l6 6" stroke="#EF4444" strokeWidth={2} strokeLinecap="round" />
-                        </Svg>
-                      }
-                      title="Cancel Subscription"
-                      description="Stop auto-renewal"
-                      onPress={handleCancelSubscription}
-                      loading={actionLoading}
-                    />
-                  ) : subscription.status === 'canceled' && (
-                    <SettingItem
-                      icon={
-                        <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-                          <Path d="M4 12a8 8 0 0 1 8-8V2.5M12 4a8 8 0 0 1 0 16v1.5M12 20a8 8 0 0 1-8-8h-1.5M4 12a8 8 0 0 0 8 8h1.5" stroke="#10B981" strokeWidth={2} strokeLinecap="round" />
-                        </Svg>
-                      }
-                      title="Reactivate Subscription"
-                      description="Resume your subscription"
+                  {/* Cancel or Reactivate */}
+                  {subscription.cancelAtPeriodEnd || subscription.status === 'canceled' ? (
+                    <Pressable
                       onPress={handleReactivate}
-                      loading={actionLoading}
-                    />
+                      disabled={actionLoading}
+                      className="py-4"
+                      style={({ pressed }) => [{ opacity: pressed || actionLoading ? 0.7 : 1 }]}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" style={{ marginRight: 8 }}>
+                          <Path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" stroke="#059669" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                        </Svg>
+                        <Text className="text-green-600 text-base font-medium">Reactivate Subscription</Text>
+                      </View>
+                    </Pressable>
+                  ) : (
+                    <Pressable
+                      onPress={handleCancelSubscription}
+                      disabled={actionLoading}
+                      className="py-4"
+                      style={({ pressed }) => [{ opacity: pressed || actionLoading ? 0.7 : 1 }]}
+                    >
+                      <Text className="text-red-500 text-base">Cancel Subscription</Text>
+                    </Pressable>
+                  )}
+                </>
+              ) : (
+                <>
+                  {/* Free Plan or Immediately Canceled */}
+                  <View className="flex-row items-center justify-between py-4 border-b border-gray-100">
+                    <Text className="text-gray-600 text-base">Current Plan</Text>
+                    <Text className="text-gray-900 text-base font-semibold">
+                      {subscription && !subscription.isActive ? 'None' : 'Free'}
+                    </Text>
+                  </View>
+                  <Pressable
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                      onViewPricing?.();
+                    }}
+                    className="py-4"
+                    style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+                  >
+                    <Text className="text-primary-blue text-base">
+                      {subscription && !subscription.isActive ? 'Subscribe Now' : 'Upgrade to Premium'}
+                    </Text>
+                  </Pressable>
+                </>
+              )}
+            </View>
+          </View>
+
+          {/* Security Section */}
+          <View className="px-4 pt-6">
+            <Text className="text-gray-500 text-base font-semibold mb-3">Security</Text>
+            <View className="bg-white rounded-2xl px-4" style={styles.card}>
+              <MenuItem
+                label="Change Password"
+                onPress={handleChangePassword}
+              />
+              <MenuItem
+                label="Two-Factor Authentication"
+                onPress={handleTwoFactor}
+              />
+              <MenuItem
+                label="Active Sessions"
+                onPress={handleActiveSessions}
+              />
+              <MenuItem
+                label="Profile Update"
+                onPress={handleProfileUpdate}
+                isLast={true}
+              />
+            </View>
+          </View>
+
+          {/* About CPDashAI Section */}
+          <View className="px-4 pt-6">
+            <Text className="text-gray-900 text-lg font-bold mb-3">About CPDashAI</Text>
+            <View className="bg-white rounded-2xl px-4" style={styles.card}>
+              <MenuItem
+                label="Terms & Conditions"
+                onPress={handleTerms}
+              />
+              <MenuItem
+                label="Privacy Policy"
+                onPress={handlePrivacyPolicy}
+              />
+              <MenuItem
+                label="Version 1.0.0"
+                onPress={handleVersion}
+                isLast={true}
+              />
+            </View>
+          </View>
+
+          {/* Data & Privacy Section (GDPR) */}
+          <View className="px-4 pt-6">
+            <Text className="text-gray-900 text-lg font-bold mb-3">Data & Privacy</Text>
+            <View className="bg-white rounded-2xl px-4" style={styles.card}>
+              {/* Export My Data */}
+              <Pressable
+                onPress={handleExportData}
+                disabled={exportLoading}
+                className="flex-row items-center justify-between py-4 border-b border-gray-100"
+                style={({ pressed }) => [{ opacity: pressed || exportLoading ? 0.7 : 1 }]}
+              >
+                <View className="flex-1">
+                  <Text className="text-gray-900 text-base">Export My Data</Text>
+                  <Text className="text-gray-500 text-xs mt-1">Download all your personal data</Text>
+                </View>
+                {exportLoading ? (
+                  <ActivityIndicator size="small" color="#4F7DF3" />
+                ) : (
+                  <ChevronRightIcon />
+                )}
+              </Pressable>
+
+              {/* Delete Account */}
+              <Pressable
+                onPress={handleDeleteAccount}
+                disabled={deleteLoading}
+                className="py-4"
+                style={({ pressed }) => [{ opacity: pressed || deleteLoading ? 0.7 : 1 }]}
+              >
+                <View className="flex-row items-center justify-between">
+                  <View className="flex-1">
+                    <Text className="text-red-500 text-base">Delete My Account</Text>
+                    <Text className="text-gray-500 text-xs mt-1">Permanently remove all your data</Text>
+                  </View>
+                  {deleteLoading && (
+                    <ActivityIndicator size="small" color="#EF4444" />
                   )}
                 </View>
-              )}
-            </>
-          ) : (
-            <>
-              <View className="bg-gray-50 rounded-xl p-4 mb-3 border border-gray-200">
-                <Text className="text-gray-700 text-sm font-semibold mb-1">Current Plan</Text>
-                <Text className="text-gray-900 text-xl font-bold mb-2">Free Plan</Text>
-                <Text className="text-gray-500 text-xs">Limited access to basic features</Text>
-              </View>
-
-              <TouchableOpacity
-                className="bg-primary-blue rounded-xl py-4 items-center"
-                activeOpacity={0.8}
-                onPress={onViewPricing}
-              >
-                <Text className="text-white text-base font-semibold">Upgrade to Premium</Text>
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
-
-        {/* Notification Settings Section */}
-        <View className="mb-6">
-          <Text className="text-gray-900 text-lg font-bold mb-4">Notifications</Text>
-
-          <SettingItem
-            icon={
-              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-                <Path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" stroke="#437EF4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-              </Svg>
-            }
-            title="Push Notifications"
-            description="Receive push notifications"
-            showSwitch
-            switchValue={pushNotifications}
-            onSwitchChange={setPushNotifications}
-          />
-
-          <SettingItem
-            icon={
-              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-                <Path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="#437EF4" strokeWidth={2} fill="none" />
-                <Path d="m22 6-10 7L2 6" stroke="#437EF4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-              </Svg>
-            }
-            title="Email Notifications"
-            description="Receive email updates"
-            showSwitch
-            switchValue={emailNotifications}
-            onSwitchChange={setEmailNotifications}
-          />
-
-          <SettingItem
-            icon={
-              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-                <Path d="M21 10h-5l-3 3-3-3H5M4 6h16v12H4z" stroke="#437EF4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-              </Svg>
-            }
-            title="Job Alerts"
-            description="Get notified about new jobs"
-            showSwitch
-            switchValue={jobAlerts}
-            onSwitchChange={setJobAlerts}
-          />
-        </View>
-
-        {/* Security Settings Section */}
-        <View className="mb-6">
-          <Text className="text-gray-900 text-lg font-bold mb-4">Security</Text>
-
-          <SettingItem
-            icon={
-              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-                <Path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" stroke="#437EF4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                <Path d="M9 12l2 2 4-4" stroke="#437EF4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-              </Svg>
-            }
-            title="Two-Factor Authentication"
-            description="Add an extra layer of security"
-            showSwitch
-            switchValue={twoFactorAuth}
-            onSwitchChange={setTwoFactorAuth}
-          />
-
-          <SettingItem
-            icon={
-              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-                <Circle cx="12" cy="12" r="3" stroke="#437EF4" strokeWidth={2} />
-                <Path d="M12 1v6m0 6v6M5.64 5.64l4.24 4.24m4.24 4.24l4.24 4.24M1 12h6m6 0h6M5.64 18.36l4.24-4.24m4.24-4.24l4.24-4.24" stroke="#437EF4" strokeWidth={2} strokeLinecap="round" />
-              </Svg>
-            }
-            title="Biometric Authentication"
-            description="Use fingerprint or face ID"
-            showSwitch
-            switchValue={biometricAuth}
-            onSwitchChange={setBiometricAuth}
-          />
-
-          <SettingItem
-            icon={
-              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-                <Path d="M19 11H5m14 0a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2m14 0V9a2 2 0 0 0-2-2M5 11V9a2 2 0 0 1 2-2m0 0V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2M7 7h10" stroke="#437EF4" strokeWidth={2} strokeLinecap="round" />
-              </Svg>
-            }
-            title="Privacy Settings"
-            description="Manage your privacy preferences"
-            onPress={() => console.log('Privacy Settings')}
-          />
-        </View>
-
-        {/* About Section */}
-        <View className="mb-6">
-          <Text className="text-gray-900 text-lg font-bold mb-4">About</Text>
-
-          <SettingItem
-            icon={
-              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-                <Circle cx="12" cy="12" r="10" stroke="#437EF4" strokeWidth={2} />
-                <Path d="M12 16v-4m0-4h.01" stroke="#437EF4" strokeWidth={2} strokeLinecap="round" />
-              </Svg>
-            }
-            title="Help & Support"
-            description="Get help and contact support"
-            onPress={() => console.log('Help & Support')}
-          />
-
-          <SettingItem
-            icon={
-              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-                <Path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="#437EF4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                <Path d="M14 2v6h6M16 13H8m8 4H8m2-8H8" stroke="#437EF4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-              </Svg>
-            }
-            title="Terms & Conditions"
-            description="Read our terms and conditions"
-            onPress={() => console.log('Terms & Conditions')}
-          />
-
-          <SettingItem
-            icon={
-              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-                <Path d="M12 15l-3-3h6l-3 3zM12 9l3 3H9l3-3z" fill="#437EF4" />
-                <Path d="M20 12h-2M6 12H4M12 6V4M12 20v-2" stroke="#437EF4" strokeWidth={2} strokeLinecap="round" />
-              </Svg>
-            }
-            title="Privacy Policy"
-            description="Learn how we protect your data"
-            onPress={() => console.log('Privacy Policy')}
-          />
-
-          <SettingItem
-            icon={
-              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-                <Circle cx="12" cy="12" r="10" stroke="#437EF4" strokeWidth={2} />
-                <Path d="M12 8v8m-4-4h8" stroke="#437EF4" strokeWidth={2} strokeLinecap="round" />
-              </Svg>
-            }
-            title="App Version"
-            description="Version 1.0.0"
-          />
-        </View>
-
-        {/* Danger Zone */}
-        <View className="mb-8">
-          <Text className="text-gray-900 text-lg font-bold mb-4">Danger Zone</Text>
-
-          <TouchableOpacity
-            className="bg-red-50 rounded-2xl p-4 border-2 border-red-200 flex-row items-center"
-            onPress={() => console.log('Delete Account')}
-            activeOpacity={0.7}
-          >
-            <View className="bg-red-500 rounded-full p-3 mr-4">
-              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-                <Path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-              </Svg>
+              </Pressable>
             </View>
-            <View className="flex-1">
-              <Text className="text-red-600 text-base font-semibold mb-1">Delete Account</Text>
-              <Text className="text-red-500 text-xs">Permanently delete your account and data</Text>
-            </View>
-            <ChevronRightIcon />
-          </TouchableOpacity>
-        </View>
+          </View>
+
+          {/* Spacing at bottom */}
+          <View className="h-8" />
+        </Animated.View>
       </ScrollView>
 
-      {/* Bottom Nav Bar */}
-      <BottomNavBar activeTab={activeTab} onTabPress={onTabChange} />
-    </SafeAreaView>
+      {/* Cancel Subscription Modal */}
+      <Modal
+        visible={showCancelModal}
+        transparent
+        animationType="none"
+        onRequestClose={closeCancelModal}
+      >
+        <Pressable
+          style={cancelModalStyles.overlay}
+          onPress={closeCancelModal}
+        >
+          <Animated.View
+            style={[
+              cancelModalStyles.modalContainer,
+              {
+                opacity: cancelModalAnim,
+                transform: [
+                  {
+                    scale: cancelModalAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.9, 1],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            <Pressable onPress={(e) => e.stopPropagation()}>
+              {renderCancelModalContent()}
+            </Pressable>
+          </Animated.View>
+        </Pressable>
+      </Modal>
+    </CandidateLayout>
   );
 }
+
+const styles = StyleSheet.create({
+  card: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  consentButton: {
+    height: 50,
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});
+
+const cancelModalStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContainer: {
+    backgroundColor: 'white',
+    borderRadius: 24,
+    width: '100%',
+    maxWidth: SCREEN_WIDTH - 40,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  iconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#FEF3C7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  subtitle: {
+    fontSize: 15,
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  optionsContainer: {
+    gap: 12,
+    marginBottom: 20,
+  },
+  optionCard: {
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 2,
+  },
+  recommendedOption: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#86EFAC',
+  },
+  immediateOption: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+  },
+  recommendedBadge: {
+    position: 'absolute',
+    top: -10,
+    right: 12,
+    backgroundColor: '#059669',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  recommendedText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: 'white',
+    letterSpacing: 0.5,
+  },
+  optionIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'white',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  optionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#059669',
+    marginBottom: 6,
+  },
+  optionDescription: {
+    fontSize: 13,
+    color: '#6B7280',
+    lineHeight: 18,
+  },
+  keepButton: {
+    backgroundColor: '#F3F4F6',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  keepButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  confirmInfo: {
+    backgroundColor: '#ECFDF5',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  infoText: {
+    fontSize: 14,
+    color: '#065F46',
+    marginLeft: 10,
+    flex: 1,
+  },
+  buttonGroup: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  backButton: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  backButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  confirmButton: {
+    flex: 1,
+    backgroundColor: '#059669',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  dangerButton: {
+    flex: 1,
+    backgroundColor: '#DC2626',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  confirmButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: 'white',
+  },
+});

@@ -1,7 +1,8 @@
 const { withAndroidManifest } = require('@expo/config-plugins');
 
 module.exports = ({ config }) => {
-  return withAndroidManifest(config, (modConfig) => {
+  // Apply Android manifest modification
+  const modifiedConfig = withAndroidManifest(config, (modConfig) => {
     const androidManifest = modConfig.modResults;
     const application = androidManifest.manifest.application[0];
 
@@ -10,4 +11,6 @@ module.exports = ({ config }) => {
 
     return modConfig;
   });
+
+  return modifiedConfig;
 };

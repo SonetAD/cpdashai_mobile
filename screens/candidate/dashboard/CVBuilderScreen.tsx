@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, TextInput, ActivityIndicator, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import LogoWhite from '../../../assets/images/logoWhite.svg';
-import BottomNavBar from '../../../components/BottomNavBar';
+import * as Haptics from 'expo-haptics';
+import CandidateLayout from '../../../components/layouts/CandidateLayout';
+import CandidateNavBar from '../../../components/CandidateNavBar';
 import KeyboardDismissWrapper from '../../../components/KeyboardDismissWrapper';
 import {
   useCreateResumeMutation,
@@ -511,46 +510,20 @@ export default function CVBuilderScreen({
   const isLoading = isCreating || isUpdating;
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {/* Header */}
-      <LinearGradient
-        colors={['#437EF4', '#437EF4']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        className="px-6 py-4"
-      >
-        <View className="flex-row items-center">
-          <LogoWhite width={39} height={33} />
-          <View className="flex-1 ml-4">
-            <Text className="text-white text-lg font-bold">
-              {resumeId ? 'Edit Resume' : 'Create Resume'}
-            </Text>
-            <Text className="text-white/90 text-xs mt-0.5">
-              {resumeId ? 'Update your resume' : 'Build your professional resume'}
-            </Text>
-          </View>
-        </View>
-      </LinearGradient>
-
-      {/* Back Navigation */}
-      <View className="bg-white px-6 py-4 flex-row items-center border-b border-gray-100">
-        <TouchableOpacity onPress={onBack} className="mr-4">
-          <Svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <Path
-              d="M15 18L9 12L15 6"
-              stroke="#1F2937"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </Svg>
-        </TouchableOpacity>
-        <Text className="text-gray-900 text-lg font-bold">Resume Builder</Text>
-      </View>
-
+    <CandidateLayout
+      showBackButton={true}
+      onBack={onBack}
+      headerTitle={resumeId ? 'Edit Resume' : 'Create Resume'}
+      headerSubtitle={resumeId ? 'Update your resume' : 'Build your professional resume'}
+    >
       {/* Content */}
       <KeyboardDismissWrapper>
-        <ScrollView className="flex-1 px-6" showsVerticalScrollIndicator={false}>
+        <ScrollView
+          className="flex-1 px-6"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 120 }}
+          onScrollBeginDrag={() => Haptics.selectionAsync()}
+        >
         {/* Personal Information */}
         <View className="mt-6 mb-6">
           <Text className="text-gray-900 text-lg font-bold mb-4">Personal Information</Text>
@@ -632,7 +605,10 @@ export default function CVBuilderScreen({
             {resumeId && (
               <TouchableOpacity
                 className="bg-primary-blue rounded-lg px-3 py-1"
-                onPress={handleGenerateSummary}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  handleGenerateSummary();
+                }}
                 disabled={isGeneratingSummary}
               >
                 {isGeneratingSummary ? (
@@ -658,7 +634,10 @@ export default function CVBuilderScreen({
           {resumeId && professionalSummary && (
             <TouchableOpacity
               className="bg-blue-50 rounded-lg px-3 py-2 mt-2"
-              onPress={() => handleImproveContent(professionalSummary, 'summary')}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                handleImproveContent(professionalSummary, 'summary');
+              }}
               disabled={isImproving}
             >
               <Text className="text-primary-blue text-xs font-medium text-center">
@@ -675,7 +654,10 @@ export default function CVBuilderScreen({
               <Text className="text-gray-900 text-lg font-bold mr-3">Work Experience</Text>
               <TouchableOpacity
                 className="flex-row items-center"
-                onPress={() => setHasExperience(!hasExperience)}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setHasExperience(!hasExperience);
+                }}
               >
                 <View className={`w-5 h-5 rounded border-2 mr-2 items-center justify-center ${hasExperience ? 'bg-primary-blue border-primary-blue' : 'border-gray-300'}`}>
                   {hasExperience && (
@@ -688,7 +670,10 @@ export default function CVBuilderScreen({
             {hasExperience && (
               <TouchableOpacity
                 className="bg-primary-blue rounded-lg px-3 py-1"
-                onPress={addExperience}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  addExperience();
+                }}
               >
                 <Text className="text-white text-xs font-semibold">+ Add</Text>
               </TouchableOpacity>
@@ -708,7 +693,10 @@ export default function CVBuilderScreen({
               <View className="flex-row items-center justify-between mb-3">
                 <Text className="text-gray-700 text-sm font-bold">Experience #{index + 1}</Text>
                 {experience.length > 1 && (
-                  <TouchableOpacity onPress={() => removeExperience(index)}>
+                  <TouchableOpacity onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    removeExperience(index);
+                  }}>
                     <Text className="text-red-500 text-xs font-medium">Remove</Text>
                   </TouchableOpacity>
                 )}
@@ -741,7 +729,10 @@ export default function CVBuilderScreen({
               <View className="flex-row gap-2 mb-2">
                 <TouchableOpacity
                   className="bg-gray-50 rounded-lg px-3 py-2 flex-1 border border-gray-200"
-                  onPress={() => showDatePickerModal('experience', index, 'start', exp.startDate)}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    showDatePickerModal('experience', index, 'start', exp.startDate);
+                  }}
                 >
                   <Text className={`text-sm ${exp.startDate ? 'text-gray-900' : 'text-gray-400'}`}>
                     {formatDateDisplay(exp.startDate)}
@@ -750,7 +741,12 @@ export default function CVBuilderScreen({
 
                 <TouchableOpacity
                   className={`bg-gray-50 rounded-lg px-3 py-2 flex-1 border border-gray-200 ${exp.current ? 'opacity-50' : ''}`}
-                  onPress={() => !exp.current && showDatePickerModal('experience', index, 'end', exp.endDate)}
+                  onPress={() => {
+                    if (!exp.current) {
+                      Haptics.selectionAsync();
+                      showDatePickerModal('experience', index, 'end', exp.endDate);
+                    }
+                  }}
                   disabled={exp.current}
                 >
                   <Text className={`text-sm ${exp.endDate ? 'text-gray-900' : 'text-gray-400'}`}>
@@ -761,7 +757,10 @@ export default function CVBuilderScreen({
 
               <TouchableOpacity
                 className="flex-row items-center mb-2"
-                onPress={() => updateExperienceField(index, 'current', !exp.current)}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  updateExperienceField(index, 'current', !exp.current);
+                }}
               >
                 <View className={`w-5 h-5 rounded border-2 mr-2 items-center justify-center ${exp.current ? 'bg-primary-blue border-primary-blue' : 'border-gray-300'}`}>
                   {exp.current && (
@@ -794,7 +793,10 @@ export default function CVBuilderScreen({
             {hasEducation && (
               <TouchableOpacity
                 className="bg-primary-blue rounded-lg px-3 py-1"
-                onPress={addEducation}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  addEducation();
+                }}
               >
                 <Text className="text-white text-xs font-semibold">+ Add</Text>
               </TouchableOpacity>
@@ -814,7 +816,10 @@ export default function CVBuilderScreen({
               <View className="flex-row items-center justify-between mb-3">
                 <Text className="text-gray-700 text-sm font-bold">Education #{index + 1}</Text>
                 {education.length > 1 && (
-                  <TouchableOpacity onPress={() => removeEducation(index)}>
+                  <TouchableOpacity onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    removeEducation(index);
+                  }}>
                     <Text className="text-red-500 text-xs font-medium">Remove</Text>
                   </TouchableOpacity>
                 )}
@@ -847,7 +852,10 @@ export default function CVBuilderScreen({
               <View className="flex-row gap-2 mb-2">
                 <TouchableOpacity
                   className="bg-gray-50 rounded-lg px-3 py-2 flex-1 border border-gray-200"
-                  onPress={() => showDatePickerModal('education', index, 'start', edu.startDate)}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    showDatePickerModal('education', index, 'start', edu.startDate);
+                  }}
                 >
                   <Text className={`text-sm ${edu.startDate ? 'text-gray-900' : 'text-gray-400'}`}>
                     {formatDateDisplay(edu.startDate)}
@@ -856,7 +864,10 @@ export default function CVBuilderScreen({
 
                 <TouchableOpacity
                   className="bg-gray-50 rounded-lg px-3 py-2 flex-1 border border-gray-200"
-                  onPress={() => showDatePickerModal('education', index, 'end', edu.endDate)}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    showDatePickerModal('education', index, 'end', edu.endDate);
+                  }}
                 >
                   <Text className={`text-sm ${edu.endDate ? 'text-gray-900' : 'text-gray-400'}`}>
                     {formatDateDisplay(edu.endDate)}
@@ -890,7 +901,10 @@ export default function CVBuilderScreen({
         <View className="flex-row gap-3 mb-8">
           <TouchableOpacity
             className="bg-gray-200 rounded-xl py-4 flex-1 items-center"
-            onPress={onBack}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              onBack?.();
+            }}
             disabled={isLoading}
           >
             <Text className="text-gray-700 text-sm font-semibold">Cancel</Text>
@@ -898,7 +912,10 @@ export default function CVBuilderScreen({
 
           <TouchableOpacity
             className="bg-primary-blue rounded-xl py-4 flex-1 items-center"
-            onPress={handleSave}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              handleSave();
+            }}
             disabled={isLoading}
           >
             {isLoading ? (
@@ -919,13 +936,19 @@ export default function CVBuilderScreen({
           {Platform.OS === 'ios' && (
             <View className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-200 pb-8">
               <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-200">
-                <TouchableOpacity onPress={closeDatePicker}>
+                <TouchableOpacity onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  closeDatePicker();
+                }}>
                   <Text className="text-primary-blue text-base font-medium">Cancel</Text>
                 </TouchableOpacity>
                 <Text className="text-gray-900 text-base font-semibold">
                   Select {datePicker.mode === 'start' ? 'Start' : 'End'} Date
                 </Text>
-                <TouchableOpacity onPress={closeDatePicker}>
+                <TouchableOpacity onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  closeDatePicker();
+                }}>
                   <Text className="text-primary-blue text-base font-semibold">Done</Text>
                 </TouchableOpacity>
               </View>
@@ -949,7 +972,7 @@ export default function CVBuilderScreen({
       )}
 
       {/* Bottom Nav Bar */}
-      <BottomNavBar activeTab={activeTab} onTabPress={onTabChange} />
-    </SafeAreaView>
+      <CandidateNavBar activeTab={activeTab} onTabPress={onTabChange} />
+    </CandidateLayout>
   );
 }

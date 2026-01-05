@@ -1,10 +1,9 @@
 import React from 'react';
 import {
-  TouchableWithoutFeedback,
-  Keyboard,
   KeyboardAvoidingView,
   Platform,
-  ViewStyle
+  ViewStyle,
+  View,
 } from 'react-native';
 
 interface KeyboardDismissWrapperProps {
@@ -14,32 +13,30 @@ interface KeyboardDismissWrapperProps {
 }
 
 /**
- * Wrapper component that dismisses keyboard when tapping outside of text inputs
- * Optionally includes KeyboardAvoidingView for iOS
+ * Wrapper component for keyboard avoidance
+ * Note: Keyboard dismissal is handled by ScrollView's keyboardDismissMode="on-drag"
+ * and keyboardShouldPersistTaps="handled" props for better scroll compatibility
  */
 export const KeyboardDismissWrapper: React.FC<KeyboardDismissWrapperProps> = ({
   children,
   style,
   avoidKeyboard = true
 }) => {
-  const content = (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-      {children}
-    </TouchableWithoutFeedback>
-  );
-
-  if (avoidKeyboard && Platform.OS === 'ios') {
+  if (avoidKeyboard) {
     return (
       <KeyboardAvoidingView
-        behavior="padding"
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={[{ flex: 1 }, style]}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        {content}
+        <View style={{ flex: 1 }}>
+          {children}
+        </View>
       </KeyboardAvoidingView>
     );
   }
 
-  return content;
+  return <View style={{ flex: 1 }}>{children}</View>;
 };
 
 export default KeyboardDismissWrapper;

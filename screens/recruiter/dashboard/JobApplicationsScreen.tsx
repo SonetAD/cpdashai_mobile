@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
+import * as Haptics from 'expo-haptics';
 import {
   useGetJobApplicationsQuery,
   useGetJobPostingQuery,
@@ -53,8 +54,8 @@ interface ApplicationCardProps {
 
 const ApplicationCard: React.FC<ApplicationCardProps> = ({ application, onPress }) => {
 
-  const matchPercentage = application.jobMatch?.matchPercentage 
-    ? Math.round(parseFloat(application.jobMatch.matchPercentage)) 
+  const matchPercentage = application.jobMatch?.matchPercentage
+    ? Math.round(parseFloat(application.jobMatch.matchPercentage))
     : 0;
 
   const candidateName = [
@@ -62,9 +63,14 @@ const ApplicationCard: React.FC<ApplicationCardProps> = ({ application, onPress 
     application.candidate?.user?.lastName?.trim()
   ].filter(Boolean).join(' ') || 'Candidate';
 
+  const handlePress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onPress(application.id);
+  };
+
   return (
     <TouchableOpacity
-      onPress={() => onPress(application.id)}
+      onPress={handlePress}
       className="bg-white rounded-2xl p-5 mb-4 shadow-sm"
       activeOpacity={0.7}
     >
@@ -138,13 +144,16 @@ export default function JobApplicationsScreen({ jobId, onBack, activeTab = 'dash
   const [showInterviewModal, setShowInterviewModal] = useState(false);
   const [showCalendarCheck, setShowCalendarCheck] = useState(false);
   const [interviewType, setInterviewType] = useState<'in_person' | 'phone' | 'video_call'>('video_call');
-  const [videoCallLink, setVideoCallLink] = useState('');
   const [location, setLocation] = useState('');
   const [duration, setDuration] = useState(60);
   const [interviewSlots, setInterviewSlots] = useState<Array<{ startTime: Date; endTime: Date }>>([]);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [currentSlotIndex, setCurrentSlotIndex] = useState<number | null>(null);
-  const [datePickerMode, setDatePickerMode] = useState<'date' | 'time'>('date');
+  const [tempDateTime, setTempDateTime] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [selectedHour, setSelectedHour] = useState(10);
+  const [selectedMinute, setSelectedMinute] = useState(0);
+  const [isAM, setIsAM] = useState(true);
   
   const { showAlert } = useAlert();
 
@@ -179,8 +188,22 @@ export default function JobApplicationsScreen({ jobId, onBack, activeTab = 'dash
     }
   };
 
+  const handleBack = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (onBack) {
+      onBack();
+    }
+  };
+
+  const handleFilterChange = (value: string | undefined) => {
+    Haptics.selectionAsync();
+    setStatusFilter(value);
+  };
+
   const handleShortlist = async () => {
     if (!selectedApplication) return;
+
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
       const result = await shortlistApplication({
@@ -242,6 +265,8 @@ export default function JobApplicationsScreen({ jobId, onBack, activeTab = 'dash
 
   const handleReject = async () => {
     if (!selectedApplication) return;
+
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
 
     try {
       const result = await rejectApplication({
@@ -333,7 +358,7 @@ export default function JobApplicationsScreen({ jobId, onBack, activeTab = 'dash
       {/* Back Button */}
       {onBack && (
         <View className="px-5 pt-4">
-          <TouchableOpacity onPress={onBack} className="flex-row items-center mb-3">
+          <TouchableOpacity onPress={handleBack} className="flex-row items-center mb-3">
             <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" style={{ marginRight: 6 }}>
               <Path
                 d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"
@@ -369,7 +394,7 @@ export default function JobApplicationsScreen({ jobId, onBack, activeTab = 'dash
             {statusOptions.map((option) => (
               <TouchableOpacity
                 key={option.label}
-                onPress={() => setStatusFilter(option.value)}
+                onPress={() => handleFilterChange(option.value)}
                 className={`px-4 py-2 rounded-full mr-2 ${
                   statusFilter === option.value ? 'bg-primary-blue' : 'bg-white'
                 }`}
@@ -424,6 +449,9 @@ export default function JobApplicationsScreen({ jobId, onBack, activeTab = 'dash
               onPress={handleApplicationPress}
             />
           ))}
+
+          {/* Bottom padding for navbar */}
+          <View style={{ height: 100 }} />
         </View>
       </ScrollView>
 
@@ -446,8 +474,11 @@ export default function JobApplicationsScreen({ jobId, onBack, activeTab = 'dash
               >
                 <View className="flex-row items-center justify-between">
                   <Text className="text-white text-xl font-bold">Application Details</Text>
-                  <TouchableOpacity 
-                    onPress={() => setShowDetailsModal(false)}
+                  <TouchableOpacity
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setShowDetailsModal(false);
+                    }}
                     className="bg-white/20 rounded-full p-2"
                   >
                     <Svg width="20" height="20" viewBox="0 0 24 24" fill="none">
@@ -778,6 +809,7 @@ export default function JobApplicationsScreen({ jobId, onBack, activeTab = 'dash
                     activeOpacity={0.7}
                     disabled={isShortlisting || selectedApplication?.status === 'shortlisted'}
                     onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                       showAlert({
                         type: 'success',
                         title: 'Shortlist Candidate',
@@ -808,13 +840,13 @@ export default function JobApplicationsScreen({ jobId, onBack, activeTab = 'dash
                     className="bg-primary-blue rounded-2xl py-4 px-5 items-center justify-center shadow-sm"
                     activeOpacity={0.7}
                     onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                       // Check if calendar is connected
                       if (!isCalendarConnected) {
                         setShowCalendarCheck(true);
                       } else {
                         // Reset interview form
                         setInterviewType('video_call');
-                        setVideoCallLink('');
                         setLocation('');
                         setDuration(60);
                         setInterviewSlots([]);
@@ -836,19 +868,25 @@ export default function JobApplicationsScreen({ jobId, onBack, activeTab = 'dash
                   <TouchableOpacity
                     className="flex-1 bg-gray-100 rounded-2xl py-3.5 px-4 items-center justify-center border border-gray-200"
                     activeOpacity={0.7}
-                    onPress={() => setShowDetailsModal(false)}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setShowDetailsModal(false);
+                    }}
                   >
                     <Text className="text-gray-700 font-semibold text-sm">Close</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     className={`flex-1 rounded-2xl py-3.5 px-4 items-center justify-center border ${
-                      selectedApplication?.status === 'rejected' 
-                        ? 'bg-gray-100 border-gray-200' 
+                      selectedApplication?.status === 'rejected'
+                        ? 'bg-gray-100 border-gray-200'
                         : 'bg-red-50 border-red-200'
                     }`}
                     activeOpacity={0.7}
                     disabled={isRejecting || selectedApplication?.status === 'rejected'}
-                    onPress={() => setShowRejectModal(true)}
+                    onPress={() => {
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                      setShowRejectModal(true);
+                    }}
                   >
                     <View className="flex-row items-center">
                       <Svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ marginRight: 6 }}>
@@ -916,6 +954,7 @@ export default function JobApplicationsScreen({ jobId, onBack, activeTab = 'dash
               <TouchableOpacity
                 className="flex-1 bg-gray-100 rounded-xl py-3 items-center justify-center"
                 onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   setShowRejectModal(false);
                   setRejectionReason('');
                   setRecruiterNotes('');
@@ -969,7 +1008,6 @@ export default function JobApplicationsScreen({ jobId, onBack, activeTab = 'dash
                     // Open interview modal after connection
                     setTimeout(() => {
                       setInterviewType('video_call');
-                      setVideoCallLink('');
                       setLocation('');
                       setDuration(60);
                       setInterviewSlots([]);
@@ -983,7 +1021,10 @@ export default function JobApplicationsScreen({ jobId, onBack, activeTab = 'dash
             <View className="px-5 py-4 border-t border-gray-100">
               <TouchableOpacity
                 className="bg-gray-100 rounded-xl py-3 items-center justify-center"
-                onPress={() => setShowCalendarCheck(false)}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setShowCalendarCheck(false);
+                }}
               >
                 <Text className="text-gray-700 font-semibold">Cancel</Text>
               </TouchableOpacity>
@@ -1006,7 +1047,10 @@ export default function JobApplicationsScreen({ jobId, onBack, activeTab = 'dash
               <View className="px-5 py-4 border-b border-gray-100">
                 <View className="flex-row items-center justify-between">
                   <Text className="text-gray-900 text-xl font-bold">Schedule Interview</Text>
-                  <TouchableOpacity onPress={() => setShowInterviewModal(false)}>
+                  <TouchableOpacity onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setShowInterviewModal(false);
+                  }}>
                     <Svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                       <Path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="#6B7280"/>
                     </Svg>
@@ -1032,7 +1076,10 @@ export default function JobApplicationsScreen({ jobId, onBack, activeTab = 'dash
                         className={`flex-1 p-3 rounded-xl border-2 ${
                           interviewType === type.value ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white'
                         }`}
-                        onPress={() => setInterviewType(type.value as any)}
+                        onPress={() => {
+                          Haptics.selectionAsync();
+                          setInterviewType(type.value as any);
+                        }}
                       >
                         <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" style={{ marginBottom: 4 }}>
                           <Path d={type.icon} fill={interviewType === type.value ? '#437EF4' : '#9CA3AF'}/>
@@ -1044,22 +1091,6 @@ export default function JobApplicationsScreen({ jobId, onBack, activeTab = 'dash
                     ))}
                   </View>
                 </View>
-
-                {/* Video Call Link */}
-                {interviewType === 'video_call' && (
-                  <View className="mb-4">
-                    <Text className="text-gray-700 text-sm font-semibold mb-2">Video Call Link</Text>
-                    <TextInput
-                      className="bg-gray-50 rounded-xl px-4 py-3 text-gray-900 border border-gray-200"
-                      placeholder="https://meet.google.com/..."
-                      placeholderTextColor="#9CA3AF"
-                      value={videoCallLink}
-                      onChangeText={setVideoCallLink}
-                      keyboardType="url"
-                      autoCapitalize="none"
-                    />
-                  </View>
-                )}
 
                 {/* Location */}
                 {(interviewType === 'in_person' || interviewType === 'phone') && (
@@ -1087,7 +1118,10 @@ export default function JobApplicationsScreen({ jobId, onBack, activeTab = 'dash
                         className={`flex-1 py-3 rounded-xl border-2 ${
                           duration === min ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white'
                         }`}
-                        onPress={() => setDuration(min)}
+                        onPress={() => {
+                          Haptics.selectionAsync();
+                          setDuration(min);
+                        }}
                       >
                         <Text className={`text-center font-semibold ${
                           duration === min ? 'text-blue-600' : 'text-gray-600'
@@ -1112,6 +1146,7 @@ export default function JobApplicationsScreen({ jobId, onBack, activeTab = 'dash
                       <TouchableOpacity
                         className="bg-red-50 p-2 rounded-lg"
                         onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                           setInterviewSlots(interviewSlots.filter((_, i) => i !== index));
                         }}
                       >
@@ -1125,19 +1160,305 @@ export default function JobApplicationsScreen({ jobId, onBack, activeTab = 'dash
                   <TouchableOpacity
                     className="bg-blue-50 border-2 border-dashed border-blue-300 rounded-xl py-3 items-center justify-center mt-2"
                     onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      // Start with tomorrow at 10 AM as default
                       const tomorrow = new Date();
                       tomorrow.setDate(tomorrow.getDate() + 1);
-                      tomorrow.setHours(10, 0, 0, 0);
-                      setInterviewSlots([...interviewSlots, {
-                        startTime: tomorrow,
-                        endTime: new Date(tomorrow.getTime() + duration * 60000)
-                      }]);
+                      setSelectedDate(tomorrow);
+                      setSelectedHour(10);
+                      setSelectedMinute(0);
+                      setIsAM(true);
+                      setCurrentSlotIndex(interviewSlots.length);
+                      setShowDatePicker(true);
                     }}
                   >
                     <Text className="text-blue-600 font-semibold">+ Add Time Slot</Text>
                   </TouchableOpacity>
                 </View>
               </ScrollView>
+
+              {/* Custom Date Time Picker Modal */}
+              {showDatePicker && (
+                <Modal
+                  transparent
+                  animationType="slide"
+                  visible={showDatePicker}
+                  onRequestClose={() => {
+                    setShowDatePicker(false);
+                    setCurrentSlotIndex(null);
+                  }}
+                >
+                  <View className="flex-1 bg-black/70 justify-end">
+                    <SafeAreaView className="bg-white rounded-t-3xl" edges={['bottom']}>
+                      {/* Drag Indicator */}
+                      <View className="items-center pt-3 pb-2">
+                        <View className="w-12 h-1.5 bg-gray-300 rounded-full" />
+                      </View>
+
+                      {/* Header */}
+                      <LinearGradient
+                        colors={['#437EF4', '#3B70E2']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        className="mx-5 mb-4 rounded-2xl p-5"
+                      >
+                        <View className="flex-row items-center justify-between">
+                          <View className="flex-row items-center flex-1">
+                            <View className="bg-white/20 rounded-full p-2.5 mr-3">
+                              <Svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                                <Path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V9h14v10z" fill="white" />
+                              </Svg>
+                            </View>
+                            <View className="flex-1">
+                              <Text className="text-white text-xl font-bold">Pick Date & Time</Text>
+                              <Text className="text-white/80 text-sm mt-0.5">Interview slot</Text>
+                            </View>
+                          </View>
+                          <TouchableOpacity
+                            onPress={() => {
+                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                              setShowDatePicker(false);
+                              setCurrentSlotIndex(null);
+                            }}
+                            className="bg-white/20 rounded-full p-2"
+                          >
+                            <Svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                              <Path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="white"/>
+                            </Svg>
+                          </TouchableOpacity>
+                        </View>
+                      </LinearGradient>
+
+                      <ScrollView className="max-h-[500px]">
+                        {/* Date Selection */}
+                        <View className="px-5 mb-4">
+                          <Text className="text-gray-900 text-base font-bold mb-3">📅 Select Date</Text>
+                          <View className="bg-gray-50 rounded-2xl p-2">
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                              {Array.from({ length: 6 }, (_, i) => {
+                                const date = new Date();
+                                date.setDate(date.getDate() + i);
+                                const isSelected = selectedDate.toDateString() === date.toDateString();
+                                return (
+                                  <TouchableOpacity
+                                    key={i}
+                                    onPress={() => {
+                                      Haptics.selectionAsync();
+                                      setSelectedDate(date);
+                                    }}
+                                    className={`min-w-[70px] mx-1 rounded-xl p-3 items-center ${
+                                      isSelected ? 'bg-blue-500' : 'bg-white'
+                                    }`}
+                                    style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: isSelected ? 0.2 : 0.05, shadowRadius: 3, elevation: isSelected ? 3 : 1 }}
+                                  >
+                                    <Text className={`text-xs font-semibold mb-1 ${isSelected ? 'text-white' : 'text-gray-500'}`}>
+                                      {date.toLocaleDateString('en-US', { weekday: 'short' })}
+                                    </Text>
+                                    <Text className={`text-2xl font-bold ${isSelected ? 'text-white' : 'text-gray-900'}`}>
+                                      {date.getDate()}
+                                    </Text>
+                                    <Text className={`text-xs font-medium mt-0.5 ${isSelected ? 'text-white/90' : 'text-gray-500'}`}>
+                                      {date.toLocaleDateString('en-US', { month: 'short' })}
+                                    </Text>
+                                  </TouchableOpacity>
+                                );
+                              })}
+                            </ScrollView>
+                          </View>
+                        </View>
+
+                        {/* Time Selection */}
+                        <View className="px-5 mb-4">
+                          <Text className="text-gray-900 text-base font-bold mb-3">🕐 Select Time</Text>
+                          
+                          <View className="flex-row items-center justify-center gap-3 mb-4">
+                            {/* Hour Picker */}
+                            <View className="flex-1 bg-gray-50 rounded-2xl p-4">
+                              <Text className="text-gray-500 text-xs font-semibold mb-2 text-center">Hour</Text>
+                              <ScrollView 
+                                style={{ height: 150 }} 
+                                showsVerticalScrollIndicator={false}
+                                nestedScrollEnabled={true}
+                              >
+                                {Array.from({ length: 12 }, (_, i) => {
+                                  const hour = i === 0 ? 12 : i;
+                                  const isSelected = selectedHour === hour;
+                                  return (
+                                    <TouchableOpacity
+                                      key={i}
+                                      onPress={() => {
+                                        Haptics.selectionAsync();
+                                        setSelectedHour(hour);
+                                      }}
+                                      className={`py-3 rounded-xl mb-2 ${isSelected ? 'bg-blue-500' : 'bg-white'}`}
+                                    >
+                                      <Text className={`text-center text-xl font-bold ${isSelected ? 'text-white' : 'text-gray-900'}`}>
+                                        {hour.toString().padStart(2, '0')}
+                                      </Text>
+                                    </TouchableOpacity>
+                                  );
+                                })}
+                              </ScrollView>
+                            </View>
+
+                            <Text className="text-gray-400 text-3xl font-bold">:</Text>
+
+                            {/* Minute Picker */}
+                            <View className="flex-1 bg-gray-50 rounded-2xl p-4">
+                              <Text className="text-gray-500 text-xs font-semibold mb-2 text-center">Minute</Text>
+                              <ScrollView 
+                                style={{ height: 150 }} 
+                                showsVerticalScrollIndicator={false}
+                                nestedScrollEnabled={true}
+                              >
+                                {Array.from({ length: 12 }, (_, i) => {
+                                  const minute = i * 5;
+                                  const isSelected = selectedMinute === minute;
+                                  return (
+                                    <TouchableOpacity
+                                      key={i}
+                                      onPress={() => {
+                                        Haptics.selectionAsync();
+                                        setSelectedMinute(minute);
+                                      }}
+                                      className={`py-3 rounded-xl mb-2 ${isSelected ? 'bg-blue-500' : 'bg-white'}`}
+                                    >
+                                      <Text className={`text-center text-xl font-bold ${isSelected ? 'text-white' : 'text-gray-900'}`}>
+                                        {minute.toString().padStart(2, '0')}
+                                      </Text>
+                                    </TouchableOpacity>
+                                  );
+                                })}
+                              </ScrollView>
+                            </View>
+
+                            {/* AM/PM Toggle */}
+                            <View className="bg-gray-50 rounded-2xl p-4">
+                              <Text className="text-gray-500 text-xs font-semibold mb-2 text-center">Period</Text>
+                              <View style={{ height: 150, justifyContent: 'center', gap: 8 }}>
+                                <TouchableOpacity
+                                  onPress={() => {
+                                    Haptics.selectionAsync();
+                                    setIsAM(true);
+                                  }}
+                                  className={`py-3 px-5 rounded-xl ${isAM ? 'bg-blue-500' : 'bg-white'}`}
+                                >
+                                  <Text className={`text-center text-xl font-bold ${isAM ? 'text-white' : 'text-gray-900'}`}>
+                                    AM
+                                  </Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  onPress={() => {
+                                    Haptics.selectionAsync();
+                                    setIsAM(false);
+                                  }}
+                                  className={`py-3 px-5 rounded-xl ${!isAM ? 'bg-blue-500' : 'bg-white'}`}
+                                >
+                                  <Text className={`text-center text-xl font-bold ${!isAM ? 'text-white' : 'text-gray-900'}`}>
+                                    PM
+                                  </Text>
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+                          </View>
+                        </View>
+
+                        {/* Preview */}
+                        <View className="mx-5 mb-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-4 border border-blue-200">
+                          <Text className="text-blue-900 text-xs font-semibold mb-2 uppercase tracking-wide">Selected Time</Text>
+                          <View className="flex-row items-center justify-between">
+                            <View className="flex-1">
+                              <Text className="text-gray-900 text-lg font-bold">
+                                {selectedDate.toLocaleDateString('en-US', { 
+                                  weekday: 'long',
+                                  month: 'short', 
+                                  day: 'numeric',
+                                  year: 'numeric'
+                                })}
+                              </Text>
+                              <Text className="text-blue-700 text-xl font-bold mt-1">
+                                {selectedHour.toString().padStart(2, '0')}:{selectedMinute.toString().padStart(2, '0')} {isAM ? 'AM' : 'PM'}
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+                      </ScrollView>
+
+                      {/* Action Buttons */}
+                      <View className="px-5 pb-5 pt-3 border-t border-gray-100">
+                        <View className="flex-row gap-3">
+                          <TouchableOpacity
+                            className="flex-1 bg-gray-100 rounded-2xl py-4 items-center justify-center"
+                            activeOpacity={0.7}
+                            onPress={() => {
+                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                              setShowDatePicker(false);
+                              setCurrentSlotIndex(null);
+                            }}
+                          >
+                            <Text className="text-gray-700 font-bold text-base">Cancel</Text>
+                          </TouchableOpacity>
+                          
+                          <TouchableOpacity
+                            className="flex-[2] bg-green-500 rounded-2xl py-4 items-center justify-center shadow-sm"
+                            activeOpacity={0.7}
+                            onPress={() => {
+                              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                              // Create datetime from selected values
+                              const finalDateTime = new Date(selectedDate);
+                              let hour = selectedHour;
+                              if (!isAM && hour !== 12) hour += 12;
+                              if (isAM && hour === 12) hour = 0;
+                              finalDateTime.setHours(hour, selectedMinute, 0, 0);
+
+                              // Validate time is not in the past
+                              const now = new Date();
+                              if (finalDateTime <= now) {
+                                showAlert({
+                                  type: 'error',
+                                  title: 'Invalid Time',
+                                  message: 'Please select a time in the future.',
+                                  buttons: [{ text: 'OK', style: 'default' }],
+                                });
+                                return;
+                              }
+
+                              // Add the slot
+                              const endTime = new Date(finalDateTime.getTime() + duration * 60000);
+                              
+                              if (currentSlotIndex !== null) {
+                                if (currentSlotIndex === interviewSlots.length) {
+                                  setInterviewSlots([...interviewSlots, {
+                                    startTime: finalDateTime,
+                                    endTime: endTime
+                                  }]);
+                                } else {
+                                  const updatedSlots = [...interviewSlots];
+                                  updatedSlots[currentSlotIndex] = {
+                                    startTime: finalDateTime,
+                                    endTime: endTime
+                                  };
+                                  setInterviewSlots(updatedSlots);
+                                }
+                              }
+                              
+                              setShowDatePicker(false);
+                              setCurrentSlotIndex(null);
+                            }}
+                          >
+                            <View className="flex-row items-center">
+                              <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" style={{ marginRight: 8 }}>
+                                <Path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" fill="white"/>
+                              </Svg>
+                              <Text className="text-white font-bold text-base">Confirm & Add</Text>
+                            </View>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </SafeAreaView>
+                  </View>
+                </Modal>
+              )}
 
               {/* Footer Actions */}
               <View className="px-5 py-4 border-t border-gray-100">
@@ -1149,16 +1470,32 @@ export default function JobApplicationsScreen({ jobId, onBack, activeTab = 'dash
                   }`}
                   disabled={interviewSlots.length < 2 || isCreatingSlots}
                   onPress={async () => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                     try {
+                      // Get user's IANA timezone (e.g., "Asia/Karachi", "America/New_York")
+                      const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+                      // Format datetime as local ISO string (without 'Z' suffix)
+                      // This allows the backend to correctly interpret the time in the user's timezone
+                      const formatLocalDateTime = (date: Date) => {
+                        const year = date.getFullYear();
+                        const month = String(date.getMonth() + 1).padStart(2, '0');
+                        const day = String(date.getDate()).padStart(2, '0');
+                        const hours = String(date.getHours()).padStart(2, '0');
+                        const minutes = String(date.getMinutes()).padStart(2, '0');
+                        const seconds = String(date.getSeconds()).padStart(2, '0');
+                        return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+                      };
+
                       const input = {
                         applicationId: selectedApplication.id,
                         interviewType,
                         durationMinutes: duration,
-                        ...(interviewType === 'video_call' && { videoCallLink }),
-                        ...(interviewType !== 'video_call' && { location }),
+                        timezone: userTimezone,
+                        ...(location && { location }),
                         slots: interviewSlots.map(slot => ({
-                          startTime: slot.startTime.toISOString(),
-                          endTime: slot.endTime.toISOString(),
+                          startTime: formatLocalDateTime(slot.startTime),
+                          endTime: formatLocalDateTime(slot.endTime),
                         })),
                       };
 

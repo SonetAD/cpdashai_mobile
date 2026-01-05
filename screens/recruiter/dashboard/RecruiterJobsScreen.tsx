@@ -10,6 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
+import * as Haptics from 'expo-haptics';
 import {
   useGetMyJobPostingsQuery,
   useDeleteJobPostingMutation,
@@ -47,9 +48,29 @@ const JobPostingCard: React.FC<JobPostingCardProps> = ({
     return status.charAt(0).toUpperCase() + status.slice(1);
   };
 
+  const handlePress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onPress(jobPosting.id);
+  };
+
+  const handleViewApplications = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onViewApplications(jobPosting.id);
+  };
+
+  const handleEdit = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onEdit(jobPosting.id);
+  };
+
+  const handleDelete = () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    onDelete(jobPosting.id);
+  };
+
   return (
     <TouchableOpacity
-      onPress={() => onPress(jobPosting.id)}
+      onPress={handlePress}
       className="bg-white rounded-2xl p-5 mb-4 shadow-sm"
       activeOpacity={0.7}
     >
@@ -89,19 +110,19 @@ const JobPostingCard: React.FC<JobPostingCardProps> = ({
       {/* Actions */}
       <View className="flex-row gap-2">
         <TouchableOpacity
-          onPress={() => onViewApplications(jobPosting.id)}
+          onPress={handleViewApplications}
           className="bg-primary-blue rounded-xl py-2 px-3 flex-1 items-center"
         >
           <Text className="text-white text-xs font-semibold">Applications</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={() => onEdit(jobPosting.id)}
+          onPress={handleEdit}
           className="bg-primary-cyan rounded-xl py-2 px-3 flex-1 items-center"
         >
           <Text className="text-white text-xs font-semibold">Edit</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={() => onDelete(jobPosting.id)}
+          onPress={handleDelete}
           className="bg-red-500 rounded-xl py-2 px-3 items-center"
         >
           <Text className="text-white text-xs font-semibold">Delete</Text>
@@ -183,7 +204,7 @@ export default function RecruiterJobsScreen({
     }
   };
 
-  const handleViewApplications = (jobId: string) => {
+  const handleViewApplicationsAction = (jobId: string) => {
     if (onViewApplications) {
       onViewApplications(jobId);
     }
@@ -196,9 +217,22 @@ export default function RecruiterJobsScreen({
   };
 
   const handleCreateJob = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     if (onCreateJob) {
       onCreateJob();
     }
+  };
+
+  const handleBack = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (onBack) {
+      onBack();
+    }
+  };
+
+  const handleFilterChange = (value: string | undefined) => {
+    Haptics.selectionAsync();
+    setStatusFilter(value);
   };
 
   const statusOptions = [
@@ -221,7 +255,7 @@ export default function RecruiterJobsScreen({
       <View className="px-6 pt-4">
         <View className="flex-row justify-between items-center mb-4">
           {onBack && (
-            <TouchableOpacity onPress={onBack} className="flex-row items-center">
+            <TouchableOpacity onPress={handleBack} className="flex-row items-center">
               <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" style={{ marginRight: 6 }}>
                 <Path
                   d="M15 18L9 12L15 6"
@@ -262,7 +296,7 @@ export default function RecruiterJobsScreen({
             {statusOptions.map((option) => (
               <TouchableOpacity
                 key={option.label}
-                onPress={() => setStatusFilter(option.value)}
+                onPress={() => handleFilterChange(option.value)}
                 className={`px-4 py-2 rounded-full mr-2 ${
                   statusFilter === option.value ? 'bg-primary-blue' : 'bg-white'
                 }`}
@@ -321,9 +355,12 @@ export default function RecruiterJobsScreen({
               onPress={handleJobPress}
               onEdit={handleEdit}
               onDelete={handleDelete}
-              onViewApplications={handleViewApplications}
+              onViewApplications={handleViewApplicationsAction}
             />
           ))}
+
+          {/* Bottom padding for navbar */}
+          <View style={{ height: 100 }} />
         </View>
       </ScrollView>
     </TalentPartnerLayout>

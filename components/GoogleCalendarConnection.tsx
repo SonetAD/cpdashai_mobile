@@ -55,30 +55,39 @@ export const GoogleCalendarConnection: React.FC<GoogleCalendarConnectionProps> =
         console.log('🌐 Browser result:', result);
 
         if (result.type === 'success' && result.url) {
-          // Extract code from callback URL
-          const url = new URL(result.url);
-          const code = url.searchParams.get('code');
-
-          if (code) {
-            console.log('✅ Got authorization code, connecting calendar...');
+          // The callback returns JSON with the code, so we need to fetch it
+          console.log('📡 Fetching callback response from:', result.url);
+          
+          try {
+            const callbackResponse = await fetch(result.url);
+            const callbackData = await callbackResponse.json();
             
-            // Connect calendar with the code
-            const connectResponse = await connectCalendar({ code }).unwrap();
-            const connectData = connectResponse.connectGoogleCalendar;
+            console.log('📦 Callback data:', callbackData);
 
-            if ('success' in connectData && connectData.success) {
-              showAlert({
-                type: 'success',
-                title: 'Connected!',
-                message: 'Google Calendar connected successfully.',
-                buttons: [{ text: 'OK', style: 'default' }],
-              });
-              refetch();
+            if (callbackData.success && callbackData.code) {
+              console.log('✅ Got authorization code, connecting calendar...');
+              
+              // Connect calendar with the code
+              const connectResponse = await connectCalendar({ code: callbackData.code }).unwrap();
+              const connectData = connectResponse.connectGoogleCalendar;
+
+              if ('success' in connectData && connectData.success) {
+                showAlert({
+                  type: 'success',
+                  title: 'Connected!',
+                  message: 'Google Calendar connected successfully.',
+                  buttons: [{ text: 'OK', style: 'default' }],
+                });
+                refetch();
+              } else {
+                throw new Error(connectData.message || 'Failed to connect calendar');
+              }
             } else {
-              throw new Error(connectData.message || 'Failed to connect calendar');
+              throw new Error(callbackData.errorDescription || callbackData.error || 'No authorization code received');
             }
-          } else {
-            throw new Error('No authorization code received');
+          } catch (fetchError: any) {
+            console.error('❌ Failed to fetch callback data:', fetchError);
+            throw new Error('Failed to retrieve authorization code from callback');
           }
         }
       } else {

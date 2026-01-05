@@ -1,89 +1,120 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
+import { View, Text, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import Svg, { Path, Circle } from 'react-native-svg';
-import LogoWhite from '../../../assets/images/logoWhite.svg';
-import ClaraIcon from '../../../assets/images/clara.svg';
-import BottomNavBar from '../../../components/BottomNavBar';
-import KeyboardDismissWrapper from '../../../components/KeyboardDismissWrapper';
+import * as Haptics from 'expo-haptics';
+import GirlAvatar from '../../../assets/images/aiInterview/girl.svg';
+import CandidateLayout from '../../../components/layouts/CandidateLayout';
+import CandidateNavBar from '../../../components/CandidateNavBar';
+import SearchModal from '../../../components/SearchModal';
 
 interface AIClaraAssistantScreenProps {
   activeTab?: string;
   onTabChange?: (tabId: string) => void;
   onBack?: () => void;
+  onSearchNavigate?: (route: string) => void;
 }
 
 export default function AIClaraAssistantScreen({
   activeTab = 'aiCoach',
   onTabChange,
   onBack,
+  onSearchNavigate,
 }: AIClaraAssistantScreenProps) {
   const [message, setMessage] = useState('');
+  const [showSearchModal, setShowSearchModal] = useState(false);
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {/* Header */}
-      <LinearGradient
-        colors={['#437EF4', '#437EF4']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        className="px-6 py-4"
-      >
-        <View className="flex-row items-center">
-          <LogoWhite width={39} height={33} />
-          <View className="flex-1 ml-4">
-            <Text className="text-white text-lg font-bold">Ai Clara Assistant</Text>
-            <Text className="text-white/90 text-xs mt-0.5">
-              Your voice will be analyzed for clarity, confidence & tone.
-            </Text>
-          </View>
-        </View>
-      </LinearGradient>
-
-      {/* Back Navigation */}
-      <View className="bg-white px-6 py-4 flex-row items-center border-b border-gray-100">
-        <TouchableOpacity onPress={onBack} className="mr-4">
-          <Svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <Path
-              d="M15 18L9 12L15 6"
-              stroke="#1F2937"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </Svg>
-        </TouchableOpacity>
-        <Text className="text-gray-900 text-lg font-bold">Ai Clara Assistant</Text>
-      </View>
-
+    <>
+    <CandidateLayout
+      showBackButton={true}
+      onBack={onBack}
+      headerTitle="Clara"
+      headerSubtitle="Your AI Mental Wellbeing Companion"
+      onSearchPress={() => setShowSearchModal(true)}
+    >
       {/* Content */}
       <KeyboardAvoidingView
         className="flex-1"
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
-        <View className="flex-1 items-center justify-center px-6">
-          {/* Clara Avatar and Welcome Message */}
-          <View className="bg-blue-50 rounded-3xl p-8 items-center border-2 border-blue-200 mb-8">
-            {/* Clara Image */}
-            <View className="mb-6">
-              <ClaraIcon width={120} height={120} />
+        <ScrollView
+          className="flex-1"
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: 120 }}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          onScrollBeginDrag={() => Haptics.selectionAsync()}
+        >
+          <View className="flex-1 items-center justify-center px-6 py-8">
+            {/* Clara Avatar and Welcome Message */}
+            <View className="bg-white rounded-3xl p-8 items-center border border-gray-100 shadow-sm mb-8">
+              {/* Clara Image */}
+              <View className="mb-6 rounded-full overflow-hidden">
+                <GirlAvatar width={120} height={120} />
+              </View>
+
+              {/* Welcome Text */}
+              <Text className="text-primary-blue text-xl font-bold mb-3">Welcome to Clara</Text>
+              <Text className="text-gray-500 text-sm text-center leading-5">
+                Start chatting with Clara now.{'\n'}Ask me anything.
+              </Text>
             </View>
 
-            {/* Welcome Text */}
-            <Text className="text-primary-blue text-xl font-bold mb-3">Welcome to Ai Clara</Text>
-            <Text className="text-gray-500 text-sm text-center leading-5">
-              Start chatting with Chat Ai Clara now.{'\n'}You can ask me anything.
-            </Text>
+            {/* Quick Action Buttons */}
+            <View className="w-full">
+              <Text className="text-gray-700 text-sm font-semibold mb-3">Quick Actions</Text>
+              <View className="flex-row flex-wrap gap-2">
+                <TouchableOpacity
+                  className="bg-white border border-blue-200 rounded-full px-4 py-2"
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setMessage('Help me improve my resume');
+                  }}
+                >
+                  <Text className="text-primary-blue text-sm">Improve my resume</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  className="bg-white border border-blue-200 rounded-full px-4 py-2"
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setMessage('Give me interview tips');
+                  }}
+                >
+                  <Text className="text-primary-blue text-sm">Interview tips</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  className="bg-white border border-blue-200 rounded-full px-4 py-2"
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setMessage('Help me write a cover letter');
+                  }}
+                >
+                  <Text className="text-primary-blue text-sm">Cover letter help</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  className="bg-white border border-blue-200 rounded-full px-4 py-2"
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setMessage('Career advice');
+                  }}
+                >
+                  <Text className="text-primary-blue text-sm">Career advice</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
-        </View>
+        </ScrollView>
 
-        {/* Input Area */}
-        <View className="px-6 pb-4">
+        {/* Input Area - Fixed at bottom */}
+        <View className="px-6 pb-32 pt-2 bg-gray-50">
           <View className="bg-white rounded-xl px-4 py-3 flex-row items-center border border-blue-200 shadow-sm">
             {/* Plus Icon */}
-            <TouchableOpacity className="mr-3">
+            <TouchableOpacity
+              className="mr-3"
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+            >
               <Svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                 <Circle cx="12" cy="12" r="10" stroke="#437EF4" strokeWidth="2" />
                 <Path
@@ -102,21 +133,52 @@ export default function AIClaraAssistantScreen({
               className="flex-1 text-gray-900 text-sm"
               value={message}
               onChangeText={setMessage}
+              onFocus={() => Haptics.selectionAsync()}
             />
 
             {/* Microphone Icon */}
-            <TouchableOpacity className="ml-3">
+            <TouchableOpacity
+              className="ml-2"
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              }}
+            >
               <Svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                 <Path
                   d="M12 15C13.6569 15 15 13.6569 15 12V6C15 4.34315 13.6569 3 12 3C10.3431 3 9 4.34315 9 6V12C9 13.6569 10.3431 15 12 15Z"
-                  stroke="#437EF4"
+                  stroke="#9CA3AF"
                   strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
                 <Path
                   d="M19 12C19 15.866 15.866 19 12 19M12 19C8.13401 19 5 15.866 5 12M12 19V22M12 22H15M12 22H9"
-                  stroke="#437EF4"
+                  stroke="#9CA3AF"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </Svg>
+            </TouchableOpacity>
+
+            {/* Send Button */}
+            <TouchableOpacity
+              className="ml-2 bg-primary-blue rounded-full p-2"
+              onPress={() => {
+                if (message.trim()) {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  // Handle send message
+                  console.log('Send message:', message);
+                  setMessage('');
+                }
+              }}
+              disabled={!message.trim()}
+              style={{ opacity: message.trim() ? 1 : 0.5 }}
+            >
+              <Svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                <Path
+                  d="M22 2L11 13M22 2L15 22L11 13M22 2L2 9L11 13"
+                  stroke="white"
                   strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -128,7 +190,16 @@ export default function AIClaraAssistantScreen({
       </KeyboardAvoidingView>
 
       {/* Bottom Nav Bar */}
-      <BottomNavBar activeTab={activeTab} onTabPress={onTabChange} />
-    </SafeAreaView>
+      <CandidateNavBar activeTab={activeTab} onTabPress={onTabChange} />
+    </CandidateLayout>
+    <SearchModal
+      visible={showSearchModal}
+      onClose={() => setShowSearchModal(false)}
+      onNavigate={(route) => {
+        setShowSearchModal(false);
+        onSearchNavigate?.(route);
+      }}
+    />
+    </>
   );
 }

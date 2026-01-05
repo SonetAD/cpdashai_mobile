@@ -1,77 +1,87 @@
-import React from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Animated, Platform, UIManager } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
+import * as Haptics from 'expo-haptics';
 import Svg, { Circle, Path } from 'react-native-svg';
-import ChevronRightIcon from '../../assets/images/chevronRight.svg';
 
-const CircleIllustration = () => {
+// Enable LayoutAnimation on Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+// Decorative white circle arc in top right
+const CircleArc = () => {
   return (
     <Svg
-      width={144}
-      height={151}
-      viewBox="0 0 144 151"
+      width={200}
+      height={200}
+      viewBox="0 0 200 200"
       fill="none"
-      style={{ position: 'absolute', top: -5, right: -5 }}
+      style={{ position: 'absolute', top: -20, right: -60 }}
     >
-      <Circle cx={98.5} cy={52.5} r={97.5} stroke="white" strokeWidth={2} />
-    </Svg>
-  );
-};
-
-const TargetIcon = () => {
-  return (
-    <Svg width={29} height={28} viewBox="0 0 29 28" fill="none">
-      <Path
-        d="M14.0819 0H14.084V0.000467235C15.4708 0.000700853 16.8112 0.20021 18.0763 0.571896C18.2787 0.631235 18.4829 0.696648 18.6885 0.7672C19.729 1.1251 20.7126 1.60005 21.6236 2.17568C21.6878 2.2161 21.7068 2.30067 21.6664 2.36444C21.6622 2.37075 21.6572 2.37706 21.6523 2.38267L20.6447 3.66709C20.6001 3.7241 20.5188 3.73625 20.4595 3.6963L20.4572 3.6949C20.2011 3.53767 19.9365 3.38886 19.6648 3.24892C19.3911 3.10828 19.1128 2.97792 18.8306 2.85901L18.8302 2.85878C17.3719 2.24366 15.7672 1.90352 14.0816 1.90352H14.0802V1.90305C12.401 1.90305 10.8003 2.24203 9.34482 2.85411C9.10702 2.95409 8.87368 3.06109 8.64574 3.1744C7.46918 3.75937 6.40048 4.52961 5.47817 5.44656L5.47723 5.44749L5.47088 5.45334C5.16494 5.75797 4.8752 6.07873 4.60332 6.4142C4.3298 6.75178 4.07344 7.10478 3.83681 7.47109C2.6203 9.35405 1.91441 11.5949 1.91441 13.9998V14.0012H1.91394C1.91394 15.6706 2.2549 17.262 2.87056 18.709C2.97113 18.9457 3.07875 19.1774 3.19272 19.404C3.78112 20.5735 4.55586 21.6363 5.4784 22.5532L5.47934 22.5541L5.48451 22.5595C5.79093 22.8639 6.11403 23.1522 6.4517 23.4227C6.79125 23.6949 7.14632 23.9495 7.515 24.1848C9.40897 25.3942 11.6632 26.096 14.0819 26.096H14.0833V26.0967C15.7629 26.0965 17.3632 25.7577 18.8186 25.1457C19.0567 25.0457 19.2898 24.9387 19.5177 24.8254C20.6943 24.2404 21.7632 23.4702 22.6853 22.5532L22.6865 22.552L22.6935 22.5453C22.999 22.2409 23.2885 21.9206 23.5601 21.5856C23.8339 21.248 24.09 20.8948 24.3267 20.5284C25.5434 18.6455 26.2491 16.4046 26.2491 14V13.9977H26.2498C26.2495 12.9887 26.1248 12.007 25.8895 11.0688C25.8505 10.9125 25.8094 10.7609 25.7666 10.6142C25.5406 9.84161 25.2386 9.10057 24.8704 8.39995C24.8384 8.33945 24.8568 8.26609 24.9108 8.22684L26.2129 7.20336C26.2721 7.15664 26.3583 7.16669 26.4051 7.22579C26.4093 7.23093 26.4128 7.23654 26.4159 7.24214H26.4164L26.4173 7.24401L26.4187 7.24682C26.574 7.52669 26.7209 7.81334 26.8574 8.1056C26.9942 8.39808 27.1208 8.69548 27.2369 8.99661C27.8354 10.5506 28.1635 12.2378 28.1635 14.0002V14.0016H28.163C28.1628 15.9339 27.7685 17.7755 27.056 19.4498C26.9406 19.7215 26.8161 19.99 26.6828 20.2542C26.0007 21.6103 25.1045 22.8401 24.039 23.8995L24.0381 23.9005L24.0329 23.9052C23.6776 24.2581 23.3033 24.592 22.9118 24.9057C22.5187 25.2209 22.1079 25.5152 21.6819 25.7874C19.4895 27.1872 16.8805 28 14.0816 28H14.0802V27.9995C12.1367 27.9993 10.2843 27.6073 8.60016 26.899C8.32687 26.7843 8.05688 26.6602 7.79087 26.5277C6.42703 25.8498 5.18984 24.9585 4.12419 23.8995L4.12325 23.8984L4.11667 23.8916C3.76232 23.5388 3.427 23.1674 3.11212 22.7789C2.79536 22.388 2.49905 21.9797 2.22553 21.5561C0.817507 19.376 0 16.7824 0 14V13.9984H0.000469967C0.00070495 12.0661 0.395007 10.2247 1.10724 8.55017C1.22285 8.27847 1.34739 8.01028 1.48063 7.74559C2.16255 6.38967 3.05901 5.15991 4.12419 4.10046L4.12513 4.09952L4.13124 4.09415C4.48607 3.74162 4.8604 3.40778 5.25117 3.0945C5.64454 2.77958 6.05505 2.48499 6.48131 2.21306C8.67441 0.812522 11.2832 0 14.0819 0ZM21.8692 3.80773L25.8099 0.0642448L26.0723 2.58895L28.8748 2.93727L24.6549 7.00245L22.6016 7.17767L14.4082 14.7539L13.6532 14.1075L21.414 6.04766L21.8692 3.80773ZM14.0819 9.56851H14.0854V9.56898C14.3504 9.56921 14.6084 9.59187 14.8568 9.63532C14.8857 9.64046 14.9266 9.64817 14.9783 9.65869H14.979C15.1858 9.70074 15.3884 9.75751 15.585 9.82759C15.6565 9.85282 15.6936 9.93085 15.668 10.0019C15.6631 10.0159 15.6555 10.0285 15.6468 10.0397L15.6471 10.0399L14.5471 11.4426C14.5163 11.4821 14.4675 11.4996 14.4207 11.4935V11.494L14.4144 11.493L14.3655 11.4874L14.3612 11.4867L14.3189 11.4823L14.3154 11.4818C14.2421 11.4755 14.1643 11.472 14.0819 11.472H14.0804V11.4713C13.7301 11.4716 13.3955 11.5426 13.0914 11.6706C13.0411 11.6919 12.9922 11.7143 12.9455 11.7374C12.7006 11.8591 12.4774 12.0201 12.284 12.2124L12.2831 12.2133L12.2767 12.2189C12.2147 12.281 12.1559 12.3467 12.1005 12.4151C12.0434 12.4855 11.9898 12.5595 11.9402 12.6361C11.6864 13.0291 11.5393 13.4975 11.5393 13.9998V14.0012H11.5386C11.5389 14.35 11.6103 14.6824 11.7391 14.9845C11.7604 15.0347 11.783 15.0833 11.8063 15.1295C11.9287 15.3732 12.0908 15.5949 12.284 15.7869L12.2849 15.7881L12.2906 15.794C12.3531 15.8556 12.4191 15.9145 12.488 15.9694C12.5587 16.0262 12.6332 16.0797 12.7103 16.129C13.1057 16.381 13.5769 16.5275 14.0819 16.5275H14.0833V16.528C14.4341 16.528 14.7687 16.457 15.0723 16.3289C15.1228 16.3077 15.1715 16.2852 15.2182 16.2621C15.4633 16.1402 15.6863 15.9792 15.8795 15.7869L15.8806 15.7858L15.8853 15.7813C15.9197 15.747 15.953 15.7122 15.9838 15.6778C16.0146 15.6435 16.0468 15.605 16.0797 15.5634C16.239 15.3625 16.3685 15.1373 16.4606 14.895C16.4712 14.8667 16.4902 14.8438 16.5139 14.8286L18.2913 13.4311C18.3508 13.3844 18.4368 13.3945 18.4838 13.4536C18.5002 13.4744 18.5094 13.4984 18.5122 13.523H18.5129L18.5141 13.5335L18.5146 13.5407L18.5202 13.5991V13.6007H18.5207L18.5259 13.6643V13.6655C18.5341 13.7776 18.5388 13.889 18.5388 13.9998V14.0012H18.5381C18.5378 14.6125 18.4131 15.1952 18.1877 15.725C18.1515 15.8103 18.1118 15.8953 18.0695 15.9797C17.8531 16.4093 17.5697 16.7987 17.233 17.1333L17.232 17.1342L17.2245 17.1405C17.1136 17.2503 16.9971 17.3547 16.8756 17.4522C16.751 17.5517 16.6208 17.6451 16.4864 17.7309C15.7923 18.1738 14.967 18.431 14.0816 18.431H14.0802V18.4303C13.4653 18.4301 12.8792 18.306 12.3465 18.082C12.2607 18.046 12.175 18.0065 12.0904 17.9645C11.6582 17.7493 11.2665 17.4676 10.93 17.133L10.9291 17.1321L10.9213 17.1237C10.8114 17.0137 10.707 16.898 10.6093 16.7775C10.5089 16.6537 10.4152 16.5245 10.3287 16.3906C9.88317 15.7007 9.62445 14.88 9.62445 14V13.9984H9.62492C9.62515 13.3872 9.75017 12.8046 9.97528 12.275C10.0117 12.1897 10.0512 12.1047 10.0935 12.0203C10.3094 11.5914 10.5928 11.2022 10.9298 10.8672L10.93 10.867L10.9298 10.8667L10.9307 10.8658C11.0423 10.7551 11.1615 10.6488 11.2874 10.5478C11.412 10.4481 11.5419 10.3549 11.6766 10.2689C12.3712 9.82572 13.1969 9.56851 14.0819 9.56851ZM14.3152 11.4818C14.243 11.473 14.1904 11.4094 14.1949 11.3375L14.3152 11.4818ZM14.0819 4.74477H14.0842V4.74524C14.917 4.74547 15.7237 4.85434 16.49 5.05782C16.6147 5.09099 16.7388 5.12674 16.8617 5.16505C17.4926 5.36082 18.0956 5.62247 18.6619 5.94136C18.7277 5.97851 18.751 6.06191 18.7136 6.12732C18.7101 6.13293 18.7066 6.13877 18.7023 6.14391L18.7016 6.14461L17.6809 7.44633C17.6381 7.50053 17.5622 7.51408 17.5039 7.48067L17.5006 7.47903C17.3625 7.40731 17.2184 7.33793 17.0687 7.27251C16.9181 7.2064 16.7668 7.14566 16.615 7.09053C15.8257 6.80411 14.9722 6.64782 14.0816 6.64782H14.0802V6.64735C13.0597 6.64735 12.0871 6.85364 11.2024 7.22556C11.0628 7.28443 10.9209 7.34961 10.7775 7.42063L10.7667 7.42553C10.0563 7.7804 9.41061 8.24647 8.85253 8.80107L8.85159 8.80201L8.84618 8.80738C8.66125 8.99171 8.48572 9.18654 8.321 9.38979C8.15486 9.59491 7.99907 9.8096 7.85526 10.0322C7.11624 11.1765 6.68739 12.5385 6.68739 13.9998V14.0012H6.68692C6.68692 15.0158 6.89441 15.9829 7.26851 16.8623C7.3296 17.0062 7.39516 17.1473 7.46425 17.2847C7.82166 17.9951 8.29256 18.6408 8.85323 19.1982L8.85417 19.1992C9.04263 19.3868 9.24025 19.5634 9.44516 19.7274C9.65147 19.8925 9.86742 20.0474 10.0914 20.1904C11.2423 20.9254 12.6125 21.3515 14.0821 21.3515H14.0835V21.3519C15.104 21.3519 16.0769 21.1459 16.9616 20.774C17.1063 20.713 17.2483 20.6481 17.3864 20.5791C18.101 20.2238 18.7505 19.7559 19.3112 19.1982L19.3121 19.1973C19.5008 19.0097 19.6784 18.8135 19.8434 18.6097C20.0095 18.4044 20.1653 18.1899 20.3091 17.9671C21.0486 16.8226 21.4775 15.4606 21.4775 13.9998H21.477V13.9963H21.4775C21.4775 13.5428 21.4357 13.098 21.3562 12.6667C21.3442 12.6023 21.3301 12.5317 21.3139 12.4567C21.2371 12.0981 21.1339 11.7503 21.0078 11.4157C20.9852 11.3557 21.0077 11.2898 21.0587 11.2552L22.3895 10.2091C22.4489 10.1624 22.5349 10.1724 22.5817 10.2315C22.5887 10.2406 22.5944 10.2497 22.5988 10.2595L22.6 10.2619L22.6009 10.2638L22.6012 10.2635C22.6705 10.4198 22.7372 10.5824 22.8009 10.7508C22.8636 10.9172 22.9215 11.0842 22.9734 11.2515C23.2448 12.1203 23.3912 13.0433 23.3912 13.9995V14.0009H23.3905C23.3905 15.2781 23.1299 16.4955 22.659 17.6021C22.5828 17.7813 22.5001 17.9589 22.412 18.1341C21.9611 19.0307 21.3687 19.8437 20.6644 20.5436L20.6633 20.5446L20.6581 20.5495C20.4236 20.7819 20.1768 21.0025 19.9188 21.2092C19.6589 21.4176 19.3873 21.6122 19.1058 21.7918C17.6559 22.7174 15.9314 23.2545 14.0816 23.2545H14.0802C12.7956 23.2543 11.5711 22.9952 10.4577 22.527C10.2775 22.4511 10.0989 22.3691 9.92264 22.2815C9.02101 21.833 8.20304 21.2442 7.49879 20.5441L7.49785 20.5432L7.49127 20.5362C7.25793 20.3037 7.03681 20.0589 6.82956 19.8028C6.61995 19.5444 6.42421 19.2744 6.24327 18.9945C5.31227 17.5533 4.77204 15.8386 4.77204 13.9998V13.9984H4.77251C4.77275 12.7212 5.03358 11.5038 5.50449 10.3969C5.58062 10.2177 5.6631 10.0402 5.75122 9.86497C6.20192 8.96905 6.79431 8.15629 7.49856 7.4559L7.49879 7.45567L7.49856 7.45544L7.4995 7.4545L7.5056 7.4489C7.73965 7.21645 7.98638 6.99638 8.24392 6.79009C8.50405 6.58171 8.77545 6.3871 9.05696 6.20745C10.5073 5.28186 12.2323 4.74477 14.0819 4.74477Z"
-        fill="white"
+      <Circle
+        cx={100}
+        cy={100}
+        r={90}
+        stroke="rgba(255, 255, 255, 0.35)"
+        strokeWidth={2}
+        fill="none"
       />
     </Svg>
   );
 };
 
-const UserIcon = () => {
+// Target/Bullseye Icon for Candidate (matching Figma)
+const CandidateIcon = () => {
+  return (
+    <Svg width={32} height={32} viewBox="0 0 32 32" fill="none">
+      {/* Outer circle */}
+      <Circle cx={16} cy={16} r={14} stroke="#06B6D4" strokeWidth={1.5} fill="none" />
+      {/* Middle circle */}
+      <Circle cx={16} cy={16} r={9} stroke="#06B6D4" strokeWidth={1.5} fill="none" />
+      {/* Inner circle */}
+      <Circle cx={16} cy={16} r={4} stroke="#06B6D4" strokeWidth={1.5} fill="none" />
+      {/* Center dot */}
+      <Circle cx={16} cy={16} r={1.5} fill="#06B6D4" />
+      {/* Crosshair lines */}
+      <Path d="M16 2V6" stroke="#06B6D4" strokeWidth={1.5} strokeLinecap="round" />
+      <Path d="M16 26V30" stroke="#06B6D4" strokeWidth={1.5} strokeLinecap="round" />
+      <Path d="M2 16H6" stroke="#06B6D4" strokeWidth={1.5} strokeLinecap="round" />
+      <Path d="M26 16H30" stroke="#06B6D4" strokeWidth={1.5} strokeLinecap="round" />
+    </Svg>
+  );
+};
+
+// User Icon for Talent Partners
+const TalentIcon = () => {
   return (
     <Svg width={28} height={28} viewBox="0 0 28 28" fill="none">
       <Path
-        d="M14 2.33325C10.7784 2.33325 8.16668 4.94492 8.16668 8.16659C8.16668 11.3882 10.7784 13.9999 14 13.9999C17.2217 13.9999 19.8333 11.3882 19.8333 8.16659C19.8333 4.94492 17.2217 2.33325 14 2.33325Z"
-        fill="#2AD1CC"
+        d="M14 3C10.686 3 8 5.686 8 9C8 12.314 10.686 15 14 15C17.314 15 20 12.314 20 9C20 5.686 17.314 3 14 3Z"
+        fill="rgba(255, 255, 255, 0.9)"
       />
       <Path
-        d="M14 15.1666C18.1826 15.1666 21.7939 17.6121 23.4823 21.1512C23.8525 21.9273 24.0376 22.3153 23.8929 23.2136C23.795 23.8217 23.1784 24.7991 22.6717 25.1493C21.9232 25.6666 21.2266 25.6666 19.8333 25.6666H8.16668C6.77343 25.6666 6.07681 25.6666 5.32832 25.1493C4.82163 24.7991 4.20502 23.8217 4.1071 23.2136C3.96245 22.3153 4.14755 21.9273 4.51777 21.1512C6.2061 17.6121 9.81746 15.1666 14 15.1666Z"
-        fill="#2AD1CC"
+        d="M14 17C19.523 17 24 20.477 24 25C24 25.552 23.552 26 23 26H5C4.448 26 4 25.552 4 25C4 20.477 8.477 17 14 17Z"
+        fill="rgba(255, 255, 255, 0.9)"
       />
     </Svg>
   );
 };
 
-interface RoleCardProps {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-  onPress: () => void;
-  borderColor?: string;
-}
-
-const RoleCard: React.FC<RoleCardProps> = ({ icon, title, description, onPress, borderColor = 'border-white/30' }) => {
+// Chevron Right Icon
+const ChevronRight = () => {
   return (
-    <TouchableOpacity
-      onPress={onPress}
-      className={`bg-primary-blue border rounded-2xl p-4 mb-4 ${borderColor}`}
-      activeOpacity={0.8}
-    >
-      <View className="flex-row justify-between">
-        <View className="flex-1">
-          <View className="flex-row items-center mb-2">
-            <View className="mr-3">{icon}</View>
-            <Text className="text-white text-lg font-bold">{title}</Text>
-          </View>
-          <Text className="text-white/80 text-sm leading-5">{description}</Text>
-        </View>
-        <View className="ml-3 justify-center">
-          <ChevronRightIcon />
-        </View>
-      </View>
-    </TouchableOpacity>
+    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M9 6L15 12L9 18"
+        stroke="rgba(255, 255, 255, 0.7)"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
   );
 };
 
@@ -80,43 +90,358 @@ interface CreateAccountScreenProps {
 }
 
 export default function CreateAccountScreen({ onRoleSelect }: CreateAccountScreenProps) {
+  // Animation values
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  const cardScale1 = useRef(new Animated.Value(0.95)).current;
+  const cardScale2 = useRef(new Animated.Value(0.95)).current;
+  const cardOpacity1 = useRef(new Animated.Value(0)).current;
+  const cardOpacity2 = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    // Entrance animations
+    Animated.parallel([
+      // Title fade and slide
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      // Card 1 animation (delayed)
+      Animated.sequence([
+        Animated.delay(200),
+        Animated.parallel([
+          Animated.spring(cardScale1, {
+            toValue: 1,
+            tension: 50,
+            friction: 8,
+            useNativeDriver: true,
+          }),
+          Animated.timing(cardOpacity1, {
+            toValue: 1,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+        ]),
+      ]),
+      // Card 2 animation (more delayed)
+      Animated.sequence([
+        Animated.delay(350),
+        Animated.parallel([
+          Animated.spring(cardScale2, {
+            toValue: 1,
+            tension: 50,
+            friction: 8,
+            useNativeDriver: true,
+          }),
+          Animated.timing(cardOpacity2, {
+            toValue: 1,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+        ]),
+      ]),
+    ]).start();
+  }, []);
+
   const handleCandidatePress = () => {
-    onRoleSelect('candidate');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    // Press animation
+    Animated.sequence([
+      Animated.timing(cardScale1, {
+        toValue: 0.98,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(cardScale1, {
+        toValue: 1,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      onRoleSelect('candidate');
+    });
   };
 
   const handleRecruiterPress = () => {
-    onRoleSelect('recruiter');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    // Press animation
+    Animated.sequence([
+      Animated.timing(cardScale2, {
+        toValue: 0.98,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(cardScale2, {
+        toValue: 1,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      onRoleSelect('recruiter');
+    });
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-primary-blue" edges={['top', 'bottom']}>
-      <View className="flex-1">
-        <CircleIllustration />
+    <View style={styles.container}>
+      {/*
+        Background layers (from Figma):
+        1. Base: linear-gradient(145.78deg, cyan 10.62%, transparent 50.64%, purple 90.66%)
+        2. Overlay: linear-gradient(0deg, rgba(37, 99, 235, 0.8), rgba(37, 99, 235, 0.8))
 
-        <View className="flex-1 px-6 pt-12 justify-center">
-          <Text className="text-white text-6xl font-bold mb-3">
-            Create{'\n'}Your{'\n'}Account
-          </Text>
-          <Text className="text-white/90 text-base mb-12">
-            Choose your role to get started.
-          </Text>
+        The overlay blends with the base gradient to create the final effect
+      */}
 
-          <RoleCard
-            icon={<TargetIcon />}
-            title="Candidate"
-            description="Your AI-powered career companion for CV improvement, job matching, upskilling and well-being support."
-            onPress={handleCandidatePress}
-          />
+      {/* Base gradient layer: cyan to purple at 145.78deg */}
+      <LinearGradient
+        colors={[
+          '#06B6D4',  // Cyan (fully opaque for better visibility)
+          '#8B5CF6',  // Purple
+        ]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0.8, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+      {/* Blue overlay at 80% - this creates the blended effect */}
+      <View style={styles.blueOverlay} />
 
-          <RoleCard
-            icon={<UserIcon />}
-            title="Talent Partners"
-            description="Discover qualified talent, review stronger applications, and make faster hiring decisions with AI-enhanced support"
-            onPress={handleRecruiterPress}
-            borderColor="border-primary-cyan"
-          />
+      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+        {/* Decorative circle arc */}
+        <CircleArc />
+
+        <View style={styles.content}>
+          {/* Animated Title */}
+          <Animated.View
+            style={{
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }],
+            }}
+          >
+            <Text style={styles.title}>
+              Create{'\n'}Your{'\n'}Account
+            </Text>
+            <Text style={styles.subtitle}>
+              Choose your role to get started.
+            </Text>
+          </Animated.View>
+
+          {/* Candidate Card - Gradient with glass layers and borders */}
+          <Animated.View
+            style={[
+              styles.candidateCardOuter,
+              {
+                opacity: cardOpacity1,
+                transform: [{ scale: cardScale1 }],
+              },
+            ]}
+          >
+            <TouchableOpacity
+              onPress={handleCandidatePress}
+              activeOpacity={1}
+              accessibilityLabel="Select Candidate role"
+              accessibilityRole="button"
+            >
+              {/* Layer 1: Base gradient background */}
+              <LinearGradient
+                colors={['#06B6D4', '#8B5CF6']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 0.8, y: 1 }}
+                style={styles.candidateCardGradient}
+              >
+                {/* Blue overlay */}
+                <View style={styles.candidateCardOverlay}>
+                  {/* Layer 2: Inner glass effect with blur and white borders */}
+                  <BlurView intensity={12} tint="light" style={styles.candidateGlassInner}>
+                    <View style={styles.candidateGlassContent}>
+                      {/* Card content */}
+                      <View style={styles.cardContentPadded}>
+                        <View style={styles.cardRow}>
+                          <View style={styles.cardTextContainer}>
+                            <View style={styles.iconTitleRow}>
+                              <CandidateIcon />
+                              <Text style={styles.candidateTitle}>Candidate</Text>
+                            </View>
+                            <Text style={styles.cardDescription}>
+                              Your AI-powered career companion for CV improvement, job matching, interviews, AI career coach, upskilling and well-being support
+                            </Text>
+                          </View>
+                          <View style={styles.chevronContainer}>
+                            <ChevronRight />
+                          </View>
+                        </View>
+                      </View>
+                    </View>
+                  </BlurView>
+                </View>
+              </LinearGradient>
+            </TouchableOpacity>
+          </Animated.View>
+
+          {/* Talent Partners Card - Glass effect only */}
+          <Animated.View
+            style={[
+              styles.talentCardOuter,
+              {
+                opacity: cardOpacity2,
+                transform: [{ scale: cardScale2 }],
+              },
+            ]}
+          >
+            <TouchableOpacity
+              onPress={handleRecruiterPress}
+              activeOpacity={1}
+              accessibilityLabel="Select Talent Partners role"
+              accessibilityRole="button"
+            >
+              <BlurView intensity={15} tint="light" style={styles.talentCardBlur}>
+                <View style={styles.talentCardInner}>
+                  <View style={styles.cardRow}>
+                    <View style={styles.cardTextContainer}>
+                      <View style={styles.iconTitleRow}>
+                        <TalentIcon />
+                        <Text style={styles.talentTitle}>Tallent Partners</Text>
+                      </View>
+                      <Text style={styles.cardDescription}>
+                        Discover qualified talent, review higher-quality applications, and make faster, more confident hiring decisions with AI-enhanced support.
+                      </Text>
+                    </View>
+                    <View style={styles.chevronContainer}>
+                      <ChevronRight />
+                    </View>
+                  </View>
+                </View>
+              </BlurView>
+            </TouchableOpacity>
+          </Animated.View>
         </View>
-      </View>
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  blueOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(37, 99, 235, 0.8)',
+  },
+  safeArea: {
+    flex: 1,
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 25,
+    justifyContent: 'center',
+  },
+  title: {
+    fontSize: 52,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    lineHeight: 60,
+    marginBottom: 16,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.9)',
+    marginBottom: 48,
+    fontWeight: '400',
+  },
+  // Candidate Card Styles
+  candidateCardOuter: {
+    marginBottom: 16,
+    borderRadius: 20,
+    // Combined shadows: cyan glow + purple shadow
+    // box-shadow: 0px 0px 10px 2px #06B6D433
+    // box-shadow: 0px 5px 10px -2px #8B5CF673
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.45,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  candidateCardGradient: {
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  candidateCardOverlay: {
+    backgroundColor: 'rgba(37, 99, 235, 0.8)',
+    padding: 8,
+  },
+  candidateGlassInner: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    // Inner glass shadow: box-shadow: 0px 5px 10px -2px #2563EB40
+  },
+  candidateGlassContent: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  cardContentPadded: {
+    padding: 16,
+    paddingVertical: 18,
+  },
+  // Talent Partners Card Styles
+  talentCardOuter: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    // box-shadow: 0px 5px 10px -2px #2563EB40
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  talentCardBlur: {
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  talentCardInner: {
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    padding: 16,
+    paddingVertical: 20,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  // Shared Card Styles
+  cardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  cardTextContainer: {
+    flex: 1,
+  },
+  iconTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    gap: 12,
+  },
+  candidateTitle: {
+    fontSize: 22,
+    fontWeight: '600',
+    color: '#2DD4BF', // Teal/cyan color for candidate
+  },
+  talentTitle: {
+    fontSize: 22,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  cardDescription: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.85)',
+    lineHeight: 21,
+  },
+  chevronContainer: {
+    paddingLeft: 12,
+    justifyContent: 'center',
+  },
+});

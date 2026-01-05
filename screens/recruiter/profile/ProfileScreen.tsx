@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Switch, ActivityIndicator } from 'react-native';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
 import { useSelector } from 'react-redux';
+import * as Haptics from 'expo-haptics';
 import { RootState } from '../../../store/store';
 import { useGetRecruiterProfileQuery, useGetMyProfileQuery } from '../../../services/api';
 import ProfilePictureUpload from '../../../components/profile/ProfilePictureUpload';
@@ -33,9 +34,16 @@ const SettingsItem: React.FC<SettingsItemProps> = ({
   showArrow = true,
   rightElement,
 }) => {
+  const handlePress = () => {
+    if (onPress) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      onPress();
+    }
+  };
+
   return (
     <TouchableOpacity
-      onPress={onPress}
+      onPress={handlePress}
       disabled={!onPress}
       className="flex-row items-center py-4 border-b border-gray-100"
       activeOpacity={0.7}
@@ -81,6 +89,11 @@ const SettingsToggleItem: React.FC<SettingsToggleItemProps> = ({
   value,
   onValueChange,
 }) => {
+  const handleValueChange = (newValue: boolean) => {
+    Haptics.selectionAsync();
+    onValueChange(newValue);
+  };
+
   return (
     <View className="flex-row items-center py-4 border-b border-gray-100">
       <View
@@ -95,7 +108,7 @@ const SettingsToggleItem: React.FC<SettingsToggleItemProps> = ({
       </View>
       <Switch
         value={value}
-        onValueChange={onValueChange}
+        onValueChange={handleValueChange}
         trackColor={{ false: '#D1D5DB', true: '#93C5FD' }}
         thumbColor={value ? '#437EF4' : '#F3F4F6'}
       />
@@ -287,6 +300,9 @@ export default function ProfileScreen({
                 elevation: 3,
               }}
               activeOpacity={0.8}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
             >
               <Text className="text-white font-bold text-sm">Edit Profile</Text>
             </TouchableOpacity>
@@ -584,7 +600,10 @@ export default function ProfileScreen({
           {/* Logout Button */}
           {onLogout && (
             <TouchableOpacity
-              onPress={onLogout}
+              onPress={() => {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                onLogout();
+              }}
               className="bg-white border border-red-200 rounded-2xl py-4 mb-4 flex-row items-center justify-center"
               style={{
                 shadowColor: '#000',
@@ -607,6 +626,9 @@ export default function ProfileScreen({
               <Text className="text-red-600 font-bold text-base">Logout</Text>
             </TouchableOpacity>
           )}
+
+          {/* Bottom padding for navbar */}
+          <View style={{ height: 100 }} />
         </View>
       </ScrollView>
     </TalentPartnerLayout>

@@ -4,7 +4,7 @@
     "slug": "cpdashai",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/appIcon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
@@ -42,12 +42,25 @@
       ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "single"
     },
     "scheme": "cpdashai",
     "plugins": [
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-router",
+      [
+        "@stripe/stripe-react-native",
+        {
+          "merchantIdentifier": "merchant.com.chawlasolutions.cpdashai",
+          "enableGooglePay": true
+        }
+      ]
     ],
+    "experiments": {
+      "typedRoutes": true
+    },
     "extra": {
       "eas": {
         "projectId": "cec3f25c-3e84-4ece-9d05-4b46175d9d62"

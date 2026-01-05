@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
+import * as Haptics from 'expo-haptics';
 import TickIcon from '../../../assets/images/jobs/tick.svg';
 import CrossIcon from '../../../assets/images/jobs/cross.svg';
 import IdeaIcon from '../../../assets/images/homepage/idea.svg';
@@ -26,6 +27,7 @@ import {
   useGetMyApplicationsQuery,
 } from '../../../services/api';
 import CandidateLayout from '../../../components/layouts/CandidateLayout';
+import CandidateNavBar from '../../../components/CandidateNavBar';
 import { useAlert } from '../../../contexts/AlertContext';
 
 interface JobDetailsScreenNewProps {
@@ -304,7 +306,10 @@ export default function JobDetailsScreen({ jobId, onBack, onNavigateToProfile, a
       <View className="flex-1 bg-gray-50 items-center justify-center px-6">
         <Text className="text-gray-600 text-lg font-semibold mb-2">Job Not Found</Text>
         <TouchableOpacity
-          onPress={onBack}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            onBack?.();
+          }}
           className="bg-primary-blue rounded-xl py-3 px-6 mt-4"
         >
           <Text className="text-white font-semibold">Go Back</Text>
@@ -315,15 +320,19 @@ export default function JobDetailsScreen({ jobId, onBack, onNavigateToProfile, a
 
   return (
     <CandidateLayout
-      activeTab={activeTab}
-      onTabChange={onTabChange}
       showBackButton={true}
       onBack={onBack}
-      title="Job Details"
-      subtitle={job?.companyName}
+      headerTitle="Job Details"
+      headerSubtitle={job?.companyName}
       showSearch={false}
     >
-      <View className="px-5 py-5">
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ paddingBottom: 120 }}
+        showsVerticalScrollIndicator={false}
+        onScrollBeginDrag={() => Haptics.selectionAsync()}
+      >
+        <View className="px-5 py-5">
           {/* Match Score Card - Only show if user has applied and not withdrawn */}
           {match && applicationId && applicationStatus !== 'withdrawn' && (
             <View className="bg-white rounded-2xl mb-4" style={{ borderWidth: 2, borderColor: getBadgeColor(match.matchPercentage) }}>
@@ -576,7 +585,10 @@ export default function JobDetailsScreen({ jobId, onBack, onNavigateToProfile, a
           <View className="flex-row gap-3 mb-6">
             {canWithdraw ? (
               <TouchableOpacity
-                onPress={handleWithdraw}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  handleWithdraw();
+                }}
                 disabled={isWithdrawing}
                 activeOpacity={0.8}
                 style={{ flex: 1 }}
@@ -601,7 +613,10 @@ export default function JobDetailsScreen({ jobId, onBack, onNavigateToProfile, a
               </View>
             ) : applicationStatus === 'withdrawn' ? (
               <TouchableOpacity
-                onPress={() => setShowApplicationModal(true)}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  setShowApplicationModal(true);
+                }}
                 disabled={isApplying}
                 className="flex-1"
               >
@@ -619,7 +634,10 @@ export default function JobDetailsScreen({ jobId, onBack, onNavigateToProfile, a
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
-                onPress={() => setShowApplicationModal(true)}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  setShowApplicationModal(true);
+                }}
                 disabled={isApplying}
                 className="flex-1"
               >
@@ -638,7 +656,10 @@ export default function JobDetailsScreen({ jobId, onBack, onNavigateToProfile, a
             )}
 
             <TouchableOpacity
-              onPress={handleSaveToggle}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                handleSaveToggle();
+              }}
               disabled={isSaving || isUnsaving}
               className="px-6"
             >
@@ -655,6 +676,10 @@ export default function JobDetailsScreen({ jobId, onBack, onNavigateToProfile, a
             </TouchableOpacity>
           </View>
         </View>
+      </ScrollView>
+
+      {/* Bottom Nav Bar */}
+      <CandidateNavBar activeTab={activeTab} onTabPress={onTabChange} />
 
       {/* Application Modal */}
       <Modal
@@ -667,9 +692,12 @@ export default function JobDetailsScreen({ jobId, onBack, onNavigateToProfile, a
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           className="flex-1"
         >
-          <TouchableOpacity 
-            activeOpacity={1} 
-            onPress={() => setShowApplicationModal(false)}
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setShowApplicationModal(false);
+            }}
             className="flex-1 bg-black/50 justify-end"
           >
             <TouchableOpacity activeOpacity={1} onPress={(e) => e.stopPropagation()}>
@@ -692,20 +720,27 @@ export default function JobDetailsScreen({ jobId, onBack, onNavigateToProfile, a
                       textAlignVertical="top"
                       value={coverLetter}
                       onChangeText={setCoverLetter}
+                      onFocus={() => Haptics.selectionAsync()}
                       style={{ minHeight: 120 }}
                     />
                   </ScrollView>
 
                   <View className="flex-row gap-3">
                     <TouchableOpacity
-                      onPress={() => setShowApplicationModal(false)}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setShowApplicationModal(false);
+                      }}
                       className="flex-1 bg-gray-200 rounded-xl py-4 items-center"
                     >
                       <Text className="text-gray-700 font-semibold">Cancel</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      onPress={handleApply}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                        handleApply();
+                      }}
                       className="flex-1 bg-primary-blue rounded-xl py-4 items-center"
                       disabled={isApplying}
                     >

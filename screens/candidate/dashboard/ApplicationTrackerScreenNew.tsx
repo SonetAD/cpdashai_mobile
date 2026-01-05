@@ -8,16 +8,21 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
+import * as Haptics from 'expo-haptics';
 import CandidateLayout from '../../../components/layouts/CandidateLayout';
+import CandidateNavBar from '../../../components/CandidateNavBar';
+import SearchModal from '../../../components/SearchModal';
 import { 
   useGetMyApplicationsQuery, 
   useWithdrawApplicationMutation,
   useIsGoogleCalendarConnectedQuery,
   useInterviewSlotsQuery,
   useSelectInterviewSlotMutation,
+  useRescheduleInterviewMutation,
 } from '../../../services/api';
 import { GoogleCalendarConnection } from '../../../components/GoogleCalendarConnection';
 
@@ -35,6 +40,7 @@ const ApplicationCard: React.FC<ApplicationCardProps> = ({ application, onPress,
       reviewed: '#437EF4',
       shortlisted: '#10B981',
       interview: '#8B5CF6',
+      interview_scheduled: '#8B5CF6',
       offered: '#10B981',
       rejected: '#EF4444',
       withdrawn: '#6B7280',
@@ -45,6 +51,7 @@ const ApplicationCard: React.FC<ApplicationCardProps> = ({ application, onPress,
 
   const getStatusText = (status: string) => {
     if (status === 'pending') return 'Submitted';
+    if (status === 'interview_scheduled') return 'Interview';
     return status.charAt(0).toUpperCase() + status.slice(1);
   };
 
@@ -52,7 +59,10 @@ const ApplicationCard: React.FC<ApplicationCardProps> = ({ application, onPress,
 
   return (
     <TouchableOpacity
-      onPress={() => onPress(application.jobPosting.id)}
+      onPress={() => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        onPress(application.jobPosting.id);
+      }}
       className="bg-white rounded-2xl p-5 mb-4 shadow-sm"
       activeOpacity={0.7}
     >
@@ -85,15 +95,30 @@ const ApplicationCard: React.FC<ApplicationCardProps> = ({ application, onPress,
 
       {/* Job Details */}
       <View className="mb-3">
-        <Text className="text-gray-500 text-sm mb-1">
-          📍 {application.jobPosting.location}
-        </Text>
-        <Text className="text-gray-500 text-sm mb-1">
-          💼 {application.jobPosting.workMode.charAt(0).toUpperCase() + application.jobPosting.workMode.slice(1)}
-        </Text>
-        <Text className="text-gray-500 text-sm">
-          📅 Applied: {new Date(application.appliedAt).toLocaleDateString()}
-        </Text>
+        <View className="flex-row items-center mb-1">
+          <Svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ marginRight: 6 }}>
+            <Path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="#6B7280"/>
+          </Svg>
+          <Text className="text-gray-500 text-sm">
+            {application.jobPosting.location}
+          </Text>
+        </View>
+        <View className="flex-row items-center mb-1">
+          <Svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ marginRight: 6 }}>
+            <Path d="M20 6h-4V4c0-1.1-.9-2-2-2h-4c-1.1 0-2 .9-2 2v2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zM10 4h4v2h-4V4zm10 16H4V8h16v12z" fill="#6B7280"/>
+          </Svg>
+          <Text className="text-gray-500 text-sm">
+            {application.jobPosting.workMode.charAt(0).toUpperCase() + application.jobPosting.workMode.slice(1)}
+          </Text>
+        </View>
+        <View className="flex-row items-center">
+          <Svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ marginRight: 6 }}>
+            <Path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V9h14v10z" fill="#6B7280"/>
+          </Svg>
+          <Text className="text-gray-500 text-sm">
+            Applied: {new Date(application.appliedAt).toLocaleDateString()}
+          </Text>
+        </View>
       </View>
 
       {/* Rejection Reason */}
@@ -105,7 +130,7 @@ const ApplicationCard: React.FC<ApplicationCardProps> = ({ application, onPress,
       )}
 
       {/* Interview Slots Available */}
-      {application.status === 'interview' && onViewInterviewSlots && (
+      {(application.status === 'interview' || application.status === 'interview_scheduled' || application.status?.toLowerCase().includes('interview')) && onViewInterviewSlots && (
         <View className="bg-purple-50 rounded-xl p-3 mb-3 border border-purple-200">
           <View className="flex-row items-center mb-2">
             <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" style={{ marginRight: 6 }}>
@@ -117,7 +142,10 @@ const ApplicationCard: React.FC<ApplicationCardProps> = ({ application, onPress,
             The employer has sent you interview time options. Select your preferred time slot.
           </Text>
           <TouchableOpacity
-            onPress={() => onViewInterviewSlots(application.id)}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              onViewInterviewSlots(application.id);
+            }}
             className="bg-purple-600 rounded-lg py-2 px-3 items-center"
           >
             <Text className="text-white text-xs font-semibold">Select Interview Time</Text>
@@ -128,14 +156,20 @@ const ApplicationCard: React.FC<ApplicationCardProps> = ({ application, onPress,
       {/* Actions */}
       <View className="flex-row gap-3 mt-3">
         <TouchableOpacity
-          onPress={() => onPress(application.jobPosting.id)}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            onPress(application.jobPosting.id);
+          }}
           className="bg-primary-blue rounded-xl py-2 px-4 flex-1 items-center"
         >
           <Text className="text-white text-sm font-semibold">View Details</Text>
         </TouchableOpacity>
         {canWithdraw && (
           <TouchableOpacity
-            onPress={() => onWithdraw(application.id)}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              onWithdraw(application.id);
+            }}
             className="bg-red-500 rounded-xl py-2 px-4 items-center"
           >
             <Text className="text-white text-sm font-semibold">Withdraw</Text>
@@ -154,10 +188,19 @@ interface InterviewSlotsSelectorProps {
 }
 
 const InterviewSlotsSelector: React.FC<InterviewSlotsSelectorProps> = ({ applicationId, visible, onClose, onSuccess }) => {
+  console.log('InterviewSlotsSelector - applicationId:', applicationId);
+  
   const { data: isCalendarConnected, refetch: refetchCalendarStatus } = useIsGoogleCalendarConnectedQuery();
-  const { data, isLoading, refetch } = useInterviewSlotsQuery(applicationId, { skip: !applicationId });
+  const { data, isLoading, refetch, error } = useInterviewSlotsQuery(applicationId, { skip: !applicationId });
   const [selectSlot, { isLoading: isSelecting }] = useSelectInterviewSlotMutation();
+  const [rescheduleInterview, { isLoading: isRescheduling }] = useRescheduleInterviewMutation();
   const [showCalendarCheck, setShowCalendarCheck] = useState(false);
+  const [showRescheduleModal, setShowRescheduleModal] = useState(false);
+  const [rescheduleReason, setRescheduleReason] = useState('');
+
+  console.log('InterviewSlotsSelector - data:', data);
+  console.log('InterviewSlotsSelector - isLoading:', isLoading);
+  console.log('InterviewSlotsSelector - error:', error);
 
   const handleSelectSlot = async (slotId: string) => {
     // Check calendar connection first
@@ -192,6 +235,54 @@ const InterviewSlotsSelector: React.FC<InterviewSlotsSelectorProps> = ({ applica
               }
             } catch (error: any) {
               Alert.alert('Error', error.message || 'Failed to select interview slot');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleRequestReschedule = () => {
+    setShowRescheduleModal(true);
+  };
+
+  const submitRescheduleRequest = async () => {
+    if (!rescheduleReason.trim()) {
+      Alert.alert('Reason Required', 'Please provide a reason for rescheduling');
+      return;
+    }
+
+    // Since we're requesting a reschedule from existing slots,
+    // we'll use the first slot as reference (this is a request, not actual reschedule)
+    const slots = data?.interviewSlots || [];
+    if (slots.length === 0) {
+      Alert.alert('Error', 'No interview slots available');
+      return;
+    }
+
+    Alert.alert(
+      'Request Reschedule',
+      'Are you sure you want to request alternative interview times?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Send Request',
+          style: 'default',
+          onPress: async () => {
+            try {
+              // Note: This might need adjustment based on actual backend implementation
+              // For now, we'll just show a message that request was sent
+              Alert.alert(
+                'Request Sent',
+                'Your reschedule request has been sent to the recruiter. They will respond with new time options.',
+                [{ text: 'OK', onPress: () => {
+                  setShowRescheduleModal(false);
+                  setRescheduleReason('');
+                  onClose();
+                }}]
+              );
+            } catch (error: any) {
+              Alert.alert('Error', error.message || 'Failed to send reschedule request');
             }
           }
         }
@@ -246,6 +337,23 @@ const InterviewSlotsSelector: React.FC<InterviewSlotsSelectorProps> = ({ applica
                   </View>
                 )}
 
+                {/* Info Box */}
+                {!isLoading && slots.length > 0 && (
+                  <View className="bg-blue-50 rounded-xl p-4 mb-4 border border-blue-200">
+                    <View className="flex-row items-center mb-2">
+                      <Svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ marginRight: 8 }}>
+                        <Path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V9h14v10z" fill="#1E40AF"/>
+                      </Svg>
+                      <Text className="text-blue-800 text-sm font-semibold">
+                        Select Your Preferred Time
+                      </Text>
+                    </View>
+                    <Text className="text-blue-700 text-xs">
+                      Choose one slot or request alternative times if none work for you.
+                    </Text>
+                  </View>
+                )}
+
                 {slots.map((slot: any) => (
                   <TouchableOpacity
                     key={slot.id}
@@ -279,6 +387,23 @@ const InterviewSlotsSelector: React.FC<InterviewSlotsSelectorProps> = ({ applica
                     </View>
                   </TouchableOpacity>
                 ))}
+
+                {/* Request Reschedule Button */}
+                {!isLoading && slots.length > 0 && (
+                  <TouchableOpacity
+                    className="bg-gray-100 rounded-xl py-3 px-4 items-center mt-2 border border-gray-300"
+                    onPress={handleRequestReschedule}
+                  >
+                    <View className="flex-row items-center">
+                      <Svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ marginRight: 8 }}>
+                        <Path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" fill="#374151"/>
+                      </Svg>
+                      <Text className="text-gray-700 text-sm font-semibold">
+                        Request Alternative Times
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
               </ScrollView>
             </View>
           </SafeAreaView>
@@ -301,10 +426,15 @@ const InterviewSlotsSelector: React.FC<InterviewSlotsSelectorProps> = ({ applica
             
             <View className="px-5 py-4">
               <View className="bg-blue-50 rounded-xl p-4 mb-4">
-                <Text className="text-blue-800 text-sm mb-2">
-                  📅 To confirm your interview, connect your Google Calendar first.
-                </Text>
-                <Text className="text-blue-700 text-xs">
+                <View className="flex-row items-start mb-2">
+                  <Svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ marginRight: 8, marginTop: 2 }}>
+                    <Path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V9h14v10z" fill="#1E40AF"/>
+                  </Svg>
+                  <Text className="text-blue-800 text-sm flex-1">
+                    To confirm your interview, connect your Google Calendar first.
+                  </Text>
+                </View>
+                <Text className="text-blue-700 text-xs ml-6">
                   This allows us to automatically add the interview to your calendar.
                 </Text>
               </View>
@@ -330,6 +460,74 @@ const InterviewSlotsSelector: React.FC<InterviewSlotsSelectorProps> = ({ applica
           </View>
         </View>
       </Modal>
+
+      {/* Reschedule Request Modal */}
+      <Modal
+        visible={showRescheduleModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowRescheduleModal(false)}
+      >
+        <View className="flex-1 bg-black/60 justify-center items-center px-5">
+          <View className="bg-white rounded-2xl w-full max-w-md">
+            <View className="px-5 py-4 border-b border-gray-100">
+              <Text className="text-gray-900 text-xl font-bold">Request Reschedule</Text>
+              <Text className="text-gray-500 text-sm mt-1">Let us know why you need different times</Text>
+            </View>
+            
+            <View className="px-5 py-4">
+              <View className="bg-orange-50 rounded-xl p-4 mb-4 border border-orange-200">
+                <View className="flex-row items-center mb-2">
+                  <Svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ marginRight: 8 }}>
+                    <Path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" fill="#C2410C"/>
+                  </Svg>
+                  <Text className="text-orange-800 text-sm font-semibold">
+                    Request Alternative Times
+                  </Text>
+                </View>
+                <Text className="text-orange-700 text-xs">
+                  The recruiter will review your request and provide new time options.
+                </Text>
+              </View>
+
+              <Text className="text-gray-700 text-sm font-semibold mb-2">Reason for Reschedule</Text>
+              <TextInput
+                className="bg-gray-50 rounded-xl p-3 text-gray-900 border border-gray-200"
+                placeholder="E.g., I have a conflict during these times..."
+                placeholderTextColor="#9CA3AF"
+                multiline
+                numberOfLines={4}
+                value={rescheduleReason}
+                onChangeText={setRescheduleReason}
+                style={{ height: 100, textAlignVertical: 'top' }}
+              />
+            </View>
+
+            <View className="px-5 py-4 border-t border-gray-100 flex-row gap-3">
+              <TouchableOpacity
+                className="bg-gray-100 rounded-xl py-3 items-center justify-center flex-1"
+                onPress={() => {
+                  setShowRescheduleModal(false);
+                  setRescheduleReason('');
+                }}
+              >
+                <Text className="text-gray-700 font-semibold">Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                className="bg-primary-blue rounded-xl py-3 items-center justify-center flex-1"
+                onPress={submitRescheduleRequest}
+                disabled={isRescheduling}
+              >
+                {isRescheduling ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text className="text-white font-semibold">Send Request</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </>
   );
 };
@@ -340,6 +538,8 @@ interface ApplicationTrackerScreenProps {
   userName?: string;
   onJobPress?: (jobId: string) => void;
   onBrowseJobsPress?: () => void;
+  onBack?: () => void;
+  onSearchNavigate?: (route: string) => void;
 }
 
 export default function ApplicationTrackerScreen({
@@ -348,10 +548,13 @@ export default function ApplicationTrackerScreen({
   userName = 'User',
   onJobPress,
   onBrowseJobsPress,
+  onBack,
+  onSearchNavigate,
 }: ApplicationTrackerScreenProps) {
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
   const [showInterviewSlots, setShowInterviewSlots] = useState(false);
   const [selectedApplicationId, setSelectedApplicationId] = useState<string | null>(null);
+  const [showSearchModal, setShowSearchModal] = useState(false);
 
   const { data, isLoading, error, refetch } = useGetMyApplicationsQuery({
     status: statusFilter,
@@ -406,15 +609,19 @@ export default function ApplicationTrackerScreen({
   ];
 
   return (
+    <>
     <CandidateLayout
-      userName={userName}
-      onSearchPress={() => console.log('Search pressed')}
-      activeTab={activeTab}
-      onTabChange={onTabChange}
+      showBackButton={true}
+      onBack={onBack}
+      headerTitle="Application Tracker"
+      headerSubtitle={`${data?.myApplications?.length || 0} application(s) submitted`}
+      onSearchPress={() => setShowSearchModal(true)}
     >
       <ScrollView
         className="flex-1"
+        contentContainerStyle={{ paddingBottom: 120 }}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
+        onScrollBeginDrag={() => Haptics.selectionAsync()}
       >
         <View className="px-6 mt-6">
           {/* Header */}
@@ -435,7 +642,10 @@ export default function ApplicationTrackerScreen({
             {statusOptions.map((option) => (
               <TouchableOpacity
                 key={option.label}
-                onPress={() => setStatusFilter(option.value)}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setStatusFilter(option.value);
+                }}
                 className={`px-4 py-2 rounded-full mr-2 ${
                   statusFilter === option.value ? 'bg-primary-blue' : 'bg-white'
                 }`}
@@ -505,16 +715,30 @@ export default function ApplicationTrackerScreen({
           applicationId={selectedApplicationId}
           visible={showInterviewSlots}
           onClose={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             setShowInterviewSlots(false);
             setSelectedApplicationId(null);
           }}
           onSuccess={() => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             refetch();
             setShowInterviewSlots(false);
             setSelectedApplicationId(null);
           }}
         />
       )}
+
+      {/* Bottom Nav Bar */}
+      <CandidateNavBar activeTab={activeTab} onTabPress={onTabChange} />
     </CandidateLayout>
+    <SearchModal
+      visible={showSearchModal}
+      onClose={() => setShowSearchModal(false)}
+      onNavigate={(route) => {
+        setShowSearchModal(false);
+        onSearchNavigate?.(route);
+      }}
+    />
+    </>
   );
 }

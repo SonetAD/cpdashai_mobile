@@ -20,9 +20,12 @@ import {
   useGetMyProfileQuery,
   useUploadCandidateProfilePictureMutation,
   useUploadRecruiterProfilePictureMutation,
+  useDeleteCandidateProfilePictureMutation,
+  useDeleteRecruiterProfilePictureMutation,
 } from '../../services/api';
 import { useAlert } from '../../contexts/AlertContext';
 import Svg, { Path, Circle } from 'react-native-svg';
+import DefaultAvatar from '../../assets/images/default.svg';
 
 interface ProfilePictureUploadProps {
   currentPictureUrl?: string;
@@ -78,6 +81,10 @@ export default function ProfilePictureUpload({
   // Upload mutations
   const [uploadCandidateProfilePicture] = useUploadCandidateProfilePictureMutation();
   const [uploadRecruiterProfilePicture] = useUploadRecruiterProfilePictureMutation();
+
+  // Delete mutations
+  const [deleteCandidateProfilePicture] = useDeleteCandidateProfilePictureMutation();
+  const [deleteRecruiterProfilePicture] = useDeleteRecruiterProfilePictureMutation();
 
   // Get the current profile picture URL
   const getProfilePictureUrl = () => {
@@ -219,6 +226,10 @@ export default function ProfilePictureUpload({
         alertMessage = 'Your session has expired. Please login again.';
       } else if (error.message?.includes('Invalid file format')) {
         alertMessage = 'Invalid image format. Please use JPG, PNG, GIF or WebP images.';
+      } else if (error.originalStatus === 413 || error.message?.includes('413') || error.message?.includes('Entity Too Large')) {
+        alertMessage = 'Image is too large. Please choose a smaller image (under 3MB recommended).';
+      } else if (error.status === 'PARSING_ERROR' && error.originalStatus === 413) {
+        alertMessage = 'Image is too large. Please choose a smaller image (under 3MB recommended).';
       }
 
       showAlert({
@@ -252,9 +263,7 @@ export default function ProfilePictureUpload({
               />
             ) : (
               <View style={[styles.initialsContainer, { width: size, height: size }]}>
-                <Text style={[styles.initialsText, { fontSize: size * 0.35 }]}>
-                  {initials}
-                </Text>
+                <DefaultAvatar width={size} height={size} />
               </View>
             )}
 
@@ -326,9 +335,45 @@ export default function ProfilePictureUpload({
                       {
                         text: 'Remove',
                         style: 'destructive',
-                        onPress: () => {
-                          // TODO: Implement remove profile picture API call
-                          setPreviewImage(null);
+                        onPress: async () => {
+                          try {
+                            setUploading(true);
+                            let response: any;
+
+                            if (userRole === 'candidate') {
+                              response = await deleteCandidateProfilePicture().unwrap();
+                            } else if (userRole === 'recruiter' || userRole === 'talentpartner') {
+                              response = await deleteRecruiterProfilePicture().unwrap();
+                            }
+
+                            const result = response?.deleteCandidateProfilePicture || response?.deleteRecruiterProfilePicture;
+
+                            if (result?.__typename === 'SuccessType') {
+                              setPreviewImage(null);
+                              showAlert({
+                                type: 'success',
+                                title: 'Success',
+                                message: result.message || 'Profile picture removed successfully',
+                                buttons: [{ text: 'OK', style: 'default' }],
+                              });
+                              // Refetch profile to update UI
+                              if (refetchProfile) {
+                                await refetchProfile();
+                              }
+                            } else {
+                              throw new Error(result?.message || 'Failed to remove profile picture');
+                            }
+                          } catch (error: any) {
+                            console.error('Error deleting profile picture:', error);
+                            showAlert({
+                              type: 'error',
+                              title: 'Error',
+                              message: error.message || 'Failed to remove profile picture. Please try again.',
+                              buttons: [{ text: 'OK', style: 'default' }],
+                            });
+                          } finally {
+                            setUploading(false);
+                          }
                         },
                       },
                     ],

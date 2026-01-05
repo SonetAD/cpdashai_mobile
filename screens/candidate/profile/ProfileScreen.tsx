@@ -1,46 +1,25 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, RefreshControl } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, ScrollView, RefreshControl, StyleSheet, Animated, Pressable } from 'react-native';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../../store/store';
-import Svg, { Path } from 'react-native-svg';
-import UserIcon from '../../../assets/images/userIcon.svg';
-import MailIcon from '../../../assets/images/mailIcon.svg';
-import CallIcon from '../../../assets/images/callIcon.svg';
-import UserQuestionIcon from '../../../assets/images/userQuestionWhite.svg';
+import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg';
+import * as Haptics from 'expo-haptics';
 import CandidateLayout from '../../../components/layouts/CandidateLayout';
 import SearchModal from '../../../components/SearchModal';
 import SettingsScreen from './SettingsScreen';
 import ProfilePictureUpload from '../../../components/profile/ProfilePictureUpload';
-import ProfileBannerUpload from '../../../components/profile/ProfileBannerUpload';
-import { useCheckSubscriptionStatusQuery, useGetMyProfileQuery } from '../../../services/api';
+import { useCheckSubscriptionStatusQuery, useGetMyProfileQuery, useGetMySubscriptionQuery, useGetMyResumesQuery } from '../../../services/api';
 import { useAlert } from '../../../contexts/AlertContext';
 
-interface ProfileFieldProps {
-  icon: React.ReactNode;
-  value: string;
-}
+// Import icons
+import LogoutIcon from '../../../assets/images/logoutIcon.svg';
 
-const ProfileField: React.FC<ProfileFieldProps> = ({ icon, value }) => {
-  return (
-    <View className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-4 mb-3 flex-row items-center">
-      <View className="mr-3">{icon}</View>
-      <Text className="text-gray-400 text-sm flex-1">{value}</Text>
-    </View>
-  );
-};
-
-const SettingsIcon = () => (
+// Chevron Right Icon
+const ChevronRightIcon = () => (
   <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
     <Path
-      d="M12 15a3 3 0 100-6 3 3 0 000 6z"
-      stroke="#437EF4"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <Path
-      d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"
-      stroke="#437EF4"
+      d="M9 18l6-6-6-6"
+      stroke="#9CA3AF"
       strokeWidth={2}
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -48,33 +27,200 @@ const SettingsIcon = () => (
   </Svg>
 );
 
+// Gradient Arc around avatar - matches Figma design
+// border: 5px solid; border-image-source: linear-gradient(180deg, #0E3FC8 0%, #8C6BFF 100%);
+const GradientArc = ({ size = 140 }: { size?: number }) => {
+  const strokeWidth = 7;
+  const radius = (size - strokeWidth) / 2;
+  const center = size / 2;
+
+  // Create arc path (incomplete circle with gap at 9 o'clock position)
+  // In SVG: 0°=right, 90°=down, 180°=left, 270°=up
+  // Gap from 8 to 10 o'clock = around 150-210 degrees
+  const startAngle = 210; // Start at 10 o'clock
+  const endAngle = 150; // End at 8 o'clock
+  const largeArcFlag = 1; // Use large arc
+
+  const startRad = (startAngle * Math.PI) / 180;
+  const endRad = (endAngle * Math.PI) / 180;
+
+  const startX = center + radius * Math.cos(startRad);
+  const startY = center + radius * Math.sin(startRad);
+  const endX = center + radius * Math.cos(endRad);
+  const endY = center + radius * Math.sin(endRad);
+
+  const pathD = `M ${startX} ${startY} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${endX} ${endY}`;
+
+  return (
+    <Svg width={size} height={size} style={styles.gradientArc}>
+      <Defs>
+        <LinearGradient id="arcGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+          <Stop offset="0%" stopColor="#0E3FC8" />
+          <Stop offset="100%" stopColor="#8C6BFF" />
+        </LinearGradient>
+      </Defs>
+      <Path
+        d={pathD}
+        stroke="url(#arcGradient)"
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        fill="none"
+      />
+    </Svg>
+  );
+};
+
+interface MenuItemProps {
+  label: string;
+  onPress: () => void;
+  showChevron?: boolean;
+  icon?: React.ReactNode;
+  isLast?: boolean;
+  isDestructive?: boolean;
+}
+
+const MenuItem: React.FC<MenuItemProps> = ({ label, onPress, showChevron = true, icon, isLast = false, isDestructive = false }) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.98,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
+  };
+
+  return (
+    <Pressable
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      onPress={() => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        onPress();
+      }}
+    >
+      <Animated.View
+        className={`flex-row items-center justify-between py-4 ${!isLast ? 'border-b border-gray-100' : ''}`}
+        style={{ transform: [{ scale: scaleAnim }] }}
+      >
+        <Text className={`text-base ${isDestructive ? 'text-red-500' : 'text-gray-900'}`}>{label}</Text>
+        {showChevron ? <ChevronRightIcon /> : icon}
+      </Animated.View>
+    </Pressable>
+  );
+};
+
 interface ProfileScreenProps {
   activeTab?: string;
   onTabChange?: (tabId: string) => void;
-  onViewFullProfile?: () => void;
+  onAIAssistantPress?: () => void;
   onLogout?: () => void;
   onViewPricing?: () => void;
+  onViewBillingHistory?: () => void;
+  onViewFullProfile?: () => void;
+  onSearchNavigate?: (route: string) => void;
 }
 
 export default function ProfileScreen({
   activeTab = 'profile',
   onTabChange,
-  onViewFullProfile,
+  onAIAssistantPress,
   onLogout,
   onViewPricing,
+  onViewBillingHistory,
+  onViewFullProfile,
+  onSearchNavigate,
 }: ProfileScreenProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Animation values
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+  const avatarScale = useRef(new Animated.Value(1)).current;
+  const cardFadeAnim = useRef(new Animated.Value(0)).current;
+  const cardSlideAnim = useRef(new Animated.Value(30)).current;
+
   // Get user data from Redux store
   const user = useSelector((state: RootState) => state.auth.user);
   const userName = user?.email?.split('@')[0] || 'User';
 
-  // Get subscription status
-  const { data: subscriptionData, refetch: refetchSubscription } = useCheckSubscriptionStatusQuery();
+  // Get profile and subscription data
+  const { refetch: refetchSubscriptionStatus } = useCheckSubscriptionStatusQuery();
   const { data: profileData, refetch: refetchProfile } = useGetMyProfileQuery();
+  const { data: subscriptionData, refetch: refetchSubscription } = useGetMySubscriptionQuery();
+  const { data: resumesData, refetch: refetchResumes } = useGetMyResumesQuery();
   const { showAlert } = useAlert();
+
+  const subscription = subscriptionData?.mySubscription;
+
+  // Check if user has uploaded a resume
+  const hasResume = resumesData?.myResumes && resumesData.myResumes.length > 0;
+
+  // Entrance animations
+  useEffect(() => {
+    // Profile section fade in
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 400,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    // Card section fade in with delay
+    setTimeout(() => {
+      Animated.parallel([
+        Animated.timing(cardFadeAnim, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.timing(cardSlideAnim, {
+          toValue: 0,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }, 150);
+  }, []);
+
+  // Avatar press animations
+  const handleAvatarPressIn = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Animated.spring(avatarScale, {
+      toValue: 0.95,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
+  };
+
+  const handleAvatarPressOut = () => {
+    Animated.spring(avatarScale, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
+  };
+
   // Generate initials from user name
   const getInitials = () => {
     if (user?.firstName && user?.lastName) {
@@ -97,48 +243,52 @@ export default function ProfileScreen({
     return userName;
   };
 
-  // Handle refresh
+  // Get job title from profile data
+  const getJobTitle = () => {
+    if (profileData?.myProfile?.__typename === 'CandidateType') {
+      const profile = profileData.myProfile as any;
+      return profile.currentJobTitle || profile.headline || 'Job Seeker';
+    }
+    return 'Job Seeker';
+  };
+
+  // Handle refresh with haptic feedback
   const handleRefresh = async () => {
     setRefreshing(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       const refetchPromises = [];
-      if (refetchSubscription) refetchPromises.push(refetchSubscription().catch(e => console.log('Subscription refetch skipped')));
-      if (refetchProfile) refetchPromises.push(refetchProfile().catch(e => console.log('Profile refetch skipped')));
+      if (refetchSubscriptionStatus) refetchPromises.push(refetchSubscriptionStatus().catch(() => console.log('Subscription status refetch skipped')));
+      if (refetchSubscription) refetchPromises.push(refetchSubscription().catch(() => console.log('Subscription refetch skipped')));
+      if (refetchProfile) refetchPromises.push(refetchProfile().catch(() => console.log('Profile refetch skipped')));
+      if (refetchResumes) refetchPromises.push(refetchResumes().catch(() => console.log('Resumes refetch skipped')));
       await Promise.all(refetchPromises);
+      // Success haptic on completion
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
       console.error('Error refreshing data:', error);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setRefreshing(false);
     }
   };
 
-  // Handle profile picture upload success
-  const handleProfilePictureUploadSuccess = async (imageUrl: string) => {
-    // Refetch profile to get the updated picture
+  // Handle profile picture upload success with haptic feedback
+  const handleProfilePictureUploadSuccess = async () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     try {
       const refetchPromises = [];
-      if (refetchSubscription) refetchPromises.push(refetchSubscription().catch(e => console.log('Subscription refetch skipped')));
-      if (refetchProfile) refetchPromises.push(refetchProfile().catch(e => console.log('Profile refetch skipped')));
+      if (refetchSubscription) refetchPromises.push(refetchSubscription().catch(() => console.log('Subscription refetch skipped')));
+      if (refetchProfile) refetchPromises.push(refetchProfile().catch(() => console.log('Profile refetch skipped')));
       await Promise.all(refetchPromises);
     } catch (error) {
       console.log('Error refetching after profile picture update:', error);
     }
   };
 
-  // Handle banner upload success
-  const handleBannerUploadSuccess = async (imageUrl: string) => {
-    // Refetch profile to get the updated banner
-    try {
-      if (refetchProfile) {
-        await refetchProfile();
-      }
-    } catch (error) {
-      console.log('Error refetching after banner update:', error);
-    }
-  };
-
   // Handle logout with confirmation
   const handleLogoutPress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     showAlert({
       type: 'warning',
       title: 'Confirm Logout',
@@ -165,14 +315,17 @@ export default function ProfileScreen({
       <SettingsScreen
         activeTab={activeTab}
         onTabChange={(tabId: string) => {
-          // If a different tab is selected, close settings and navigate
           if (tabId !== activeTab) {
             setShowSettings(false);
           }
           onTabChange?.(tabId);
         }}
-        onBack={() => setShowSettings(false)}
+        onBack={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          setShowSettings(false);
+        }}
         onViewPricing={onViewPricing}
+        onViewBillingHistory={onViewBillingHistory}
       />
     );
   }
@@ -180,183 +333,334 @@ export default function ProfileScreen({
   return (
     <>
       <CandidateLayout
-        userName={userName}
-        onSearchPress={() => setShowSearchModal(true)}
+        onSearchPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          setShowSearchModal(true);
+        }}
         activeTab={activeTab}
         onTabChange={onTabChange}
+        onAIAssistantPress={onAIAssistantPress}
+        headerTitle={hasResume ? "My Profile" : "Create Your Profile"}
+        headerSubtitle={hasResume ? "Your AI-powered career snapshot." : "Your AI-powered career snapshot is ready."}
       >
-      <ScrollView
-        className="flex-1"
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            colors={['#437EF4']}
-            tintColor="#437EF4"
-          />
-        }
-      >
-        {/* Profile Banner */}
-        <ProfileBannerUpload
-          height={150}
-          editable={true}
-          onUploadSuccess={handleBannerUploadSuccess}
-        />
-        
-        <View className="px-6 mt-6 pb-6">
-        {/* Avatar Section */}
-        <View className="items-center mb-6" style={{ marginTop: -40 }}>
-          <ProfilePictureUpload
-            initials={getInitials()}
-            size={80}
-            editable={true}
-            onUploadSuccess={handleProfilePictureUploadSuccess}
-          />
-          <Text className="text-gray-900 text-xl font-bold mb-1 mt-3">{getFullName()}</Text>
-          <Text className="text-gray-500 text-sm mb-1">
-            {user?.email || 'No email'}
-          </Text>
-          {user?.phoneNumber && (
-            <Text className="text-gray-500 text-sm">{user.phoneNumber}</Text>
-          )}
-          
-          {/* Profile Status Badge */}
-          {profileData?.myProfile?.__typename === 'CandidateType' && (
-            <View className="mt-3 bg-blue-50 border border-blue-200 rounded-full px-4 py-1.5">
-              <Text className="text-blue-700 text-xs font-semibold">
-                Profile Active
-              </Text>
-            </View>
-          )}
-        </View>
-
-        {/* Subscription Status Card */}
-        {subscriptionData?.subscriptionStatus && (
-          <TouchableOpacity
-            className="bg-gradient-to-r from-blue-500 to-cyan-500 rounded-xl p-4 mb-6"
-            activeOpacity={0.8}
-            onPress={onViewPricing}
+        <ScrollView
+          className="flex-1 bg-gray-50"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 140 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={['#437EF4']}
+              tintColor="#437EF4"
+            />
+          }
+        >
+          {/* Profile Avatar Section with entrance animation */}
+          <Animated.View
+            className="items-center mt-8 mb-8"
             style={{
-              backgroundColor: subscriptionData.subscriptionStatus.plan === 'free' ? '#F3F4F6' : '#DBEAFE',
-              borderWidth: 1,
-              borderColor: subscriptionData.subscriptionStatus.plan === 'free' ? '#E5E7EB' : '#93C5FD'
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }],
             }}
           >
-            <View className="flex-row items-center justify-between">
-              <View className="flex-1">
-                <View className="flex-row items-center mb-1">
-                  <Text className={`text-sm font-semibold ${
-                    subscriptionData.subscriptionStatus.plan === 'free' ? 'text-gray-600' : 'text-blue-700'
-                  }`}>
-                    Subscription Plan
+            <Pressable
+              onPressIn={handleAvatarPressIn}
+              onPressOut={handleAvatarPressOut}
+            >
+              <Animated.View style={[styles.avatarWrapper, { transform: [{ scale: avatarScale }] }]}>
+                {/* Gradient Arc */}
+                <GradientArc size={110} />
+                {/* Avatar with white ring */}
+                <View style={styles.avatarContainer}>
+                  <View style={styles.whiteRing}>
+                    <ProfilePictureUpload
+                      initials={getInitials()}
+                      size={80}
+                      editable={true}
+                      onUploadSuccess={handleProfilePictureUploadSuccess}
+                    />
+                  </View>
+                </View>
+              </Animated.View>
+            </Pressable>
+            <Text className="text-gray-900 text-2xl font-bold mt-4">{getFullName()}</Text>
+            <Text className="text-gray-500 text-sm mt-1">{getJobTitle()}</Text>
+            <Text className="text-gray-500 text-sm mt-0.5">{user?.email || 'No email'}</Text>
+
+            {/* Subscription Badge */}
+            {subscription && (
+              <View style={styles.subscriptionBadge}>
+                <View style={[
+                  styles.planBadge,
+                  subscription.plan === 'free' ? styles.freePlanBadge : styles.premiumPlanBadge
+                ]}>
+                  <Text style={[
+                    styles.planText,
+                    subscription.plan === 'free' ? styles.freePlanText : styles.premiumPlanText
+                  ]}>
+                    {subscription.plan === 'free' ? 'Free Plan' : `${subscription.plan} Plan`}
                   </Text>
-                  {subscriptionData.subscriptionStatus.plan !== 'free' && (
-                    <View className="bg-green-500 rounded-full px-2 py-0.5 ml-2">
-                      <Text className="text-white text-xs font-bold">ACTIVE</Text>
-                    </View>
+                  {subscription.isActive && subscription.plan !== 'free' && (
+                    <View style={styles.activeDot} />
                   )}
                 </View>
-                <Text className={`text-xl font-bold capitalize mb-2 ${
-                  subscriptionData.subscriptionStatus.plan === 'free' ? 'text-gray-900' : 'text-blue-900'
-                }`}>
-                  {subscriptionData.subscriptionStatus.plan || 'Free'} Plan
-                </Text>
-
-                {subscriptionData.subscriptionStatus.canUseAiFeatures ? (
-                  <View>
-                    <Text className="text-gray-600 text-xs mb-1">
-                      AI Resume Parses: {subscriptionData.subscriptionStatus.aiResumeParsesRemaining || 0} remaining
-                    </Text>
-                    <Text className="text-gray-600 text-xs">
-                      AI Improvements: {subscriptionData.subscriptionStatus.aiContentImprovementsRemaining || 0} remaining
-                    </Text>
-                  </View>
-                ) : (
-                  <Text className="text-gray-600 text-xs">
-                    Upgrade to unlock AI features
-                  </Text>
-                )}
-              </View>
-
-              <View className="items-center">
-                <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-                  <Path
-                    d="M9 18l6-6-6-6"
-                    stroke={subscriptionData.subscriptionStatus.plan === 'free' ? '#6B7280' : '#1D4ED8'}
-                    strokeWidth={2}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </Svg>
-              </View>
-            </View>
-
-            {subscriptionData.subscriptionStatus.currentPeriodEnd && subscriptionData.subscriptionStatus.plan !== 'free' && (
-              <View className="mt-3 pt-3 border-t border-gray-200">
-                <Text className="text-gray-500 text-xs">
-                  Next billing: {new Date(subscriptionData.subscriptionStatus.currentPeriodEnd).toLocaleDateString()}
-                </Text>
               </View>
             )}
-          </TouchableOpacity>
-        )}
 
-        {/* Profile Fields */}
-        <View className="mt-4">
-          <ProfileField
-            icon={<UserIcon width={20} height={20} />}
-            value={getFullName()}
-          />
-          <ProfileField
-            icon={<MailIcon width={20} height={20} />}
-            value={user?.email || 'No email'}
-          />
-          <ProfileField
-            icon={<CallIcon width={20} height={20} />}
-            value={user?.phoneNumber || 'No phone number'}
-          />
-        </View>
+            {/* View Full Profile Button */}
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                onViewFullProfile?.();
+              }}
+              style={({ pressed }) => [
+                styles.viewProfileButton,
+                pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }
+              ]}
+            >
+              <Text style={styles.viewProfileButtonText}>View Full Profile</Text>
+              <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+                <Path
+                  d="M9 18l6-6-6-6"
+                  stroke="#FFFFFF"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </Svg>
+            </Pressable>
+          </Animated.View>
 
-        {/* Action Buttons */}
-        <View className="flex-row gap-3 mt-6">
-          <TouchableOpacity
-            className="bg-primary-blue rounded-xl py-4 flex-1 items-center"
-            activeOpacity={0.8}
-            onPress={onViewFullProfile}
+          {/* Subscription Section */}
+          {subscription && subscription.plan !== 'free' && (
+            <Animated.View
+              className="px-4 mb-4"
+              style={{
+                opacity: cardFadeAnim,
+                transform: [{ translateY: cardSlideAnim }],
+              }}
+            >
+              <Text className="text-gray-900 text-lg font-bold mb-3">Subscription</Text>
+              <View className="bg-white rounded-2xl px-4" style={styles.card}>
+                {/* Cancellation Warning Banner */}
+                {(subscription.cancelAtPeriodEnd || subscription.status === 'canceled') && subscription.isActive && (
+                  <View style={{
+                    backgroundColor: '#FEF3C7',
+                    borderWidth: 1,
+                    borderColor: '#FCD34D',
+                    borderRadius: 12,
+                    padding: 12,
+                    marginTop: 12,
+                    marginBottom: 4,
+                  }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                      <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                        <Path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" stroke="#D97706" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                      </Svg>
+                      <Text style={{ fontSize: 13, fontWeight: '600', color: '#92400E', marginLeft: 6 }}>
+                        Won't Renew
+                      </Text>
+                    </View>
+                    <Text style={{ fontSize: 12, color: '#92400E' }}>
+                      Access until {new Date(subscription.currentPeriodEnd).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })}
+                    </Text>
+                  </View>
+                )}
+
+                {/* Current Plan Row */}
+                <View className="flex-row items-center justify-between py-4 border-b border-gray-100">
+                  <Text className="text-gray-600 text-base">Current Plan</Text>
+                  <View className="flex-row items-center">
+                    <Text className="text-gray-900 text-base font-semibold capitalize mr-2">
+                      {subscription.plan}
+                    </Text>
+                    {subscription.cancelAtPeriodEnd || subscription.status === 'canceled' ? (
+                      <View style={{ backgroundColor: '#FEF3C7', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 }}>
+                        <Text style={{ color: '#D97706', fontSize: 10, fontWeight: '700' }}>CANCELING</Text>
+                      </View>
+                    ) : subscription.isActive ? (
+                      <View className="bg-green-500 rounded px-2 py-0.5">
+                        <Text className="text-white text-xs font-bold">ACTIVE</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                </View>
+
+                {/* Manage Settings */}
+                <Pressable
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setShowSettings(true);
+                  }}
+                  className="flex-row items-center justify-between py-4"
+                >
+                  <Text className="text-primary-blue text-base">
+                    {subscription.cancelAtPeriodEnd || subscription.status === 'canceled'
+                      ? 'Manage Subscription'
+                      : 'Manage Subscription'}
+                  </Text>
+                  <ChevronRightIcon />
+                </Pressable>
+              </View>
+            </Animated.View>
+          )}
+
+          {/* Manage Account Section with entrance animation */}
+          <Animated.View
+            className="px-4"
+            style={{
+              opacity: cardFadeAnim,
+              transform: [{ translateY: cardSlideAnim }],
+            }}
           >
-            <Text className="text-white text-base font-semibold">
-              View Full Profile
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            className="bg-white border-2 border-primary-blue rounded-xl py-4 px-4 items-center justify-center"
-            activeOpacity={0.8}
-            onPress={() => setShowSettings(true)}
-          >
-            <SettingsIcon />
-          </TouchableOpacity>
-        </View>
-
-        {/* Logout Button */}
-        {onLogout && (
-          <TouchableOpacity
-            className="bg-white border border-gray-300 rounded-xl py-4 mt-4 items-center"
-            activeOpacity={0.8}
-            onPress={handleLogoutPress}
-          >
-            <Text className="text-gray-700 text-base font-semibold">
-              Logout
-            </Text>
-          </TouchableOpacity>
-        )}
-        </View>
-      </ScrollView>
+            <Text className="text-gray-900 text-lg font-bold mb-3">Manage Account</Text>
+            <View className="bg-white rounded-2xl px-4" style={styles.card}>
+              <MenuItem
+                label="Setting & Privacy"
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  setShowSettings(true);
+                }}
+              />
+              <MenuItem
+                label="Help"
+                onPress={() => {
+                  showAlert({
+                    type: 'info',
+                    title: 'Help',
+                    message: 'Need help? Contact us at support@cpdash.ai',
+                    buttons: [{ text: 'OK', style: 'default' }],
+                  });
+                }}
+              />
+              <MenuItem
+                label="Activity"
+                onPress={() => {
+                  showAlert({
+                    type: 'info',
+                    title: 'Activity',
+                    message: 'Your activity history will be available in Milestone 3.',
+                    buttons: [{ text: 'OK', style: 'default' }],
+                  });
+                }}
+              />
+              <MenuItem
+                label="Logout"
+                onPress={handleLogoutPress}
+                showChevron={false}
+                icon={<LogoutIcon width={24} height={24} />}
+                isLast={true}
+                isDestructive={true}
+              />
+            </View>
+          </Animated.View>
+        </ScrollView>
       </CandidateLayout>
 
       {/* Search Modal */}
-      <SearchModal visible={showSearchModal} onClose={() => setShowSearchModal(false)} />
+      <SearchModal
+        visible={showSearchModal}
+        onClose={() => setShowSearchModal(false)}
+        onNavigate={(route) => {
+          setShowSearchModal(false);
+          onSearchNavigate?.(route);
+        }}
+      />
     </>
   );
 }
+
+const styles = StyleSheet.create({
+  avatarWrapper: {
+    width: 110,
+    height: 110,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gradientArc: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+  },
+  avatarContainer: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  whiteRing: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: 'white',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 3,
+  },
+  card: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  subscriptionBadge: {
+    marginTop: 12,
+  },
+  planBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  freePlanBadge: {
+    backgroundColor: '#F3F4F6',
+  },
+  premiumPlanBadge: {
+    backgroundColor: '#EEF2FF',
+  },
+  planText: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'capitalize',
+  },
+  freePlanText: {
+    color: '#6B7280',
+  },
+  premiumPlanText: {
+    color: '#4F46E5',
+  },
+  activeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10B981',
+    marginLeft: 6,
+  },
+  viewProfileButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#437EF4',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    marginTop: 16,
+    gap: 8,
+    shadowColor: '#437EF4',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  viewProfileButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+});

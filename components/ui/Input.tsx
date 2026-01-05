@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, TextInput, TextInputProps, TouchableOpacity, Text, Keyboard } from 'react-native';
+import { View, TextInput, TextInputProps, TouchableOpacity, Text, StyleSheet } from 'react-native';
 import { cn } from '../../lib/utils';
 
 interface InputProps extends TextInputProps {
@@ -22,23 +22,26 @@ export const Input = React.forwardRef<TextInput, InputProps>(
     const handleBlur = (e: any) => {
       setIsFocused(false);
       onBlur?.(e);
-      // Dismiss keyboard when input loses focus
-      Keyboard.dismiss();
+      // Note: Don't dismiss keyboard here to allow form navigation
     };
 
     return (
       <View className={containerClassName}>
-        <View className={cn(
-          'bg-gray-50 border rounded-xl flex-row items-center px-4 py-3',
-          error ? 'border-error-red' : isFocused ? 'border-primary-blue' : 'border-gray-200'
-        )}>
+        <View
+          className="flex-row items-center px-4"
+          style={[
+            styles.inputContainer,
+            error ? styles.inputError : isFocused ? styles.inputFocused : styles.inputDefault
+          ]}
+        >
           {leftIcon && <View className="mr-3">{leftIcon}</View>}
           <TextInput
             ref={ref}
-            className={cn('flex-1 text-gray-700 text-base', className)}
-            placeholderTextColor="#A8AAAD"
+            className={cn('flex-1 text-gray-700 text-sm', className)}
+            placeholderTextColor="#9CA3AF"
             onFocus={handleFocus}
             onBlur={handleBlur}
+            style={{ fontSize: 14 }}
             {...props}
           />
           {rightIcon && (
@@ -54,3 +57,21 @@ export const Input = React.forwardRef<TextInput, InputProps>(
 );
 
 Input.displayName = 'Input';
+
+const styles = StyleSheet.create({
+  inputContainer: {
+    height: 56,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  inputDefault: {
+    borderColor: 'rgba(100, 116, 139, 0.2)', // #64748B at 20%
+  },
+  inputFocused: {
+    borderColor: '#2563EB',
+  },
+  inputError: {
+    borderColor: '#EF4444',
+  },
+});

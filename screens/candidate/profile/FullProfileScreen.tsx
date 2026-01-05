@@ -1,12 +1,83 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, ScrollView, RefreshControl, Animated, Pressable, StyleSheet } from 'react-native';
 import { useSelector } from 'react-redux';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
 import { RootState } from '../../../store/store';
 import CandidateLayout from '../../../components/layouts/CandidateLayout';
-import Svg, { Path, Circle } from 'react-native-svg';
+import Svg, { Path, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
 import { SkeletonLoader } from '../../../components/SkeletonLoader';
 import { useGetCandidateProfileQuery, useGetRecruiterProfileQuery } from '../../../services/api';
 import ProfilePictureUpload from '../../../components/profile/ProfilePictureUpload';
+import SearchModal from '../../../components/SearchModal';
+
+// Gradient Arc around avatar - matches ProfileScreen design
+const GradientArc = ({ size = 110 }: { size?: number }) => {
+  const strokeWidth = 7;
+  const radius = (size - strokeWidth) / 2;
+  const center = size / 2;
+
+  // Create arc path (incomplete circle with gap at 9 o'clock position)
+  const startAngle = 210; // Start at 10 o'clock
+  const endAngle = 150; // End at 8 o'clock
+  const largeArcFlag = 1; // Use large arc
+
+  const startRad = (startAngle * Math.PI) / 180;
+  const endRad = (endAngle * Math.PI) / 180;
+
+  const startX = center + radius * Math.cos(startRad);
+  const startY = center + radius * Math.sin(startRad);
+  const endX = center + radius * Math.cos(endRad);
+  const endY = center + radius * Math.sin(endRad);
+
+  const pathD = `M ${startX} ${startY} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${endX} ${endY}`;
+
+  return (
+    <Svg width={size} height={size} style={avatarStyles.gradientArc}>
+      <Defs>
+        <SvgLinearGradient id="arcGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+          <Stop offset="0%" stopColor="#0E3FC8" />
+          <Stop offset="100%" stopColor="#8C6BFF" />
+        </SvgLinearGradient>
+      </Defs>
+      <Path
+        d={pathD}
+        stroke="url(#arcGradient)"
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        fill="none"
+      />
+    </Svg>
+  );
+};
+
+const avatarStyles = StyleSheet.create({
+  avatarWrapper: {
+    width: 110,
+    height: 110,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gradientArc: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+  },
+  avatarContainer: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  whiteRing: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: 'white',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 3,
+  },
+});
 
 // Import tab components
 import { PersonalInfoTab } from './tabs/PersonalInfoTab';
@@ -24,6 +95,7 @@ interface FullProfileScreenProps {
   activeTab?: string;
   onTabChange?: (tabId: string) => void;
   onBack?: () => void;
+  onSearchNavigate?: (route: string) => void;
 }
 
 interface EducationEntry {
@@ -53,7 +125,10 @@ export default function FullProfileScreen({
   activeTab = 'profile',
   onTabChange,
   onBack,
+  onSearchNavigate,
 }: FullProfileScreenProps) {
+  const insets = useSafeAreaInsets();
+  const [showSearchModal, setShowSearchModal] = useState(false);
   const user = useSelector((state: RootState) => state.auth.user);
   const userName = user?.email?.split('@')[0] || 'User';
   const userRole = user?.role?.toLowerCase();
@@ -64,6 +139,16 @@ export default function FullProfileScreen({
   const [experienceList, setExperienceList] = useState<ExperienceEntry[]>([]);
   const [skills, setSkills] = useState<string[]>([]);
   const [hobbies, setHobbies] = useState<string[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Animation values
+  const headerFade = useRef(new Animated.Value(0)).current;
+  const headerSlide = useRef(new Animated.Value(-20)).current;
+  const avatarScale = useRef(new Animated.Value(0.8)).current;
+  const avatarFade = useRef(new Animated.Value(0)).current;
+  const contentFade = useRef(new Animated.Value(0)).current;
+  const contentSlide = useRef(new Animated.Value(30)).current;
+  const backButtonScale = useRef(new Animated.Value(1)).current;
 
   // RTK Query - use appropriate query based on user role
   const { data: candidateProfileData, isLoading: isLoadingCandidate, error: candidateError, refetch: refetchCandidate } = useGetCandidateProfileQuery(undefined, { skip: isRecruiter });
@@ -72,6 +157,57 @@ export default function FullProfileScreen({
   const profileData = isRecruiter ? recruiterProfileData : candidateProfileData;
   const isLoadingProfile = isRecruiter ? isLoadingRecruiter : isLoadingCandidate;
   const profileError = isRecruiter ? recruiterError : candidateError;
+
+  // Entrance animations
+  useEffect(() => {
+    // Header animation
+    Animated.parallel([
+      Animated.timing(headerFade, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.timing(headerSlide, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    // Avatar animation with delay
+    setTimeout(() => {
+      Animated.parallel([
+        Animated.spring(avatarScale, {
+          toValue: 1,
+          friction: 6,
+          tension: 40,
+          useNativeDriver: true,
+        }),
+        Animated.timing(avatarFade, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }, 150);
+
+    // Content animation with delay
+    setTimeout(() => {
+      Animated.parallel([
+        Animated.timing(contentFade, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.spring(contentSlide, {
+          toValue: 0,
+          friction: 8,
+          tension: 40,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }, 250);
+  }, []);
 
   // Refetch profile data when component mounts
   useEffect(() => {
@@ -84,6 +220,50 @@ export default function FullProfileScreen({
 
   // Track if profile is being updated
   const [isProfileUpdating, setIsProfileUpdating] = useState(false);
+
+  // Handle refresh
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      if (isRecruiter) {
+        await refetchRecruiter();
+      } else {
+        await refetchCandidate();
+      }
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      console.error('Refresh error:', error);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  // Handle tab change with haptics
+  const handleTabChange = (tabId: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSelectedTab(tabId);
+  };
+
+  // Handle back press
+  const handleBackPress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Animated.sequence([
+      Animated.timing(backButtonScale, {
+        toValue: 0.9,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(backButtonScale, {
+        toValue: 1,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      onBack?.();
+    });
+  };
 
   // Debug profile loading
   useEffect(() => {
@@ -383,42 +563,83 @@ export default function FullProfileScreen({
   // Show skeleton loader while fetching profile data
   if (isLoadingProfile) {
     return (
+      <>
       <CandidateLayout
         userName={userName}
-        onSearchPress={() => console.log('Search pressed')}
+        onSearchPress={() => setShowSearchModal(true)}
         activeTab={activeTab}
         onTabChange={onTabChange}
       >
         <SkeletonLoader type="profile" />
       </CandidateLayout>
+      <SearchModal
+        visible={showSearchModal}
+        onClose={() => setShowSearchModal(false)}
+        onNavigate={(route) => {
+          setShowSearchModal(false);
+          onSearchNavigate?.(route);
+        }}
+      />
+      </>
     );
   }
 
   return (
+    <>
     <CandidateLayout
       userName={userName}
-      onSearchPress={() => console.log('Search pressed')}
+      onSearchPress={() => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        setShowSearchModal(true);
+      }}
       activeTab={activeTab}
       onTabChange={onTabChange}
+      hideHeader={true}
     >
-      <View className="bg-white -mt-5 flex-1">
+      <ScrollView
+        className="bg-white flex-1"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={['#437EF4']}
+            tintColor="#437EF4"
+          />
+        }
+      >
         {/* Header with Back Button and Profile Text */}
-        <View className="px-6 pt-6 pb-4 bg-white flex-row items-center">
-          <TouchableOpacity
-            onPress={onBack}
-            className="mr-3"
-            activeOpacity={0.7}
+        <Animated.View
+          className="px-6 pb-4 bg-white flex-row items-center"
+          style={{
+            paddingTop: insets.top + 16,
+            opacity: headerFade,
+            transform: [{ translateY: headerSlide }],
+          }}
+        >
+          <Pressable
+            onPress={handleBackPress}
+            hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+            style={({ pressed }) => ({
+              marginRight: 8,
+              padding: 8,
+              borderRadius: 12,
+              backgroundColor: pressed ? 'rgba(0, 0, 0, 0.05)' : 'transparent',
+            })}
           >
-            <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-              <Path
-                d="M15 18L9 12L15 6"
-                stroke="#1F2937"
-                strokeWidth={2}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </Svg>
-          </TouchableOpacity>
+            <Animated.View style={{ transform: [{ scale: backButtonScale }] }}>
+              <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
+                <Path
+                  d="M15 18L9 12L15 6"
+                  stroke="#1F2937"
+                  strokeWidth={2.5}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </Svg>
+            </Animated.View>
+          </Pressable>
           <View className="flex-1">
             <Text className="text-gray-900 text-2xl font-bold">My Profile</Text>
             {isProfileUpdating && (
@@ -428,78 +649,97 @@ export default function FullProfileScreen({
               </View>
             )}
           </View>
-        </View>
+        </Animated.View>
 
         <View className="px-6 bg-white">
-          {/* Avatar Section with Progress Ring */}
-          <View className="items-center mb-6 bg-white rounded-2xl py-6 mx-0">
-            <View className="relative mb-3">
-              {/* Progress Ring */}
-              <Svg width={78} height={78} className="absolute -top-1 -left-1">
-                <Circle
-                  cx={39}
-                  cy={39}
-                  r={36}
-                  stroke="#E5E7EB"
-                  strokeWidth={4}
-                  fill="none"
-                />
-                <Circle
-                  cx={39}
-                  cy={39}
-                  r={36}
-                  stroke="#2AD1CC"
-                  strokeWidth={4}
-                  fill="none"
-                  strokeDasharray={226}
-                  strokeDashoffset={113}
-                  strokeLinecap="round"
-                />
-              </Svg>
-              {/* Profile Picture */}
-              <ProfilePictureUpload
-                initials={getInitials()}
-                size={70}
-                editable={false}
-              />
+          {/* Avatar Section with Gradient Arc - matches ProfileScreen */}
+          <Animated.View
+            className="items-center mb-6 bg-white rounded-2xl py-6 mx-0"
+            style={{
+              opacity: avatarFade,
+              transform: [{ scale: avatarScale }],
+            }}
+          >
+            <View style={avatarStyles.avatarWrapper} className="mb-3">
+              {/* Gradient Arc */}
+              <GradientArc size={110} />
+              {/* Avatar with white ring */}
+              <View style={avatarStyles.avatarContainer}>
+                <View style={avatarStyles.whiteRing}>
+                  <ProfilePictureUpload
+                    initials={getInitials()}
+                    size={80}
+                    editable={false}
+                  />
+                </View>
+              </View>
             </View>
             <Text className="text-gray-900 text-lg font-bold mb-1">{getFullName()}</Text>
             <Text className="text-gray-500 text-xs">{user?.email || 'No email'}</Text>
-          </View>
+          </Animated.View>
 
           {/* Tabs */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            className="mb-6"
-            contentContainerStyle={{ paddingRight: 24 }}
+          <Animated.View
+            style={{
+              opacity: contentFade,
+              transform: [{ translateY: contentSlide }],
+            }}
           >
-            {tabs.map((tab) => (
-              <TouchableOpacity
-                key={tab.id}
-                onPress={() => setSelectedTab(tab.id)}
-                className={`mr-2 px-4 py-2 rounded-full ${
-                  selectedTab === tab.id
-                    ? 'bg-primary-blue'
-                    : 'bg-white border border-gray-200'
-                }`}
-                activeOpacity={0.7}
-              >
-                <Text
-                  className={`text-sm font-medium ${
-                    selectedTab === tab.id ? 'text-white' : 'text-gray-600'
-                  }`}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              className="mb-6"
+              contentContainerStyle={{ paddingRight: 24 }}
+            >
+              {tabs.map((tab) => (
+                <Pressable
+                  key={tab.id}
+                  onPress={() => handleTabChange(tab.id)}
+                  style={({ pressed }) => [
+                    { opacity: pressed ? 0.8 : 1, transform: [{ scale: pressed ? 0.95 : 1 }] }
+                  ]}
                 >
-                  {tab.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+                  <View
+                    className={`mr-2 px-4 py-2 rounded-full ${
+                      selectedTab === tab.id
+                        ? 'bg-primary-blue'
+                        : 'bg-white border border-gray-200'
+                    }`}
+                  >
+                    <Text
+                      className={`text-sm font-medium ${
+                        selectedTab === tab.id ? 'text-white' : 'text-gray-600'
+                      }`}
+                    >
+                      {tab.label}
+                    </Text>
+                  </View>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </Animated.View>
 
           {/* Tab Content */}
-          <View className="mb-6">{renderTabContent()}</View>
+          <Animated.View
+            className="mb-6"
+            style={{
+              opacity: contentFade,
+              transform: [{ translateY: contentSlide }],
+            }}
+          >
+            {renderTabContent()}
+          </Animated.View>
         </View>
-      </View>
+      </ScrollView>
     </CandidateLayout>
+    <SearchModal
+      visible={showSearchModal}
+      onClose={() => setShowSearchModal(false)}
+      onNavigate={(route) => {
+        setShowSearchModal(false);
+        onSearchNavigate?.(route);
+      }}
+    />
+    </>
   );
 }

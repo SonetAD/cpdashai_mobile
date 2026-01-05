@@ -1,17 +1,29 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useState, useRef } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, TextInput, LayoutAnimation, Platform, UIManager } from 'react-native';
+
+// Enable LayoutAnimation on Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import Svg, { Path, Rect } from 'react-native-svg';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as Haptics from 'expo-haptics';
 import { Input } from '../../components/ui/Input';
-import { Button } from '../../components/ui/Button';
 import { Checkbox } from '../../components/ui/Checkbox';
 import { Select } from '../../components/ui/Select';
 import SuccessPopup from '../../components/SuccessPopup';
 import KeyboardDismissWrapper from '../../components/KeyboardDismissWrapper';
-import { useRegisterCandidateMutation, useRegisterRecruiterMutation } from '../../services/api';
+import GDPRConsentBanner, { ConsentPreferences, POLICY_VERSION } from '../../components/GDPRConsentBanner';
+import {
+  useRegisterCandidateMutation,
+  useRegisterRecruiterMutation,
+  useAcceptAllConsentsMutation,
+  useRejectOptionalConsentsMutation,
+  useUpdateAllConsentsMutation,
+} from '../../services/api';
 import { useAppDispatch } from '../../store/hooks';
 import { setCredentials } from '../../store/slices/authSlice';
 import { storeTokens } from '../../utils/authUtils';
@@ -28,6 +40,8 @@ import LockIcon from '../../assets/images/lockIcon.svg';
 import CallIcon from '../../assets/images/callIcon.svg';
 import EyeSlashIcon from '../../assets/images/eyeSlash.svg';
 import EyeIcon from '../../assets/images/eye.svg';
+import GoogleIcon from '../../assets/images/googleIcon.svg';
+import LinkedInIcon from '../../assets/images/linkedinIcon.svg';
 
 // Base object schema without refinements
 const baseObjectSchema = z.object({
@@ -111,37 +125,6 @@ const recruiterSchema = baseObjectSchema.extend({
   path: ['phoneNumber'],
 });
 
-const GoogleIcon = () => (
-  <Svg width={20} height={20} viewBox="0 0 20 20" fill="none">
-    <Path
-      d="M18.7509 10.1944C18.7509 9.47495 18.6913 8.94995 18.5624 8.40552H10.1794V11.6527H15.1C15.0009 12.4597 14.4652 13.675 13.2747 14.4916L13.258 14.6003L15.9085 16.6126L16.0921 16.6305C17.7786 15.1041 18.7509 12.8583 18.7509 10.1944Z"
-      fill="#4285F4"
-    />
-    <Path
-      d="M10.1788 18.75C12.5895 18.75 14.6133 17.9722 16.0915 16.6305L13.274 14.4916C12.5201 15.0068 11.5081 15.3666 10.1788 15.3666C7.81773 15.3666 5.81379 13.8402 5.09944 11.7305L4.99473 11.7392L2.23868 13.8295L2.20264 13.9277C3.67087 16.786 6.68674 18.75 10.1788 18.75Z"
-      fill="#34A853"
-    />
-    <Path
-      d="M5.10014 11.7305C4.91165 11.186 4.80257 10.6027 4.80257 9.99992C4.80257 9.3971 4.91165 8.81379 5.09022 8.26935L5.08523 8.1534L2.29464 6.02954L2.20333 6.0721C1.5982 7.25823 1.25098 8.5902 1.25098 9.99992C1.25098 11.4096 1.5982 12.7415 2.20333 13.9277L5.10014 11.7305Z"
-      fill="#FBBC05"
-    />
-    <Path
-      d="M10.1789 4.63331C11.8554 4.63331 12.9864 5.34303 13.6312 5.93612L16.1511 3.525C14.6035 2.11528 12.5895 1.25 10.1789 1.25C6.68676 1.25 3.67088 3.21387 2.20264 6.07218L5.08953 8.26944C5.81381 6.15972 7.81776 4.63331 10.1789 4.63331Z"
-      fill="#EB4335"
-    />
-  </Svg>
-);
-
-const LinkedInIcon = () => (
-  <Svg width={20} height={20} viewBox="0 0 20 20" fill="none">
-    <Rect width={20} height={20} rx={10} fill="#006699" />
-    <Path
-      d="M7.69945 14.0526V8.65H5.90531V14.0526H7.69964H7.69945ZM6.80276 7.9125C7.42828 7.9125 7.81771 7.49764 7.81771 6.97919C7.806 6.44893 7.42828 6.04565 6.81465 6.04565C6.2006 6.04565 5.79956 6.44893 5.79956 6.97915C5.79956 7.4976 6.18885 7.91245 6.791 7.91245H6.80262L6.80276 7.9125ZM8.69253 14.0526H10.4865V11.0359C10.4865 10.8746 10.4982 10.7129 10.5456 10.5978C10.6753 10.275 10.9705 9.94093 11.4662 9.94093C12.1152 9.94093 12.375 10.4363 12.375 11.1627V14.0526H14.169V10.9549C14.169 9.29553 13.284 8.52334 12.1036 8.52334C11.1359 8.52334 10.7109 9.06472 10.4747 9.43344H10.4867V8.65019H8.69263C8.71604 9.15701 8.69249 14.0528 8.69249 14.0528L8.69253 14.0526Z"
-      fill="white"
-    />
-  </Svg>
-);
-
 interface RegisterScreenProps {
   role: 'candidate' | 'recruiter' | null;
   onBack: () => void;
@@ -178,17 +161,30 @@ export default function RegisterScreen({ role, onBack, onLogin, onRegisterSucces
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [showSuccessPopup, setShowSuccessPopup] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [showConsentBanner, setShowConsentBanner] = useState(false);
+  const [pendingFormData, setPendingFormData] = useState<FormData | null>(null);
+  const [pendingGoogleAuth, setPendingGoogleAuth] = useState(false);
   const [registerCandidate, { isLoading: isCandidateLoading }] = useRegisterCandidateMutation();
   const [registerRecruiter, { isLoading: isRecruiterLoading }] = useRegisterRecruiterMutation();
+  const [acceptAllConsents] = useAcceptAllConsentsMutation();
+  const [rejectOptionalConsents] = useRejectOptionalConsentsMutation();
+  const [updateAllConsents] = useUpdateAllConsentsMutation();
   const dispatch = useAppDispatch();
   const { showAlert } = useAlert();
+
+  // Input refs for form navigation
+  const usernameRef = useRef<TextInput>(null);
+  const emailRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
+  const confirmPasswordRef = useRef<TextInput>(null);
+  const phoneRef = useRef<TextInput>(null);
 
   const isLoading = isCandidateLoading || isRecruiterLoading;
 
   // Use appropriate schema based on role
   const schema = role === 'recruiter' ? recruiterSchema : registerSchema;
 
-  const { control, handleSubmit, formState: { errors }, watch } = useForm<FormData>({
+  const { control, handleSubmit, formState: { errors }, watch, clearErrors } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
       registrationType: 'email',
@@ -212,7 +208,94 @@ export default function RegisterScreen({ role, onBack, onLogin, onRegisterSucces
   const registrationType = watch('registrationType');
   const organizationType = role === 'recruiter' ? watch('organizationType' as any) : undefined;
 
-  const onSubmit = async (data: FormData) => {
+  // Handle showing consent banner before registration
+  const handleSignUpClick = (data: FormData) => {
+    setPendingFormData(data);
+    setShowConsentBanner(true);
+  };
+
+  // Process consent and then register
+  const processConsentAndRegister = async (consentAction: 'acceptAll' | 'rejectAll' | 'custom', customPreferences?: ConsentPreferences) => {
+    try {
+      // First, proceed with registration
+      if (pendingGoogleAuth) {
+        await handleGoogleAuthWithConsent(consentAction, customPreferences);
+      } else if (pendingFormData) {
+        await performRegistration(pendingFormData, consentAction, customPreferences);
+      }
+    } catch (error) {
+      console.error('Registration/Consent error:', error);
+    } finally {
+      setShowConsentBanner(false);
+      setPendingFormData(null);
+      setPendingGoogleAuth(false);
+    }
+  };
+
+  // Handle consent acceptance
+  const handleConsentAcceptAll = () => {
+    // Immediately hide consent banner to prevent race condition
+    setShowConsentBanner(false);
+    processConsentAndRegister('acceptAll');
+  };
+
+  const handleConsentRejectAll = () => {
+    // Don't proceed with registration if user rejects consent
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    setShowConsentBanner(false);
+    setPendingFormData(null);
+    setPendingGoogleAuth(false);
+    showAlert({
+      type: 'info',
+      title: 'Consent Required',
+      message: 'You need to accept our terms and privacy policy to create an account.',
+      buttons: [{ text: 'OK', style: 'default' }],
+    });
+  };
+
+  const handleConsentCustom = (preferences: ConsentPreferences) => {
+    // Check if required consents are accepted
+    if (!preferences.privacyPolicy || !preferences.termsOfService || !preferences.dataProcessing) {
+      // Required consents not accepted - don't proceed with registration
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      setShowConsentBanner(false);
+      setPendingFormData(null);
+      setPendingGoogleAuth(false);
+      showAlert({
+        type: 'info',
+        title: 'Consent Required',
+        message: 'You must accept the Privacy Policy, Terms of Service, and Data Processing to create an account.',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
+      return;
+    }
+    // Immediately hide consent banner to prevent race condition with Reject button
+    setShowConsentBanner(false);
+    processConsentAndRegister('custom', preferences);
+  };
+
+  // Save consent after successful registration
+  const saveConsent = async (consentAction: 'acceptAll' | 'rejectAll' | 'custom', customPreferences?: ConsentPreferences) => {
+    try {
+      if (consentAction === 'acceptAll') {
+        await acceptAllConsents({ policyVersion: POLICY_VERSION }).unwrap();
+      } else if (consentAction === 'rejectAll') {
+        await rejectOptionalConsents().unwrap();
+      } else if (consentAction === 'custom' && customPreferences) {
+        await updateAllConsents({
+          ...customPreferences,
+          policyVersion: POLICY_VERSION,
+        }).unwrap();
+      }
+      console.log('Consent saved successfully');
+    } catch (error) {
+      console.error('Failed to save consent:', error);
+      // Don't block registration if consent save fails - can be retried later
+    }
+  };
+
+  // Perform the actual registration
+  const performRegistration = async (data: FormData, consentAction: 'acceptAll' | 'rejectAll' | 'custom', customPreferences?: ConsentPreferences) => {
     try {
       const registrationData: any = {
         password: data.password,
@@ -272,9 +355,13 @@ export default function RegisterScreen({ role, onBack, onLogin, onRegisterSucces
             refreshToken: response.refreshToken,
           }));
 
+          // Save consent preferences after successful registration
+          await saveConsent(consentAction, customPreferences);
+
           console.log('Registration successful - tokens stored, redirecting to dashboard');
 
           // Show success popup and then navigate to dashboard
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           setShowSuccessPopup(true);
         } else {
           showAlert({
@@ -315,9 +402,13 @@ export default function RegisterScreen({ role, onBack, onLogin, onRegisterSucces
             refreshToken: response.refreshToken,
           }));
 
+          // Save consent preferences after successful registration
+          await saveConsent(consentAction, customPreferences);
+
           console.log('Registration successful - tokens stored, redirecting to dashboard');
 
           // Show success popup and then navigate to dashboard
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           setShowSuccessPopup(true);
         } else {
           showAlert({
@@ -346,10 +437,18 @@ export default function RegisterScreen({ role, onBack, onLogin, onRegisterSucces
   };
 
   /**
-   * NATIVE Google Sign-In Handler for Registration
+   * Show consent banner before Google Sign-In
+   */
+  const handleGoogleSignIn = () => {
+    setPendingGoogleAuth(true);
+    setShowConsentBanner(true);
+  };
+
+  /**
+   * NATIVE Google Sign-In Handler with consent
    * This shows the native account selector popup - NO BROWSER!
    */
-  const handleGoogleSignIn = async () => {
+  const handleGoogleAuthWithConsent = async (consentAction: 'acceptAll' | 'rejectAll' | 'custom', customPreferences?: ConsentPreferences) => {
     try {
       setIsGoogleLoading(true);
       console.log('Starting NATIVE Google Sign-In for registration (popup, no browser)...');
@@ -381,7 +480,11 @@ export default function RegisterScreen({ role, onBack, onLogin, onRegisterSucces
           refreshToken: result.refreshToken,
         }));
 
+        // Save consent preferences after successful Google sign-in
+        await saveConsent(consentAction, customPreferences);
+
         console.log('Google registration complete');
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setShowSuccessPopup(true);
       } else if (result.cancelled) {
         console.log('User cancelled Google Sign-In');
@@ -408,78 +511,115 @@ export default function RegisterScreen({ role, onBack, onLogin, onRegisterSucces
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-white" edges={['top', 'bottom']}>
+    <SafeAreaView className="flex-1 bg-gray-50" edges={['top', 'bottom']}>
       <KeyboardDismissWrapper>
-        <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 20 }}>
-          <View className="px-6 pt-6">
-        {/* Header */}
-        <TouchableOpacity className="mb-6" onPress={onBack}>
-          <BackArrowIcon />
-        </TouchableOpacity>
+        <ScrollView
+          className="flex-1"
+          contentContainerStyle={{ paddingBottom: 20 }}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
+          {/* Back Button */}
+          <View className="px-4 pt-4">
+            <TouchableOpacity
+              className="w-12 h-12 bg-white rounded-full items-center justify-center"
+              style={styles.backButton}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                onBack();
+              }}
+              accessibilityLabel="Go back"
+              accessibilityRole="button"
+            >
+              <BackArrowIcon />
+            </TouchableOpacity>
+          </View>
 
-        <Text className="text-3xl font-bold text-gray-900 mb-2">
-          Create your account
-        </Text>
-        <Text className="text-sm text-gray-500 mb-6">
-          Register Your Account Building, Improving, Showcasing Your Career
-        </Text>
+          {/* White Card Container */}
+          <View className="mx-4 mt-4 bg-white rounded-3xl p-6" style={styles.card}>
+            <Text className="text-2xl font-bold text-gray-900 mb-2">
+              Create your account
+            </Text>
+            <Text className="text-sm text-gray-500 mb-6">
+              Register Your Account Building, Improving,{'\n'}Showcasing Your Career
+            </Text>
 
-        {/* Registration Type Selector - Segmented Control */}
-        <Controller
-          control={control}
-          name="registrationType"
-          render={({ field: { onChange, value } }) => (
-            <View className="mb-6">
-              <Text className="text-sm font-medium text-gray-700 mb-3">Register with</Text>
-              <View className="flex-row bg-gray-100 rounded-xl p-1">
-                <TouchableOpacity
-                  className={`flex-1 py-3 rounded-lg ${
-                    value === 'email' ? 'bg-primary-blue' : 'bg-transparent'
-                  }`}
-                  onPress={() => onChange('email')}
-                >
-                  <Text
-                    className={`text-center font-semibold ${
-                      value === 'email' ? 'text-white' : 'text-gray-600'
-                    }`}
-                  >
-                    Email
-                  </Text>
-                </TouchableOpacity>
+            {/* Registration Type Selector - E-Mail / Phone Number */}
+            <Controller
+              control={control}
+              name="registrationType"
+              render={({ field: { onChange, value } }) => {
+                const isEmailSelected = value === 'email';
+                const isPhoneSelected = value === 'phone';
 
-                <TouchableOpacity
-                  className={`flex-1 py-3 rounded-lg mx-1 ${
-                    value === 'phone' ? 'bg-primary-blue' : 'bg-transparent'
-                  }`}
-                  onPress={() => onChange('phone')}
-                >
-                  <Text
-                    className={`text-center font-semibold ${
-                      value === 'phone' ? 'text-white' : 'text-gray-600'
-                    }`}
-                  >
-                    Phone
-                  </Text>
-                </TouchableOpacity>
+                return (
+                  <View className="mb-6">
+                    <Text className="text-sm font-semibold text-gray-900 mb-3">Sign Up With</Text>
+                    <View className="flex-row" style={{ gap: 10 }}>
+                      {/* E-Mail Button */}
+                      <TouchableOpacity
+                        style={[
+                          styles.toggleButtonBase,
+                          styles.toggleButtonShadow,
+                          isEmailSelected ? styles.toggleButtonActive : styles.toggleButtonInactiveGlass
+                        ]}
+                        onPress={() => {
+                          if (!isEmailSelected) {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                            clearErrors();
+                            onChange('email');
+                          }
+                        }}
+                        activeOpacity={0.8}
+                        accessibilityLabel="Sign up with email"
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: isEmailSelected }}
+                      >
+                        <Text
+                          style={[
+                            styles.toggleButtonText,
+                            { color: isEmailSelected ? '#FFFFFF' : '#2563EB' }
+                          ]}
+                        >
+                          E-Mail
+                        </Text>
+                      </TouchableOpacity>
 
-                <TouchableOpacity
-                  className={`flex-1 py-3 rounded-lg ${
-                    value === 'both' ? 'bg-primary-blue' : 'bg-transparent'
-                  }`}
-                  onPress={() => onChange('both')}
-                >
-                  <Text
-                    className={`text-center font-semibold ${
-                      value === 'both' ? 'text-white' : 'text-gray-600'
-                    }`}
-                  >
-                    Both
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-        />
+                      {/* Phone Number Button */}
+                      <TouchableOpacity
+                        style={[
+                          styles.toggleButtonBase,
+                          styles.toggleButtonShadow,
+                          isPhoneSelected ? styles.toggleButtonActive : styles.toggleButtonInactiveGlass
+                        ]}
+                        onPress={() => {
+                          if (!isPhoneSelected) {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                            clearErrors();
+                            onChange('phone');
+                          }
+                        }}
+                        activeOpacity={0.8}
+                        accessibilityLabel="Sign up with phone number"
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: isPhoneSelected }}
+                      >
+                        <Text
+                          style={[
+                            styles.toggleButtonText,
+                            { color: isPhoneSelected ? '#FFFFFF' : '#2563EB' }
+                          ]}
+                        >
+                          Phone Number
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              }}
+            />
 
         {/* Form Fields */}
         <Controller
@@ -487,12 +627,22 @@ export default function RegisterScreen({ role, onBack, onLogin, onRegisterSucces
           name="username"
           render={({ field: { onChange, value } }) => (
             <Input
+              ref={usernameRef}
               leftIcon={<UserIcon />}
               placeholder="Username"
               value={value}
               onChangeText={onChange}
               error={errors.username?.message}
               containerClassName="mb-4"
+              returnKeyType="next"
+              onSubmitEditing={() => {
+                if (registrationType === 'email' || registrationType === 'both') {
+                  emailRef.current?.focus();
+                } else {
+                  passwordRef.current?.focus();
+                }
+              }}
+              autoCorrect={false}
             />
           )}
         />
@@ -504,14 +654,18 @@ export default function RegisterScreen({ role, onBack, onLogin, onRegisterSucces
             name="email"
             render={({ field: { onChange, value } }) => (
               <Input
+                ref={emailRef}
                 leftIcon={<MailIcon />}
-                placeholder="Enter your E-mail"
+                placeholder="E-mail"
                 value={value}
                 onChangeText={onChange}
                 keyboardType="email-address"
                 autoCapitalize="none"
+                autoCorrect={false}
                 error={errors.email?.message}
                 containerClassName="mb-4"
+                returnKeyType="next"
+                onSubmitEditing={() => passwordRef.current?.focus()}
               />
             )}
           />
@@ -522,8 +676,9 @@ export default function RegisterScreen({ role, onBack, onLogin, onRegisterSucces
           name="password"
           render={({ field: { onChange, value } }) => (
             <Input
+              ref={passwordRef}
               leftIcon={<LockIcon />}
-              placeholder="Enter your Password"
+              placeholder="Password"
               value={value}
               onChangeText={onChange}
               secureTextEntry={!showPassword}
@@ -531,6 +686,8 @@ export default function RegisterScreen({ role, onBack, onLogin, onRegisterSucces
               onRightIconPress={() => setShowPassword(!showPassword)}
               error={errors.password?.message}
               containerClassName="mb-4"
+              returnKeyType="next"
+              onSubmitEditing={() => confirmPasswordRef.current?.focus()}
             />
           )}
         />
@@ -540,8 +697,9 @@ export default function RegisterScreen({ role, onBack, onLogin, onRegisterSucces
           name="confirmPassword"
           render={({ field: { onChange, value } }) => (
             <Input
+              ref={confirmPasswordRef}
               leftIcon={<LockIcon />}
-              placeholder="Enter your Confirm Password"
+              placeholder="Confirm Password"
               value={value}
               onChangeText={onChange}
               secureTextEntry={!showConfirmPassword}
@@ -549,6 +707,12 @@ export default function RegisterScreen({ role, onBack, onLogin, onRegisterSucces
               onRightIconPress={() => setShowConfirmPassword(!showConfirmPassword)}
               error={errors.confirmPassword?.message}
               containerClassName="mb-4"
+              returnKeyType={registrationType === 'phone' || registrationType === 'both' ? 'next' : 'done'}
+              onSubmitEditing={() => {
+                if (registrationType === 'phone' || registrationType === 'both') {
+                  phoneRef.current?.focus();
+                }
+              }}
             />
           )}
         />
@@ -560,13 +724,15 @@ export default function RegisterScreen({ role, onBack, onLogin, onRegisterSucces
             name="phoneNumber"
             render={({ field: { onChange, value } }) => (
               <Input
+                ref={phoneRef}
                 leftIcon={<CallIcon />}
-                placeholder="Enter your Phone Number (e.g., +1234567890)"
+                placeholder="Phone Number (+1234567890)"
                 value={value}
                 onChangeText={onChange}
                 keyboardType="phone-pad"
                 error={errors.phoneNumber?.message}
                 containerClassName="mb-4"
+                returnKeyType="done"
               />
             )}
           />
@@ -678,94 +844,144 @@ export default function RegisterScreen({ role, onBack, onLogin, onRegisterSucces
           </>
         )}
 
-        {/* Terms and Conditions */}
-        <Controller
-          control={control}
-          name="agreedToTerms"
-          render={({ field: { onChange, value } }) => (
-            <View className="mb-4">
-              <TouchableOpacity
-                className="flex-row items-start space-x-2"
-                onPress={() => onChange(!value)}
+          </View>
+          {/* End of White Card Container */}
+
+          {/* Terms and Conditions - Outside Card */}
+          <Controller
+            control={control}
+            name="agreedToTerms"
+            render={({ field: { onChange, value } }) => (
+              <View className="mx-4 mt-4 mb-4">
+                <TouchableOpacity
+                  className="flex-row items-start"
+                  style={{ gap: 12 }}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    onChange(!value);
+                  }}
+                  accessibilityLabel="Agree to terms and conditions"
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: value }}
+                >
+                  <Checkbox
+                    checked={value}
+                    onCheckedChange={(newValue) => {
+                      Haptics.selectionAsync();
+                      onChange(newValue);
+                    }}
+                    className="mt-0.5"
+                  />
+                  <Text className="text-sm text-gray-700 flex-1">
+                    Agree to the{' '}
+                    <Text className="text-primary-blue">Term & Condition</Text> and{' '}
+                    <Text className="text-primary-blue">Privacy Policy</Text>
+                  </Text>
+                </TouchableOpacity>
+                {errors.agreedToTerms && (
+                  <Text className="text-error-red text-xs mt-1 ml-8">
+                    {errors.agreedToTerms.message}
+                  </Text>
+                )}
+              </View>
+            )}
+          />
+
+          {/* Gradient Sign Up Button */}
+          <View className="mx-4 mb-4">
+            <TouchableOpacity
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                handleSubmit(handleSignUpClick)();
+              }}
+              disabled={isLoading || showConsentBanner}
+              activeOpacity={0.8}
+              accessibilityLabel="Sign up"
+              accessibilityRole="button"
+              accessibilityState={{ disabled: isLoading }}
+            >
+              <LinearGradient
+                colors={['#06B6D4', '#3B82F6', '#6366F1', '#8B5CF6']}
+                locations={[0, 0.35, 0.65, 1]}
+                start={{ x: 0.5, y: 0 }}
+                end={{ x: 0.5, y: 1 }}
+                style={[styles.gradientButton, isLoading && { opacity: 0.7 }]}
               >
-                <Checkbox
-                  checked={value}
-                  onCheckedChange={onChange}
-                  className="mr-3 mt-0.5"
-                />
-                <Text className="text-sm text-gray-700 flex-1">
-                  Agree to the{' '}
-                  <Text className="text-primary-blue">Terms & Conditions</Text> and{' '}
-                  <Text className="text-primary-blue">Privacy Policy</Text>
+                <Text className="text-white font-semibold text-base">
+                  {isLoading ? 'Signing Up...' : 'Sign Up'}
                 </Text>
-              </TouchableOpacity>
-              {errors.agreedToTerms && (
-                <Text className="text-error-red text-xs mt-1 ml-1">
-                  {errors.agreedToTerms.message}
-                </Text>
-              )}
-            </View>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+
+          {/* OAuth Social Sign Up - Only for candidates */}
+          {role === 'candidate' && (
+            <>
+              {/* Divider */}
+              <View className="flex-row items-center mx-4 my-4">
+                <View className="flex-1 h-px bg-gray-300" />
+                <Text className="text-gray-400 mx-4 text-sm">OR</Text>
+                <View className="flex-1 h-px bg-gray-300" />
+              </View>
+
+              {/* Social Sign Up Buttons - Side by Side */}
+              <View className="mx-4 flex-row mb-4" style={{ gap: 12 }}>
+                {/* Google Button */}
+                <TouchableOpacity
+                  style={[styles.socialButton, styles.socialButtonShadow]}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    handleGoogleSignIn();
+                  }}
+                  disabled={isGoogleLoading || isLoading || showConsentBanner}
+                  activeOpacity={0.8}
+                  accessibilityLabel="Sign up with Google"
+                  accessibilityRole="button"
+                >
+                  <GoogleIcon width={20} height={20} />
+                  <Text className="text-gray-800 font-medium ml-2">
+                    {isGoogleLoading ? 'Loading...' : 'Google'}
+                  </Text>
+                </TouchableOpacity>
+
+                {/* LinkedIn Button */}
+                <TouchableOpacity
+                  style={[styles.socialButton, styles.socialButtonShadow]}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    showAlert({
+                      type: 'info',
+                      title: 'Available in Milestone 3',
+                      message: 'LinkedIn sign up will be available in Milestone 3.',
+                      buttons: [{ text: 'OK', style: 'default' }],
+                    });
+                  }}
+                  disabled={isLoading || showConsentBanner}
+                  activeOpacity={0.8}
+                  accessibilityLabel="Sign up with LinkedIn"
+                  accessibilityRole="button"
+                >
+                  <LinkedInIcon width={20} height={20} />
+                  <Text className="text-gray-800 font-medium ml-2">LinkedIn</Text>
+                </TouchableOpacity>
+              </View>
+            </>
           )}
-        />
 
-        {/* Sign In Button */}
-        <Button
-          className="bg-primary-blue rounded-xl mb-6"
-          onPress={handleSubmit(onSubmit)}
-          isLoading={isLoading}
-        >
-          Sign Up
-        </Button>
-
-        {/* OAuth Social Login - Only for Candidates */}
-        {role !== 'recruiter' && (
-          <>
-            {/* OR Divider */}
-            <View className="flex-row items-center mb-6">
-              <View className="flex-1 h-px bg-gray-300" />
-              <Text className="mx-4 text-gray-400">OR</Text>
-              <View className="flex-1 h-px bg-gray-300" />
-            </View>
-
-            {/* Social Login Buttons */}
-            <View className="flex-row justify-between mb-6">
-              <TouchableOpacity
-                onPress={handleGoogleSignIn}
-                disabled={isGoogleLoading}
-                className={`flex-1 bg-white border border-gray-300 rounded-xl py-3 flex-row items-center justify-center mr-3 ${
-                  isGoogleLoading ? 'opacity-50' : ''
-                }`}
-              >
-                <GoogleIcon />
-                <Text className="ml-2 text-gray-700 font-medium">
-                  {isGoogleLoading ? 'Signing in...' : 'Google'}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                className="flex-1 bg-white border border-gray-300 rounded-xl py-3 flex-row items-center justify-center"
-                onPress={() => showAlert({
-                  type: 'info',
-                  title: 'Coming Soon',
-                  message: 'LinkedIn registration will be available soon.',
-                  buttons: [{ text: 'OK', style: 'default' }],
-                })}
-              >
-                <LinkedInIcon />
-                <Text className="ml-2 text-gray-700 font-medium">LinkedIn</Text>
-              </TouchableOpacity>
-            </View>
-          </>
-        )}
-
-        {/* Already have account */}
-        <View className="flex-row justify-center mb-8">
-          <Text className="text-gray-600">Already have an account? </Text>
-          <TouchableOpacity onPress={onLogin}>
-            <Text className="text-primary-blue font-semibold">Log In</Text>
-          </TouchableOpacity>
-        </View>
-        </View>
+          {/* Already have account */}
+          <View className="flex-row justify-center mb-8">
+            <Text className="text-gray-600">Already have an account? </Text>
+            <TouchableOpacity
+              onPress={() => {
+                Haptics.selectionAsync();
+                onLogin?.();
+              }}
+              accessibilityLabel="Sign in to existing account"
+              accessibilityRole="link"
+            >
+              <Text className="text-primary-blue font-semibold">Sign In</Text>
+            </TouchableOpacity>
+          </View>
         </ScrollView>
       </KeyboardDismissWrapper>
 
@@ -780,6 +996,92 @@ export default function RegisterScreen({ role, onBack, onLogin, onRegisterSucces
           onRegisterSuccess?.();
         }}
       />
+
+      {/* GDPR Consent Banner */}
+      <GDPRConsentBanner
+        visible={showConsentBanner}
+        onAcceptAll={handleConsentAcceptAll}
+        onRejectAll={handleConsentRejectAll}
+        onSavePreferences={handleConsentCustom}
+      />
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  backButton: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  card: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  toggleButtonBase: {
+    flex: 1,
+    height: 50,
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toggleButtonShadow: {
+    // Figma: box-shadow: 0px 5px 10px -2px #2563EB40 (25% opacity)
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  toggleButtonActive: {
+    backgroundColor: '#2563EB',
+  },
+  toggleButtonInactiveGlass: {
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(200, 205, 215, 0.6)',
+  },
+  toggleButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  gradientButton: {
+    height: 50,
+    borderRadius: 33.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    // Glass effect shadow: 0px 5px 10px -2px #2563EB40
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 8,
+    // Subtle inner glow border
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  socialButton: {
+    flex: 1,
+    height: 50,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(200, 205, 215, 0.6)',
+  },
+  socialButtonShadow: {
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+});

@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
+import * as Haptics from 'expo-haptics';
 import {
   useCreateJobPostingMutation,
   useUpdateJobPostingMutation,
@@ -256,7 +257,10 @@ export default function CreateEditJobPostingScreen({
       {/* Back Button */}
       {onBack && (
         <View className="px-6 pt-4">
-          <TouchableOpacity onPress={onBack} className="flex-row items-center mb-4">
+          <TouchableOpacity onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            onBack();
+          }} className="flex-row items-center mb-4">
             <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" style={{ marginRight: 6 }}>
               <Path
                 d="M15 18L9 12L15 6"
@@ -367,7 +371,10 @@ export default function CreateEditJobPostingScreen({
               ].map((option) => (
                 <TouchableOpacity
                   key={option.value}
-                  onPress={() => setFormData({ ...formData, jobType: option.value })}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setFormData({ ...formData, jobType: option.value });
+                  }}
                   className={`px-4 py-2 rounded-full mr-2 mb-2 ${
                     formData.jobType === option.value ? 'bg-primary-blue' : 'bg-gray-200'
                   }`}
@@ -392,7 +399,10 @@ export default function CreateEditJobPostingScreen({
               ].map((option) => (
                 <TouchableOpacity
                   key={option.value}
-                  onPress={() => setFormData({ ...formData, workMode: option.value })}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setFormData({ ...formData, workMode: option.value });
+                  }}
                   className={`px-4 py-2 rounded-full mr-2 mb-2 ${
                     formData.workMode === option.value ? 'bg-primary-blue' : 'bg-gray-200'
                   }`}
@@ -420,7 +430,10 @@ export default function CreateEditJobPostingScreen({
               ].map((option) => (
                 <TouchableOpacity
                   key={option.value}
-                  onPress={() => setFormData({ ...formData, experienceLevel: option.value })}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setFormData({ ...formData, experienceLevel: option.value });
+                  }}
                   className={`px-4 py-2 rounded-full mr-2 mb-2 ${
                     formData.experienceLevel === option.value ? 'bg-primary-blue' : 'bg-gray-200'
                   }`}
@@ -572,7 +585,10 @@ export default function CreateEditJobPostingScreen({
               ].map((option) => (
                 <TouchableOpacity
                   key={option.value}
-                  onPress={() => setFormData({ ...formData, status: option.value })}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setFormData({ ...formData, status: option.value });
+                  }}
                   className={`px-4 py-2 rounded-full mr-2 mb-2 ${
                     formData.status === option.value ? 'bg-primary-blue' : 'bg-gray-200'
                   }`}
@@ -591,7 +607,10 @@ export default function CreateEditJobPostingScreen({
 
           {/* Submit Button */}
           <TouchableOpacity
-            onPress={handleSubmit}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              handleSubmit();
+            }}
             disabled={isCreating || isUpdating}
             className="bg-primary-blue rounded-xl py-4 items-center mb-6"
           >
@@ -605,6 +624,9 @@ export default function CreateEditJobPostingScreen({
                 : 'Create Job Posting'}
             </Text>
           </TouchableOpacity>
+
+          {/* Bottom padding for navbar */}
+          <View style={{ height: 100 }} />
         </View>
       </ScrollView>
       </KeyboardAvoidingView>

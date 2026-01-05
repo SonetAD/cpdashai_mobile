@@ -1,96 +1,122 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Path } from 'react-native-svg';
+import * as Haptics from 'expo-haptics';
 import LogoWhite from '../../assets/images/logoWhite.svg';
 import SearchIcon from '../../assets/images/search.svg';
-import BottomNavBar from '../BottomNavBar';
+
+// Back Arrow Icon
+const BackArrowIcon = () => (
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M15 18l-6-6 6-6"
+      stroke="white"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+);
 
 interface CandidateLayoutProps {
   children: React.ReactNode;
-  userName?: string;
   showSearch?: boolean;
   onSearchPress?: () => void;
-  activeTab?: string;
-  onTabChange?: (tabId: string) => void;
   showBackButton?: boolean;
   onBack?: () => void;
-  title?: string;
-  subtitle?: string;
+  headerTitle?: string;
+  headerSubtitle?: string;
+  hideHeader?: boolean;
 }
 
 export default function CandidateLayout({
   children,
-  userName = 'User',
   showSearch = true,
   onSearchPress,
-  activeTab = 'home',
-  onTabChange,
   showBackButton = false,
   onBack,
-  title,
-  subtitle,
+  headerTitle,
+  headerSubtitle,
+  hideHeader = false,
 }: CandidateLayoutProps) {
+  // Check if we have a custom header (title provided)
+  const hasCustomHeader = !!headerTitle;
+
   return (
-    <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
+    <SafeAreaView className="flex-1 bg-gray-50" edges={hideHeader ? [] : ['top']}>
       {/* Header */}
-      <LinearGradient
-        colors={['#437EF4', '#437EF4']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        className="px-6 py-4"
-      >
-        <View className="flex-row items-center justify-between">
-          {showBackButton && onBack ? (
-            <>
-              <TouchableOpacity onPress={onBack} className="mr-4">
-                <View style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}>
-                  <Text style={{ color: 'white', fontSize: 24, fontWeight: 'bold' }}>‹</Text>
+      {!hideHeader && (
+        <LinearGradient
+          colors={['#4F7DF3', '#5B7FF2']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          className="px-5 py-4"
+        >
+          <View className="flex-row items-center">
+            {showBackButton && onBack ? (
+              <>
+                <TouchableOpacity
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    onBack();
+                  }}
+                  className="mr-4"
+                >
+                  <BackArrowIcon />
+                </TouchableOpacity>
+                <View className="flex-1">
+                  {headerTitle && <Text className="text-white text-lg font-bold">{headerTitle}</Text>}
+                  {headerSubtitle && <Text className="text-white/80 text-sm">{headerSubtitle}</Text>}
                 </View>
-              </TouchableOpacity>
-              <View className="flex-1">
-                {title && <Text className="text-white text-lg font-bold">{title}</Text>}
-                {subtitle && <Text className="text-white/80 text-sm">{subtitle}</Text>}
-              </View>
-            </>
-          ) : (
-            <>
-              {/* Logo */}
-              <LogoWhite width={39} height={33} />
+              </>
+            ) : hasCustomHeader ? (
+              <>
+                {/* Logo Icon */}
+                <View className="mr-3">
+                  <LogoWhite width={44} height={37} />
+                </View>
+                {/* Custom Title and Subtitle */}
+                <View className="flex-1">
+                  <Text className="text-white text-xl font-bold">{headerTitle}</Text>
+                  {headerSubtitle && (
+                    <Text className="text-white/80 text-sm mt-0.5">{headerSubtitle}</Text>
+                  )}
+                </View>
+              </>
+            ) : (
+              <>
+                {/* Logo */}
+                <LogoWhite width={39} height={33} />
 
-              {/* CPDash AI Title */}
-              <View className="flex-1 mx-4">
-                <Text className="text-white text-xl font-bold">
-                  CPDash AI
-                </Text>
-              </View>
-            </>
-          )}
+                {/* CPDash AI Title */}
+                <View className="flex-1 mx-4">
+                  <Text className="text-white text-xl font-bold">
+                    CPDash AI
+                  </Text>
+                </View>
 
-          {/* Search Icon */}
-          {showSearch && !showBackButton && (
-            <TouchableOpacity
-              onPress={onSearchPress}
-              className="p-2"
-              activeOpacity={0.7}
-            >
-              <SearchIcon width={24} height={24} />
-            </TouchableOpacity>
-          )}
-        </View>
-      </LinearGradient>
+                {/* Search Icon */}
+                {showSearch && (
+                  <TouchableOpacity
+                    onPress={onSearchPress}
+                    className="p-2"
+                    activeOpacity={0.7}
+                  >
+                    <SearchIcon width={24} height={24} />
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
+          </View>
+        </LinearGradient>
+      )}
 
       {/* Content */}
-      <ScrollView
-        className="flex-1"
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 20 }}
-      >
+      <View className="flex-1">
         {children}
-      </ScrollView>
-
-      {/* Bottom Nav Bar */}
-      <BottomNavBar activeTab={activeTab} onTabPress={onTabChange} />
+      </View>
     </SafeAreaView>
   );
 }

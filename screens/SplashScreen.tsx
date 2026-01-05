@@ -1,7 +1,8 @@
 import React from 'react';
 import { View, Text, Dimensions, StyleSheet } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
-import CpDashAILogo from '../assets/images/cpDashAILogo.svg';
+import LogoWhite from '../assets/images/logoWhite.svg';
 
 const { width, height } = Dimensions.get('window');
 
@@ -27,13 +28,22 @@ const ArrowPattern = () => {
 
 export default function SplashScreen() {
   return (
-    <View className="flex-1 bg-primary-blue">
+    <LinearGradient
+      colors={['#5B4FC4', '#6B5DD3']}
+      locations={[0, 1]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={{ flex: 1 }}
+    >
       <ArrowPattern />
-      <View style={StyleSheet.absoluteFillObject} className="justify-center items-start pl-20">
-        <View className="mt-16">
-          <CpDashAILogo width={207} height={44} />
+      <View style={[StyleSheet.absoluteFillObject, { paddingTop: 60 }]} className="justify-center items-center">
+        <View className="flex-row items-center">
+          <LogoWhite width={44} height={44} />
+          <Text style={{ fontSize: 28, fontWeight: '700', color: 'white', marginLeft: 12, letterSpacing: 1 }}>
+            CPDASHAI
+          </Text>
         </View>
       </View>
-    </View>
+    </LinearGradient>
   );
 }
