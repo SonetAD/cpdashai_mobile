@@ -10,7 +10,7 @@ import SearchModal from '../../../components/SearchModal';
 const RayAvatar = ({ size = 120 }: { size?: number }) => (
   <View style={{ width: size, height: size, borderRadius: size / 2, overflow: 'hidden' }}>
     <Image
-      source={require('../../../assets/images/aiInterview/ray.png')}
+      source={require('../../../assets/images/aiInterview/ray.jpg')}
       style={{ width: size, height: size }}
       resizeMode="cover"
     />

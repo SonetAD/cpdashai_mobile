@@ -16,6 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import Svg, { Path } from 'react-native-svg';
 import ClaraSvg from '../assets/images/clara.svg';
+import RaySvg from '../assets/images/aiInterview/ray.svg';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -25,6 +26,7 @@ interface OnboardingSlide {
   title: string;
   description: string;
   isClara?: boolean;
+  isRay?: boolean;
 }
 
 const slides: OnboardingSlide[] = [
@@ -43,13 +45,19 @@ const slides: OnboardingSlide[] = [
   {
     id: '3',
     title: 'Meet',
+    description: 'Your AI career coach for interview prep, resume tips, and job search guidance.',
+    isRay: true,
+  },
+  {
+    id: '4',
+    title: 'Meet',
     description: 'Your AI companion for career clarity, confidence, and emotional support.',
     isClara: true,
   },
 ];
 
-// Only show pagination for image slides (not Clara)
-const imageSlides = slides.filter(s => !s.isClara);
+// Only show pagination for image slides (not Ray or Clara)
+const imageSlides = slides.filter(s => !s.isClara && !s.isRay);
 
 // Arrow Right Icon
 const ArrowRightIcon = () => (
@@ -127,6 +135,106 @@ export default function OnboardingScreen({ onFinish }: OnboardingScreenProps) {
     onFinish();
   };
 
+  const renderRaySlide = () => {
+    return (
+      <View style={styles.slideContainer}>
+        <StatusBar barStyle="light-content" />
+
+        {/* Background gradient - cyan top-left to purple bottom-right */}
+        <LinearGradient
+          colors={['#06B6D4', '#3B82F6', '#8B5CF6']}
+          locations={[0, 0.5, 1]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+
+        {/* Content Container */}
+        <View style={styles.claraContent}>
+          <View style={styles.claraCardWrapper}>
+            {/* Ray Image - Overlapping with white circle */}
+            <View style={styles.claraImageContainer}>
+              <View style={styles.rayImageCircle}>
+                <RaySvg width={120} height={120} />
+              </View>
+            </View>
+
+            {/* White Card Container */}
+            <View style={styles.claraCard}>
+              {/* Title - "Meet RAY" with RAY in cyan italic */}
+              <View style={styles.rayTitleContainer}>
+                <Text style={styles.rayTitleMeet}>Meet </Text>
+                <Text style={styles.rayTitleName}>RAY</Text>
+              </View>
+
+              {/* Subtitle */}
+              <Text style={styles.claraSubtitle}>
+                Your AI career coach for interview prep,{'\n'}resume tips, and job search guidance.
+              </Text>
+
+              {/* Features Box */}
+              <View style={styles.claraFeatures}>
+                {[
+                  'AI-powered career coaching',
+                  'Interview preparation & practice',
+                  'Resume tips & optimization',
+                  'Personalized job search guidance',
+                ].map((feature, index) => (
+                  <View key={index} style={styles.claraFeatureRow}>
+                    <View style={styles.rayFeatureDot} />
+                    <Text style={styles.claraFeatureText}>{feature}</Text>
+                  </View>
+                ))}
+              </View>
+
+              {/* Start Button with glass effect */}
+              <View style={styles.buttonWrapper}>
+                <TouchableOpacity
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    // Go to next slide (Clara)
+                    flatListRef.current?.scrollToIndex({
+                      index: currentIndex + 1,
+                      animated: true,
+                    });
+                  }}
+                  activeOpacity={0.9}
+                  style={styles.glassButtonTouchable}
+                >
+                  {/* Gradient background layer */}
+                  <LinearGradient
+                    colors={[
+                      'rgba(6, 182, 212, 0.9)',
+                      'rgba(139, 92, 246, 0)',
+                      'rgba(139, 92, 246, 0.9)',
+                    ]}
+                    locations={[0.1062, 0.5064, 0.9066]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 0.85, y: 1 }}
+                    style={styles.glassButtonGradient}
+                  >
+                    {/* Blue overlay */}
+                    <View style={styles.glassButtonOverlay}>
+                      <Text style={styles.glassButtonText}>Start With Ray</Text>
+                    </View>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+
+              {/* Skip Button */}
+              <TouchableOpacity
+                onPress={handleSkip}
+                style={styles.skipButton}
+              >
+                <Text style={styles.skipText}>Skip</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
   const renderClaraSlide = () => {
     return (
       <View style={styles.slideContainer}>
@@ -177,23 +285,30 @@ export default function OnboardingScreen({ onFinish }: OnboardingScreenProps) {
               </View>
 
               {/* Start Button with glass effect */}
-              <View style={styles.claraButtonWrapper}>
+              <View style={styles.buttonWrapper}>
                 <TouchableOpacity
                   onPress={() => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                     onFinish();
                   }}
                   activeOpacity={0.9}
-                  style={styles.claraButtonTouchable}
+                  style={styles.glassButtonTouchable}
                 >
+                  {/* Gradient background layer */}
                   <LinearGradient
-                    colors={['#06B6D4', '#8B5CF6']}
+                    colors={[
+                      'rgba(6, 182, 212, 0.9)',
+                      'rgba(139, 92, 246, 0)',
+                      'rgba(139, 92, 246, 0.9)',
+                    ]}
+                    locations={[0.1062, 0.5064, 0.9066]}
                     start={{ x: 0, y: 0 }}
-                    end={{ x: 0.8, y: 1 }}
-                    style={styles.claraButtonGradient}
+                    end={{ x: 0.85, y: 1 }}
+                    style={styles.glassButtonGradient}
                   >
-                    <View style={styles.claraButtonOverlay}>
-                      <Text style={styles.claraButtonText}>Start With Clara</Text>
+                    {/* Blue overlay */}
+                    <View style={styles.glassButtonOverlay}>
+                      <Text style={styles.glassButtonText}>Start With Clara</Text>
                     </View>
                   </LinearGradient>
                 </TouchableOpacity>
@@ -214,6 +329,9 @@ export default function OnboardingScreen({ onFinish }: OnboardingScreenProps) {
   };
 
   const renderSlide = ({ item }: { item: OnboardingSlide }) => {
+    if (item.isRay) {
+      return renderRaySlide();
+    }
     if (item.isClara) {
       return renderClaraSlide();
     }
@@ -286,18 +404,23 @@ export default function OnboardingScreen({ onFinish }: OnboardingScreenProps) {
             <TouchableOpacity
               onPress={handleNext}
               activeOpacity={0.9}
-              style={styles.nextButtonTouchable}
+              style={styles.glassButtonTouchable}
             >
-              {/* Button gradient background */}
+              {/* Gradient background layer */}
               <LinearGradient
-                colors={['#06B6D4', '#8B5CF6']}
+                colors={[
+                  'rgba(6, 182, 212, 0.9)',
+                  'rgba(139, 92, 246, 0)',
+                  'rgba(139, 92, 246, 0.9)',
+                ]}
+                locations={[0.1062, 0.5064, 0.9066]}
                 start={{ x: 0, y: 0 }}
-                end={{ x: 0.8, y: 1 }}
-                style={styles.buttonGradient}
+                end={{ x: 0.85, y: 1 }}
+                style={styles.glassButtonGradient}
               >
                 {/* Blue overlay */}
-                <View style={styles.buttonBlueOverlay}>
-                  <Text style={styles.nextButtonText}>Next</Text>
+                <View style={styles.glassButtonOverlay}>
+                  <Text style={styles.glassButtonText}>Next</Text>
                   <ArrowRightIcon />
                 </View>
               </LinearGradient>
@@ -414,7 +537,7 @@ const styles = StyleSheet.create({
   // Button
   buttonWrapper: {
     marginBottom: 16,
-    borderRadius: 30,
+    borderRadius: 33.5,
     // Glass shadow: box-shadow: 0px 5px 10px -2px #2563EB40
     shadowColor: '#2563EB',
     shadowOffset: { width: 0, height: 5 },
@@ -422,26 +545,33 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 12,
   },
-  nextButtonTouchable: {
-    borderRadius: 30,
+  // Glass button styles matching Figma design
+  glassButtonTouchable: {
+    borderRadius: 33.5,
     overflow: 'hidden',
   },
-  buttonGradient: {
-    borderRadius: 30,
+  glassButtonGradient: {
+    borderRadius: 33.5,
   },
-  buttonBlueOverlay: {
+  glassButtonOverlay: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 18,
-    borderRadius: 30,
-    gap: 8,
+    paddingVertical: 13,
+    paddingHorizontal: 20,
+    borderRadius: 33.5,
+    gap: 10,
     backgroundColor: 'rgba(37, 99, 235, 0.8)',
+    minHeight: 50,
   },
-  nextButtonText: {
+  glassButtonText: {
     color: '#FFFFFF',
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '600',
+    // Text shadow for glass effect
+    textShadowColor: 'rgba(37, 99, 235, 0.25)',
+    textShadowOffset: { width: 0, height: 5 },
+    textShadowRadius: 10,
   },
   skipButton: {
     paddingVertical: 8,
@@ -519,32 +649,40 @@ const styles = StyleSheet.create({
     fontSize: 14,
     flex: 1,
   },
-  claraButtonWrapper: {
-    marginBottom: 16,
-    borderRadius: 30,
-    // Glass shadow
-    shadowColor: '#2563EB',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 12,
+  // Ray Slide Styles
+  rayTitleMeet: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#1F2937',
   },
-  claraButtonTouchable: {
-    borderRadius: 30,
-    overflow: 'hidden',
-  },
-  claraButtonGradient: {
-    borderRadius: 30,
-  },
-  claraButtonOverlay: {
-    backgroundColor: 'rgba(37, 99, 235, 0.8)',
-    paddingVertical: 18,
-    borderRadius: 30,
+  rayImageCircle: {
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    borderWidth: 3,
+    borderColor: '#06B6D4',
   },
-  claraButtonText: {
-    color: '#FFFFFF',
-    fontSize: 17,
+  rayTitleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'baseline',
+    marginBottom: 8,
+  },
+  rayTitleName: {
+    fontSize: 28,
     fontWeight: '600',
+    fontStyle: 'italic',
+    color: '#06B6D4',
+  },
+  rayFeatureDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#06B6D4',
+    marginRight: 10,
   },
 });

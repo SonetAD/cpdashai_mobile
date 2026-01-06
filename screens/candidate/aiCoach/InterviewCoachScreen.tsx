@@ -652,7 +652,7 @@ export default function InterviewCoachScreen({
             <View className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex-row items-center">
               <View className="rounded-full w-14 h-14 items-center justify-center overflow-hidden">
                 <Image
-                  source={require('../../../assets/images/aiInterview/ray.png')}
+                  source={require('../../../assets/images/aiInterview/ray.jpg')}
                   style={{ width: 56, height: 56 }}
                   resizeMode="cover"
                 />
