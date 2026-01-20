@@ -32,13 +32,13 @@ export default function ProfileRoute() {
 
   return (
     <ProfileScreen
-      activeTab="profile"
+      activeTab="home" // Show Home as selected since this is accessed from top navbar
       onTabChange={(tabId) => {
         const routes: Record<string, string> = {
           home: '/(candidate)/(tabs)/home',
           jobs: '/(candidate)/(tabs)/jobs',
           aiCoach: '/(candidate)/(tabs)/ai-coach',
-          profile: '/(candidate)/(tabs)/profile',
+          profile: '/(candidate)/(tabs)/profile/full-profile',
         };
         // Use replace for tab changes to avoid stacking
         router.replace(routes[tabId] as any);
@@ -47,8 +47,10 @@ export default function ProfileRoute() {
       onLogout={handleLogout}
       onViewPricing={() => router.push('/(candidate)/subscription/pricing' as any)}
       onViewBillingHistory={() => router.push('/(candidate)/subscription/billing-history' as any)}
-      onViewFullProfile={() => router.push('/(candidate)/(tabs)/profile/full-profile' as any)}
       onSearchNavigate={(route) => router.push(route as any)}
+      onBack={() => router.replace('/(candidate)/(tabs)/home' as any)}
+      onNotificationPress={() => router.push('/(candidate)/notifications' as any)}
+      onProfilePress={() => {}} // Already on profile, do nothing
     />
   );
 }

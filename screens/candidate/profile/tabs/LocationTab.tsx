@@ -1,44 +1,792 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, TextInput, Alert, ScrollView, Modal } from 'react-native';
-import { 
-  useGetCandidateProfileQuery, 
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator, Modal, Dimensions, TextInput, Animated } from 'react-native';
+import { Canvas, RoundedRect, LinearGradient as SkiaLinearGradient, vec } from '@shopify/react-native-skia';
+import * as Haptics from 'expo-haptics';
+import { useSelector } from 'react-redux';
+import {
+  useGetCandidateProfileQuery,
   useAddPreferredLocationsMutation,
-  useUpdatePreferredLocationsMutation,
-  useDeletePreferredLocationsMutation 
+  useDeletePreferredLocationsMutation,
+  WorkType,
+  EmploymentType,
 } from '../../../../services/api';
 import { useAlert } from '../../../../contexts/AlertContext';
+import Svg, { Path } from 'react-native-svg';
+
+const SCREEN_WIDTH = Dimensions.get('window').width;
+
+// CountriesNow API endpoints
+const COUNTRIES_API = 'https://countriesnow.space/api/v0.1/countries';
+const CITIES_API = 'https://countriesnow.space/api/v0.1/countries/cities';
+
+const WORK_TYPES: { label: string; value: WorkType }[] = [
+  { label: 'Remote', value: 'REMOTE' },
+  { label: 'Hybrid', value: 'HYBRID' },
+  { label: 'On-site', value: 'ONSITE' },
+];
+
+const EMPLOYMENT_TYPES: { label: string; value: EmploymentType }[] = [
+  { label: 'Full Time', value: 'FULL_TIME' },
+  { label: 'Part Time', value: 'PART_TIME' },
+  { label: 'Contract', value: 'CONTRACT' },
+  { label: 'Internship', value: 'INTERNSHIP' },
+  { label: 'Freelance', value: 'FREELANCE' },
+];
+
+const LocationIcon = ({ size = 20, color = "#3B82F6" }: { size?: number; color?: string }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M12 21c-4.97-4.97-7-7.97-7-11a7 7 0 1114 0c0 3.03-2.03 6.03-7 11z"
+      stroke={color}
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <Path
+      d="M12 13a3 3 0 100-6 3 3 0 000 6z"
+      stroke={color}
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+);
+
+const ChevronDownIcon = ({ color = "#64748B" }: { color?: string }) => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+    <Path d="M6 9l6 6 6-6" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+// Location Card Component
+const LocationCard = ({
+  location,
+  onDelete,
+}: {
+  location: {
+    id?: string;
+    city: string;
+    country: string;
+    workTypes: string[];
+    employmentType: string;
+  };
+  onDelete: () => void;
+}) => {
+  const getWorkTypeLabel = (type: string) => {
+    const found = WORK_TYPES.find(w => w.value === type);
+    return found?.label || type;
+  };
+
+  const getEmploymentTypeLabel = (type: string) => {
+    const found = EMPLOYMENT_TYPES.find(e => e.value === type);
+    return found?.label || type;
+  };
+
+  return (
+    <View style={cardStyles.container}>
+      <View style={cardStyles.header}>
+        <View style={cardStyles.locationInfo}>
+          <LocationIcon size={20} color="#3B82F6" />
+          <Text style={cardStyles.locationText}>{location.city}, {location.country}</Text>
+        </View>
+        <TouchableOpacity
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            onDelete();
+          }}
+          style={cardStyles.deleteButton}
+        >
+          <Text style={cardStyles.deleteIcon}>×</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={cardStyles.tagsContainer}>
+        {location.workTypes.map((type, idx) => (
+          <View key={idx} style={cardStyles.workTypeTag}>
+            <Text style={cardStyles.workTypeText}>{getWorkTypeLabel(type)}</Text>
+          </View>
+        ))}
+        <View style={cardStyles.employmentTag}>
+          <Text style={cardStyles.employmentText}>{getEmploymentTypeLabel(location.employmentType)}</Text>
+        </View>
+      </View>
+    </View>
+  );
+};
+
+const cardStyles = StyleSheet.create({
+  container: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  locationInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  locationText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginLeft: 8,
+  },
+  deleteButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#FEE2E2',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deleteIcon: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#EF4444',
+  },
+  tagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  workTypeTag: {
+    backgroundColor: '#DBEAFE',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  workTypeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1D4ED8',
+  },
+  employmentTag: {
+    backgroundColor: '#F0FDF4',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  employmentText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#16A34A',
+  },
+});
+
+// Search Icon Component
+const SearchIcon = ({ color = "#94A3B8" }: { color?: string }) => (
+  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+);
+
+// Loading Skeleton Component for dropdown options
+const LoadingSkeleton = ({ count = 5 }: { count?: number }) => {
+  const pulseAnim = React.useRef(new Animated.Value(0.3)).current;
+
+  React.useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 0.3,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    animation.start();
+    return () => animation.stop();
+  }, []);
+
+  return (
+    <View style={skeletonStyles.container}>
+      {Array.from({ length: count }).map((_, index) => (
+        <Animated.View
+          key={index}
+          style={[
+            skeletonStyles.item,
+            { opacity: pulseAnim },
+            index % 3 === 0 && { width: '85%' },
+            index % 3 === 1 && { width: '70%' },
+            index % 3 === 2 && { width: '90%' },
+          ]}
+        />
+      ))}
+    </View>
+  );
+};
+
+const skeletonStyles = StyleSheet.create({
+  container: {
+    paddingVertical: 8,
+  },
+  item: {
+    height: 48,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 10,
+    marginBottom: 8,
+    width: '100%',
+  },
+});
+
+// Dropdown Component
+const Dropdown = ({
+  label,
+  value,
+  placeholder,
+  options,
+  onSelect,
+  disabled,
+  loading,
+  searchPlaceholder,
+}: {
+  label: string;
+  value: string;
+  placeholder: string;
+  options: string[];
+  onSelect: (value: string) => void;
+  disabled?: boolean;
+  loading?: boolean;
+  searchPlaceholder?: string;
+}) => {
+  const [showModal, setShowModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Filter options based on search query
+  const filteredOptions = useMemo(() => {
+    if (!searchQuery.trim()) return options;
+    const query = searchQuery.toLowerCase().trim();
+    return options.filter(option => option.toLowerCase().includes(query));
+  }, [options, searchQuery]);
+
+  // Reset search when modal closes
+  const handleCloseModal = () => {
+    setShowModal(false);
+    setSearchQuery('');
+  };
+
+  return (
+    <View style={dropdownStyles.container}>
+      <Text style={dropdownStyles.label}>{label}</Text>
+      <TouchableOpacity
+        style={[dropdownStyles.button, disabled && dropdownStyles.buttonDisabled]}
+        onPress={() => {
+          if (!disabled && !loading) {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setShowModal(true);
+          }
+        }}
+        disabled={disabled || loading}
+      >
+        <Text style={[dropdownStyles.buttonText, !value && dropdownStyles.placeholderText]}>
+          {value || placeholder}
+        </Text>
+        {loading ? (
+          <ActivityIndicator size="small" color="#64748B" />
+        ) : (
+          <ChevronDownIcon color={disabled ? '#CBD5E1' : '#64748B'} />
+        )}
+      </TouchableOpacity>
+
+      <Modal visible={showModal} transparent animationType="fade">
+        <TouchableOpacity
+          style={dropdownStyles.modalOverlay}
+          activeOpacity={1}
+          onPress={handleCloseModal}
+        >
+          <View style={dropdownStyles.modalContent} onStartShouldSetResponder={() => true}>
+            <Text style={dropdownStyles.modalTitle}>{label.replace(' *', '')}</Text>
+
+            {/* Search Input */}
+            <View style={dropdownStyles.searchContainer}>
+              <SearchIcon color="#94A3B8" />
+              <TextInput
+                style={dropdownStyles.searchInput}
+                placeholder={searchPlaceholder || `Search ${label.replace(' *', '').toLowerCase()}...`}
+                placeholderTextColor="#94A3B8"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setSearchQuery('')}>
+                  <Text style={dropdownStyles.clearButton}>✕</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {loading ? (
+              <View style={dropdownStyles.loadingContainer}>
+                <ActivityIndicator size="small" color="#3B82F6" style={{ marginBottom: 12 }} />
+                <Text style={dropdownStyles.loadingText}>Loading {label.replace(' *', '').toLowerCase()}...</Text>
+                <LoadingSkeleton count={5} />
+              </View>
+            ) : options.length === 0 ? (
+              <View style={dropdownStyles.emptyState}>
+                <Text style={dropdownStyles.emptyText}>No options available</Text>
+              </View>
+            ) : filteredOptions.length === 0 ? (
+              <View style={dropdownStyles.emptyState}>
+                <Text style={dropdownStyles.emptyText}>No results for "{searchQuery}"</Text>
+              </View>
+            ) : (
+              <ScrollView style={dropdownStyles.optionsList} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                {filteredOptions.map((option) => (
+                  <TouchableOpacity
+                    key={option}
+                    style={[dropdownStyles.option, value === option && dropdownStyles.optionSelected]}
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      onSelect(option);
+                      handleCloseModal();
+                    }}
+                  >
+                    <Text style={[dropdownStyles.optionText, value === option && dropdownStyles.optionTextSelected]}>
+                      {option}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    </View>
+  );
+};
+
+const dropdownStyles = StyleSheet.create({
+  container: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#475569',
+    marginBottom: 8,
+  },
+  button: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  buttonDisabled: {
+    backgroundColor: '#F1F5F9',
+    borderColor: '#E2E8F0',
+  },
+  buttonText: {
+    fontSize: 16,
+    color: '#1E293B',
+  },
+  placeholderText: {
+    color: '#94A3B8',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    width: '100%',
+    maxHeight: '70%',
+    padding: 20,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 14,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#1E293B',
+    marginLeft: 10,
+    paddingVertical: 0,
+  },
+  clearButton: {
+    fontSize: 14,
+    color: '#94A3B8',
+    paddingHorizontal: 4,
+  },
+  optionsList: {
+    maxHeight: 400,
+  },
+  option: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    marginBottom: 4,
+  },
+  optionSelected: {
+    backgroundColor: '#EFF6FF',
+  },
+  optionText: {
+    fontSize: 16,
+    color: '#334155',
+  },
+  optionTextSelected: {
+    color: '#2563EB',
+    fontWeight: '600',
+  },
+  emptyState: {
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 15,
+    color: '#94A3B8',
+  },
+  loadingContainer: {
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 14,
+    color: '#64748B',
+    marginBottom: 16,
+    fontWeight: '500',
+  },
+});
+
+// Work Type Icons
+const WorkTypeIcon = ({ type, color }: { type: WorkType; color: string }) => {
+  if (type === 'REMOTE') {
+    return (
+      <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+        <Path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+      </Svg>
+    );
+  }
+  if (type === 'HYBRID') {
+    return (
+      <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+        <Path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+      </Svg>
+    );
+  }
+  return (
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+      <Path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+};
+
+// Multi-Select Work Type Component
+const WorkTypeSelector = ({
+  selected,
+  onToggle,
+}: {
+  selected: WorkType[];
+  onToggle: (type: WorkType) => void;
+}) => {
+  return (
+    <View style={workTypeStyles.container}>
+      <Text style={workTypeStyles.label}>Work Types <Text style={workTypeStyles.hint}>(Select one or more)</Text></Text>
+      <View style={workTypeStyles.options}>
+        {WORK_TYPES.map((type) => {
+          const isSelected = selected.includes(type.value);
+          return (
+            <TouchableOpacity
+              key={type.value}
+              style={[workTypeStyles.option, isSelected && workTypeStyles.optionSelected]}
+              onPress={() => {
+                Haptics.selectionAsync();
+                onToggle(type.value);
+              }}
+            >
+              <WorkTypeIcon type={type.value} color={isSelected ? '#2563EB' : '#64748B'} />
+              <Text style={[workTypeStyles.optionText, isSelected && workTypeStyles.optionTextSelected]}>
+                {type.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+};
+
+const workTypeStyles = StyleSheet.create({
+  container: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#475569',
+    marginBottom: 8,
+  },
+  hint: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: '#94A3B8',
+  },
+  options: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  option: {
+    flexGrow: 1,
+    flexBasis: '30%',
+    minWidth: 100,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  optionSelected: {
+    borderColor: '#3B82F6',
+    backgroundColor: '#EFF6FF',
+  },
+  optionText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#64748B',
+  },
+  optionTextSelected: {
+    color: '#2563EB',
+    fontWeight: '600',
+  },
+});
+
+// Employment Type Selector
+const EmploymentTypeSelector = ({
+  selected,
+  onSelect,
+}: {
+  selected: EmploymentType | '';
+  onSelect: (type: EmploymentType) => void;
+}) => {
+  return (
+    <View style={employmentStyles.container}>
+      <Text style={employmentStyles.label}>Employment Type</Text>
+      <View style={employmentStyles.options}>
+        {EMPLOYMENT_TYPES.map((type) => {
+          const isSelected = selected === type.value;
+          return (
+            <TouchableOpacity
+              key={type.value}
+              style={[employmentStyles.option, isSelected && employmentStyles.optionSelected]}
+              onPress={() => {
+                Haptics.selectionAsync();
+                onSelect(type.value);
+              }}
+            >
+              <Text style={[employmentStyles.optionText, isSelected && employmentStyles.optionTextSelected]}>
+                {type.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+};
+
+const employmentStyles = StyleSheet.create({
+  container: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#475569',
+    marginBottom: 8,
+  },
+  options: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  option: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+  },
+  optionSelected: {
+    borderColor: '#10B981',
+    backgroundColor: '#ECFDF5',
+  },
+  optionText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#64748B',
+  },
+  optionTextSelected: {
+    color: '#059669',
+    fontWeight: '600',
+  },
+});
 
 export default function LocationTab() {
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [newLocation, setNewLocation] = useState('');
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [selectedCountry, setSelectedCountry] = useState('');
+  const [selectedCity, setSelectedCity] = useState('');
+  const [selectedWorkTypes, setSelectedWorkTypes] = useState<WorkType[]>([]);
+  const [selectedEmploymentType, setSelectedEmploymentType] = useState<EmploymentType | ''>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Countries and Cities state
+  const [countries, setCountries] = useState<string[]>([]);
+  const [cities, setCities] = useState<string[]>([]);
+  const [loadingCountries, setLoadingCountries] = useState(false);
+  const [loadingCities, setLoadingCities] = useState(false);
 
   const { data: profileData, refetch: refetchProfile } = useGetCandidateProfileQuery();
   const [addPreferredLocations] = useAddPreferredLocationsMutation();
-  const [updatePreferredLocations] = useUpdatePreferredLocationsMutation();
   const [deletePreferredLocations] = useDeletePreferredLocationsMutation();
   const { showAlert } = useAlert();
+  const authToken = useSelector((state: any) => state.auth?.token);
 
   const candidateProfile = profileData?.myProfile?.__typename === 'CandidateType' ? profileData.myProfile : null;
   const locations = candidateProfile?.preferredLocations || [];
 
+  // Fetch countries on mount
+  useEffect(() => {
+    const fetchCountries = async () => {
+      setLoadingCountries(true);
+      try {
+        const response = await fetch(COUNTRIES_API);
+        const data = await response.json();
+        if (data.error === false && data.data) {
+          const countryNames = data.data.map((item: { country: string }) => item.country).sort();
+          setCountries(countryNames);
+        }
+      } catch (error) {
+        console.error('Error fetching countries:', error);
+        // Fallback to some common countries if API fails
+        setCountries(['United States', 'United Kingdom', 'Canada', 'Australia', 'Germany', 'France', 'India', 'Singapore', 'United Arab Emirates']);
+      } finally {
+        setLoadingCountries(false);
+      }
+    };
+    fetchCountries();
+  }, []);
+
+  // Fetch cities when country changes
+  const fetchCities = useCallback(async (country: string) => {
+    if (!country) {
+      setCities([]);
+      return;
+    }
+    setLoadingCities(true);
+    setCities([]);
+    try {
+      const response = await fetch(CITIES_API, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ country }),
+      });
+      const data = await response.json();
+      if (data.error === false && data.data) {
+        setCities(data.data.sort());
+      }
+    } catch (error) {
+      console.error('Error fetching cities:', error);
+      setCities([]);
+    } finally {
+      setLoadingCities(false);
+    }
+  }, []);
+
+  const resetForm = () => {
+    setSelectedCountry('');
+    setSelectedCity('');
+    setSelectedWorkTypes([]);
+    setSelectedEmploymentType('');
+    setShowAddForm(false);
+  };
+
+  const handleToggleWorkType = (type: WorkType) => {
+    setSelectedWorkTypes((prev) =>
+      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
+    );
+  };
+
   const handleAddLocation = async () => {
-    if (!newLocation.trim()) {
+    if (!authToken) {
       showAlert({
         type: 'error',
-        title: 'Required Field',
-        message: 'Please enter a location',
+        title: 'Session Expired',
+        message: 'Please log in again to continue.',
         buttons: [{ text: 'OK', style: 'default' }],
       });
       return;
     }
 
-    // Check if location already exists
-    if (locations.some(loc => loc.toLowerCase() === newLocation.trim().toLowerCase())) {
+    // Validation
+    const missingFields: string[] = [];
+    if (!selectedCountry) missingFields.push('Country');
+    if (!selectedCity) missingFields.push('City');
+    if (selectedWorkTypes.length === 0) missingFields.push('Work Type');
+    if (!selectedEmploymentType) missingFields.push('Employment Type');
+
+    if (missingFields.length > 0) {
       showAlert({
         type: 'error',
-        title: 'Duplicate Location',
-        message: 'This location is already in your list',
+        title: 'Required Fields Missing',
+        message: `Please select: ${missingFields.join(', ')}`,
         buttons: [{ text: 'OK', style: 'default' }],
       });
       return;
@@ -48,34 +796,32 @@ export default function LocationTab() {
 
     try {
       const response = await addPreferredLocations({
-        locations: [newLocation.trim()],
+        locations: [{
+          city: selectedCity,
+          country: selectedCountry,
+          workTypes: selectedWorkTypes,
+          employmentType: selectedEmploymentType as EmploymentType,
+        }],
       }).unwrap();
 
       if (response.addPreferredLocations?.__typename === 'SuccessType') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         showAlert({
           type: 'success',
           title: 'Success!',
           message: 'Location added successfully',
           buttons: [{ text: 'OK', style: 'default' }],
         });
-
-        setNewLocation('');
-        setShowAddModal(false);
+        resetForm();
         await refetchProfile();
       } else {
-        showAlert({
-          type: 'error',
-          title: 'Error',
-          message: response.addPreferredLocations?.message || 'Failed to add location',
-          buttons: [{ text: 'OK', style: 'default' }],
-        });
+        throw new Error(response.addPreferredLocations?.message || 'Failed to add location');
       }
     } catch (error: any) {
-      console.error('Error adding location:', error);
       showAlert({
         type: 'error',
         title: 'Error',
-        message: error?.data?.addPreferredLocations?.message || 'Failed to add location. Please try again.',
+        message: error.message || 'Failed to add location',
         buttons: [{ text: 'OK', style: 'default' }],
       });
     } finally {
@@ -83,26 +829,34 @@ export default function LocationTab() {
     }
   };
 
-  const handleDeleteLocation = async (location: string) => {
+  const handleDeleteLocation = async (locationId: string, locationName: string) => {
+    if (!authToken) {
+      showAlert({
+        type: 'error',
+        title: 'Session Expired',
+        message: 'Please log in again to continue.',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
+      return;
+    }
+
     showAlert({
       type: 'warning',
       title: 'Delete Location',
-      message: `Are you sure you want to remove "${location}" from your preferred locations?`,
+      message: `Are you sure you want to remove "${locationName}"?`,
       buttons: [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
+        { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
             try {
               const response = await deletePreferredLocations({
-                locations: [location],
+                locationIds: [locationId],
               }).unwrap();
 
               if (response.deletePreferredLocations?.__typename === 'SuccessType') {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 showAlert({
                   type: 'success',
                   title: 'Success!',
@@ -111,19 +865,13 @@ export default function LocationTab() {
                 });
                 await refetchProfile();
               } else {
-                showAlert({
-                  type: 'error',
-                  title: 'Error',
-                  message: response.deletePreferredLocations?.message || 'Failed to delete location',
-                  buttons: [{ text: 'OK', style: 'default' }],
-                });
+                throw new Error('Failed to delete location');
               }
             } catch (error: any) {
-              console.error('Error deleting location:', error);
               showAlert({
                 type: 'error',
                 title: 'Error',
-                message: error?.data?.deletePreferredLocations?.message || 'Failed to delete location. Please try again.',
+                message: 'Failed to delete location',
                 buttons: [{ text: 'OK', style: 'default' }],
               });
             }
@@ -134,110 +882,229 @@ export default function LocationTab() {
   };
 
   return (
-    <View>
-      {/* Header */}
-      <View className="bg-white rounded-xl p-5 mb-4 border border-gray-100">
-        <Text className="text-gray-900 font-bold text-lg mb-2">Preferred Locations</Text>
-        <Text className="text-gray-600 text-sm mb-4">
-          Add your preferred work locations. This helps employers understand where you'd like to work and is required when applying for jobs.
-        </Text>
-
-        {/* Locations List */}
-        {locations.length > 0 ? (
-          <View className="flex-row flex-wrap gap-2 mb-4">
-            {locations.map((location, index) => (
-              <View key={index} className="bg-blue-50 border border-primary-blue rounded-full px-4 py-2 flex-row items-center">
-                <Text className="text-primary-blue text-sm font-medium mr-2">{location}</Text>
-                <TouchableOpacity onPress={() => handleDeleteLocation(location)}>
-                  <Text className="text-primary-blue text-base font-bold">×</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
-          </View>
-        ) : (
-          <View className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-4">
-            <Text className="text-yellow-800 text-sm font-medium mb-1">⚠️ No locations added</Text>
-            <Text className="text-yellow-700 text-xs">
-              You need to add at least one preferred location before you can apply for jobs.
-            </Text>
-          </View>
-        )}
-
-        {/* Add Location Button */}
-        <TouchableOpacity
-          onPress={() => setShowAddModal(true)}
-          className="bg-primary-blue rounded-xl py-3 items-center"
-        >
-          <Text className="text-white text-sm font-semibold">+ Add Location</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Common Locations Suggestions */}
-      <View className="bg-white rounded-xl p-5 mb-4 border border-gray-100">
-        <Text className="text-gray-900 font-bold text-base mb-3">Quick Add</Text>
-        <Text className="text-gray-600 text-xs mb-3">Popular location options:</Text>
-        <View className="flex-row flex-wrap gap-2">
-          {['Remote', 'Hybrid', 'New York', 'San Francisco', 'London', 'Toronto', 'Berlin', 'Singapore'].map((loc) => (
-            <TouchableOpacity
-              key={loc}
-              onPress={() => {
-                setNewLocation(loc);
-                setShowAddModal(true);
-              }}
-              className="bg-gray-100 rounded-full px-3 py-2"
-            >
-              <Text className="text-gray-700 text-xs font-medium">+ {loc}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      {/* Add Location Modal */}
-      <Modal
-        visible={showAddModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowAddModal(false)}
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      {/* Add Button */}
+      <TouchableOpacity
+        style={styles.addButton}
+        activeOpacity={0.8}
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          setShowAddForm(true);
+        }}
       >
-        <View className="flex-1 bg-black/50 justify-end">
-          <View className="bg-white rounded-t-3xl p-6">
-            <Text className="text-gray-900 text-xl font-bold mb-4">Add Preferred Location</Text>
-
-            <Text className="text-gray-700 text-sm mb-2">Location *</Text>
-            <TextInput
-              className="bg-gray-50 rounded-xl p-4 mb-4 text-gray-900 border border-gray-200"
-              placeholder="e.g., New York, Remote, Hybrid, etc."
-              placeholderTextColor="#9CA3AF"
-              value={newLocation}
-              onChangeText={setNewLocation}
-              autoFocus
-            />
-
-            <View className="flex-row gap-3">
-              <TouchableOpacity
-                onPress={() => {
-                  setShowAddModal(false);
-                  setNewLocation('');
-                }}
-                className="flex-1 bg-gray-200 rounded-xl py-4 items-center"
-                disabled={isSubmitting}
-              >
-                <Text className="text-gray-700 font-semibold">Cancel</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={handleAddLocation}
-                className="flex-1 bg-primary-blue rounded-xl py-4 items-center"
-                disabled={isSubmitting}
-              >
-                <Text className="text-white font-semibold">
-                  {isSubmitting ? 'Adding...' : 'Add Location'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+        <View style={styles.addButtonContent}>
+          <LocationIcon size={20} color="#FFFFFF" />
+          <Text style={styles.addButtonText}>Add Location</Text>
         </View>
-      </Modal>
-    </View>
+      </TouchableOpacity>
+
+      {/* Add Location Form */}
+      {showAddForm && (
+        <View style={styles.formCard}>
+          <View style={styles.formHeader}>
+            <Text style={styles.formTitle}>Add New Location</Text>
+            <TouchableOpacity onPress={resetForm}>
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Country Dropdown */}
+          <Dropdown
+            label="Country *"
+            value={selectedCountry}
+            placeholder={loadingCountries ? 'Loading countries...' : 'Select a country'}
+            options={countries}
+            onSelect={(country) => {
+              setSelectedCountry(country);
+              setSelectedCity(''); // Reset city when country changes
+              fetchCities(country); // Fetch cities for selected country
+            }}
+            disabled={loadingCountries}
+            loading={loadingCountries}
+          />
+
+          {/* City Dropdown */}
+          <Dropdown
+            label="City *"
+            value={selectedCity}
+            placeholder={!selectedCountry ? 'Select country first' : loadingCities ? 'Loading cities...' : 'Select a city'}
+            options={cities}
+            onSelect={setSelectedCity}
+            disabled={!selectedCountry || loadingCities}
+            loading={loadingCities}
+          />
+
+          {/* Work Type Multi-Select */}
+          <WorkTypeSelector
+            selected={selectedWorkTypes}
+            onToggle={handleToggleWorkType}
+          />
+
+          {/* Employment Type */}
+          <EmploymentTypeSelector
+            selected={selectedEmploymentType}
+            onSelect={setSelectedEmploymentType}
+          />
+
+          {/* Submit Button */}
+          <TouchableOpacity
+            style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              handleAddLocation();
+            }}
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.submitButtonText}>Add Location</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Locations List */}
+      {Array.isArray(locations) && locations.length > 0 ? (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Your Preferred Locations</Text>
+          {locations.map((location: any, index: number) => {
+            // Handle both old string format and new object format
+            if (typeof location === 'string') {
+              return (
+                <LocationCard
+                  key={index}
+                  location={{
+                    city: location,
+                    country: '',
+                    workTypes: [],
+                    employmentType: 'FULL_TIME',
+                  }}
+                  onDelete={() => handleDeleteLocation(location, location)}
+                />
+              );
+            }
+            // Use city_country combination as unique identifier
+            const locationKey = `${location.city}_${location.country}`;
+            return (
+              <LocationCard
+                key={locationKey}
+                location={location}
+                onDelete={() => handleDeleteLocation(locationKey, `${location.city}, ${location.country}`)}
+              />
+            );
+          })}
+        </View>
+      ) : !showAddForm && (
+        <View style={styles.emptyState}>
+          <LocationIcon size={48} color="#D1D5DB" />
+          <Text style={styles.emptyStateTitle}>No locations added yet</Text>
+          <Text style={styles.emptyStateText}>
+            Add your preferred work locations to help employers find you
+          </Text>
+        </View>
+      )}
+    </ScrollView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 24,
+    paddingTop: 20,
+  },
+  addButton: {
+    backgroundColor: '#3B82F6',
+    borderRadius: 16,
+    paddingVertical: 14,
+    marginBottom: 20,
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  addButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  section: {
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 12,
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+  },
+  emptyStateTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyStateText: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+  },
+  formCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.2)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  formHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  formTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  cancelText: {
+    fontSize: 14,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  submitButton: {
+    backgroundColor: '#3B82F6',
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  submitButtonDisabled: {
+    opacity: 0.6,
+  },
+  submitButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+});

@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react';
-import { Redirect, Slot } from 'expo-router';
+import { Slot } from 'expo-router';
 import { useSelector } from 'react-redux';
 import { AppState, AppStateStatus } from 'react-native';
 import { RootState } from '../../store/store';
 import { useLazySyncSubscriptionStatusQuery } from '../../services/api';
 
 export default function CandidateLayout() {
-  const { isAuthenticated, user } = useSelector((state: RootState) => state.auth);
+  const { isAuthenticated } = useSelector((state: RootState) => state.auth);
   const [syncSubscriptionStatus] = useLazySyncSubscriptionStatusQuery();
   const appState = useRef(AppState.currentState);
   const hasSyncedOnMount = useRef(false);
@@ -41,15 +41,7 @@ export default function CandidateLayout() {
     };
   }, [isAuthenticated, syncSubscriptionStatus]);
 
-  // Redirect to auth if not authenticated
-  if (!isAuthenticated) {
-    return <Redirect href="/(auth)/splash" />;
-  }
-
-  // Redirect recruiters to their dashboard
-  if (user?.role === 'recruiter') {
-    return <Redirect href="/(recruiter)/(tabs)/home" />;
-  }
-
+  // Auth redirects are handled by the root _layout.tsx AuthNavigator
+  // This layout just provides the slot for candidate routes
   return <Slot />;
 }

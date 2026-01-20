@@ -1,205 +1,75 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
-import Svg, { Path, Circle } from 'react-native-svg';
-import * as Haptics from 'expo-haptics';
-import GirlAvatar from '../../../assets/images/aiInterview/girl.svg';
-import CandidateLayout from '../../../components/layouts/CandidateLayout';
-import CandidateNavBar from '../../../components/CandidateNavBar';
-import SearchModal from '../../../components/SearchModal';
+import { View } from 'react-native';
+import { useRouter } from 'expo-router';
+import AIChatScreen, { ChatMessage, AI_THEMES } from '../../../components/AIChatScreen';
+import { useFeatureAccess } from '../../../contexts/FeatureGateContext';
+import ClaraSvg from '../../../assets/images/aiInterview/girl.svg';
 
 interface AIClaraAssistantScreenProps {
-  activeTab?: string;
-  onTabChange?: (tabId: string) => void;
   onBack?: () => void;
-  onSearchNavigate?: (route: string) => void;
 }
 
+const CLARA_QUICK_ACTIONS = [
+  { label: 'Feeling stressed', message: "I'm feeling stressed about my job search" },
+  { label: 'Work-life balance', message: 'Help me maintain work-life balance' },
+  { label: 'Build confidence', message: 'Help me build my confidence' },
+  { label: 'Stay motivated', message: 'I need help staying motivated in my career journey' },
+];
+
 export default function AIClaraAssistantScreen({
-  activeTab = 'aiCoach',
-  onTabChange,
   onBack,
-  onSearchNavigate,
 }: AIClaraAssistantScreenProps) {
-  const [message, setMessage] = useState('');
-  const [showSearchModal, setShowSearchModal] = useState(false);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const router = useRouter();
+  // Clara is the Mental Wellbeing Companion - unlocks at Interview Ready level (41+ CRS)
+  const { hasAccess, requiredLevelDisplay } = useFeatureAccess('interview_coach_full');
+
+  const handleSendMessage = (text: string) => {
+    const userMessage: ChatMessage = {
+      id: Date.now().toString(),
+      text,
+      isUser: true,
+      timestamp: new Date(),
+    };
+    setMessages((prev) => [...prev, userMessage]);
+
+    // Simulate AI response
+    setTimeout(() => {
+      const aiMessage: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        text: "Hi there! I'm Clara, your AI Wellbeing Companion. I'm here to support your mental health and emotional wellbeing throughout your career journey. Whether you're feeling stressed, need motivation, or just want someone to talk to, I'm here for you. How are you feeling today?",
+        isUser: false,
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, aiMessage]);
+    }, 1000);
+  };
+
+  const ClaraAvatarHeader = (
+    <ClaraSvg width={42} height={42} />
+  );
+
+  const ClaraAvatarEmpty = (
+    <ClaraSvg width={84} height={84} />
+  );
 
   return (
-    <>
-    <CandidateLayout
-      showBackButton={true}
-      onBack={onBack}
-      headerTitle="Clara"
-      headerSubtitle="Your AI Mental Wellbeing Companion"
-      onSearchPress={() => setShowSearchModal(true)}
-    >
-      {/* Content */}
-      <KeyboardAvoidingView
-        className="flex-1"
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-      >
-        <ScrollView
-          className="flex-1"
-          contentContainerStyle={{ flexGrow: 1, paddingBottom: 120 }}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          onScrollBeginDrag={() => Haptics.selectionAsync()}
-        >
-          <View className="flex-1 items-center justify-center px-6 py-8">
-            {/* Clara Avatar and Welcome Message */}
-            <View className="bg-white rounded-3xl p-8 items-center border border-gray-100 shadow-sm mb-8">
-              {/* Clara Image */}
-              <View className="mb-6 rounded-full overflow-hidden">
-                <GirlAvatar width={120} height={120} />
-              </View>
-
-              {/* Welcome Text */}
-              <Text className="text-primary-blue text-xl font-bold mb-3">Welcome to Clara</Text>
-              <Text className="text-gray-500 text-sm text-center leading-5">
-                Start chatting with Clara now.{'\n'}Ask me anything.
-              </Text>
-            </View>
-
-            {/* Quick Action Buttons */}
-            <View className="w-full">
-              <Text className="text-gray-700 text-sm font-semibold mb-3">Quick Actions</Text>
-              <View className="flex-row flex-wrap gap-2">
-                <TouchableOpacity
-                  className="bg-white border border-blue-200 rounded-full px-4 py-2"
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setMessage('Help me improve my resume');
-                  }}
-                >
-                  <Text className="text-primary-blue text-sm">Improve my resume</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  className="bg-white border border-blue-200 rounded-full px-4 py-2"
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setMessage('Give me interview tips');
-                  }}
-                >
-                  <Text className="text-primary-blue text-sm">Interview tips</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  className="bg-white border border-blue-200 rounded-full px-4 py-2"
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setMessage('Help me write a cover letter');
-                  }}
-                >
-                  <Text className="text-primary-blue text-sm">Cover letter help</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  className="bg-white border border-blue-200 rounded-full px-4 py-2"
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setMessage('Career advice');
-                  }}
-                >
-                  <Text className="text-primary-blue text-sm">Career advice</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </ScrollView>
-
-        {/* Input Area - Fixed at bottom */}
-        <View className="px-6 pb-32 pt-2 bg-gray-50">
-          <View className="bg-white rounded-xl px-4 py-3 flex-row items-center border border-blue-200 shadow-sm">
-            {/* Plus Icon */}
-            <TouchableOpacity
-              className="mr-3"
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              }}
-            >
-              <Svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <Circle cx="12" cy="12" r="10" stroke="#437EF4" strokeWidth="2" />
-                <Path
-                  d="M12 8V16M8 12H16"
-                  stroke="#437EF4"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
-              </Svg>
-            </TouchableOpacity>
-
-            {/* Text Input */}
-            <TextInput
-              placeholder="Write Here ......."
-              placeholderTextColor="#9CA3AF"
-              className="flex-1 text-gray-900 text-sm"
-              value={message}
-              onChangeText={setMessage}
-              onFocus={() => Haptics.selectionAsync()}
-            />
-
-            {/* Microphone Icon */}
-            <TouchableOpacity
-              className="ml-2"
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              }}
-            >
-              <Svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <Path
-                  d="M12 15C13.6569 15 15 13.6569 15 12V6C15 4.34315 13.6569 3 12 3C10.3431 3 9 4.34315 9 6V12C9 13.6569 10.3431 15 12 15Z"
-                  stroke="#9CA3AF"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <Path
-                  d="M19 12C19 15.866 15.866 19 12 19M12 19C8.13401 19 5 15.866 5 12M12 19V22M12 22H15M12 22H9"
-                  stroke="#9CA3AF"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </Svg>
-            </TouchableOpacity>
-
-            {/* Send Button */}
-            <TouchableOpacity
-              className="ml-2 bg-primary-blue rounded-full p-2"
-              onPress={() => {
-                if (message.trim()) {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  // Handle send message
-                  console.log('Send message:', message);
-                  setMessage('');
-                }
-              }}
-              disabled={!message.trim()}
-              style={{ opacity: message.trim() ? 1 : 0.5 }}
-            >
-              <Svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                <Path
-                  d="M22 2L11 13M22 2L15 22L11 13M22 2L2 9L11 13"
-                  stroke="white"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </Svg>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </KeyboardAvoidingView>
-
-      {/* Bottom Nav Bar */}
-      <CandidateNavBar activeTab={activeTab} onTabPress={onTabChange} />
-    </CandidateLayout>
-    <SearchModal
-      visible={showSearchModal}
-      onClose={() => setShowSearchModal(false)}
-      onNavigate={(route) => {
-        setShowSearchModal(false);
-        onSearchNavigate?.(route);
-      }}
+    <AIChatScreen
+      title="Talk to Clara"
+      avatarComponent={ClaraAvatarHeader}
+      emptyAvatarComponent={ClaraAvatarEmpty}
+      theme={AI_THEMES.clara}
+      welcomeTitle="Hi, I'm Clara!"
+      welcomeSubtitle="Your AI Wellbeing Companion. I'm here to support your mental health, confidence, and emotional wellbeing throughout your career journey."
+      quickActions={CLARA_QUICK_ACTIONS}
+      messages={messages}
+      onSendMessage={handleSendMessage}
+      onBack={onBack || (() => {})}
+      inputPlaceholder="Type a message..."
+      hasAccess={hasAccess}
+      requiredLevelDisplay={requiredLevelDisplay}
+      onUnlockPress={() => router.push('/(candidate)/(tabs)/profile/full-profile' as any)}
+      bottomOffset={75}
     />
-    </>
   );
 }

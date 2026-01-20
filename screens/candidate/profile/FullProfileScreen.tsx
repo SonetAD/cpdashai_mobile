@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { View, Text, ScrollView, RefreshControl, Animated, Pressable, StyleSheet } from 'react-native';
 import { useSelector } from 'react-redux';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,51 +7,88 @@ import { RootState } from '../../../store/store';
 import CandidateLayout from '../../../components/layouts/CandidateLayout';
 import Svg, { Path, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
 import { SkeletonLoader } from '../../../components/SkeletonLoader';
-import { useGetCandidateProfileQuery, useGetRecruiterProfileQuery } from '../../../services/api';
+import { useGetCandidateProfileQuery, useGetRecruiterProfileQuery, useGetMyCRSQuery } from '../../../services/api';
 import ProfilePictureUpload from '../../../components/profile/ProfilePictureUpload';
+import ProfileBannerUpload from '../../../components/profile/ProfileBannerUpload';
 import SearchModal from '../../../components/SearchModal';
 
-// Gradient Arc around avatar - matches ProfileScreen design
-const GradientArc = ({ size = 110 }: { size?: number }) => {
+// Gradient Arc around avatar with progress fill
+const GradientArc = ({ size = 110, progress = 0 }: { size?: number; progress?: number }) => {
   const strokeWidth = 7;
   const radius = (size - strokeWidth) / 2;
   const center = size / 2;
 
-  // Create arc path (incomplete circle with gap at 9 o'clock position)
-  const startAngle = 210; // Start at 10 o'clock
-  const endAngle = 150; // End at 8 o'clock
-  const largeArcFlag = 1; // Use large arc
+  // Arc parameters - gap at bottom left (9 o'clock position)
+  const gapAngle = 60; // degrees of gap
+  const totalArcAngle = 360 - gapAngle; // 300 degrees of arc
+  const startAngle = 210; // Start at 10 o'clock (right side of gap)
+  const endAngle = 150; // End at 8 o'clock (left side of gap)
 
-  const startRad = (startAngle * Math.PI) / 180;
-  const endRad = (endAngle * Math.PI) / 180;
+  // Convert angles to cartesian coordinates
+  const polarToCartesian = (angle: number) => {
+    const rad = (angle * Math.PI) / 180;
+    return {
+      x: center + radius * Math.cos(rad),
+      y: center + radius * Math.sin(rad),
+    };
+  };
 
-  const startX = center + radius * Math.cos(startRad);
-  const startY = center + radius * Math.sin(startRad);
-  const endX = center + radius * Math.cos(endRad);
-  const endY = center + radius * Math.sin(endRad);
+  const arcStart = polarToCartesian(startAngle);
+  const arcEnd = polarToCartesian(endAngle);
+  const largeArcFlag = totalArcAngle > 180 ? 1 : 0;
 
-  const pathD = `M ${startX} ${startY} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${endX} ${endY}`;
+  // Background arc path (full arc from start to end)
+  const backgroundArc = `M ${arcStart.x} ${arcStart.y} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${arcEnd.x} ${arcEnd.y}`;
+
+  // Progress arc - fills based on percentage (minimum 5% if > 0)
+  const displayProgress = progress === 0 ? 0 : Math.max(progress, 5);
+  const progressAngle = (displayProgress / 100) * totalArcAngle;
+
+  // Progress fills from start angle clockwise
+  const progressEndAngle = startAngle + progressAngle;
+  const progressEnd = polarToCartesian(progressEndAngle > 360 ? progressEndAngle - 360 : progressEndAngle);
+  const progressLargeArc = progressAngle > 180 ? 1 : 0;
+  const progressArc = `M ${arcStart.x} ${arcStart.y} A ${radius} ${radius} 0 ${progressLargeArc} 1 ${progressEnd.x} ${progressEnd.y}`;
 
   return (
     <Svg width={size} height={size} style={avatarStyles.gradientArc}>
       <Defs>
-        <SvgLinearGradient id="arcGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+        <SvgLinearGradient id="arcGradientFull" x1="0%" y1="0%" x2="0%" y2="100%">
           <Stop offset="0%" stopColor="#0E3FC8" />
           <Stop offset="100%" stopColor="#8C6BFF" />
         </SvgLinearGradient>
       </Defs>
+      {/* Background arc - gray */}
       <Path
-        d={pathD}
-        stroke="url(#arcGradient)"
+        d={backgroundArc}
+        stroke="#E5E7EB"
         strokeWidth={strokeWidth}
         strokeLinecap="round"
         fill="none"
       />
+      {/* Progress arc - gradient fill */}
+      {displayProgress > 0 && (
+        <Path
+          d={progressArc}
+          stroke="url(#arcGradientFull)"
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+          fill="none"
+        />
+      )}
     </Svg>
   );
 };
 
 const avatarStyles = StyleSheet.create({
+  overlappingAvatarContainer: {
+    position: 'absolute',
+    bottom: -55, // Half of avatar height to overlap
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 10,
+  },
   avatarWrapper: {
     width: 110,
     height: 110,
@@ -76,6 +113,12 @@ const avatarStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 3,
+    // Add shadow for depth
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
 });
 
@@ -96,6 +139,9 @@ interface FullProfileScreenProps {
   onTabChange?: (tabId: string) => void;
   onBack?: () => void;
   onSearchNavigate?: (route: string) => void;
+  showBackButton?: boolean;
+  onNotificationPress?: () => void;
+  onProfilePress?: () => void;
 }
 
 interface EducationEntry {
@@ -126,6 +172,9 @@ export default function FullProfileScreen({
   onTabChange,
   onBack,
   onSearchNavigate,
+  showBackButton = true,
+  onNotificationPress,
+  onProfilePress,
 }: FullProfileScreenProps) {
   const insets = useSafeAreaInsets();
   const [showSearchModal, setShowSearchModal] = useState(false);
@@ -153,6 +202,11 @@ export default function FullProfileScreen({
   // RTK Query - use appropriate query based on user role
   const { data: candidateProfileData, isLoading: isLoadingCandidate, error: candidateError, refetch: refetchCandidate } = useGetCandidateProfileQuery(undefined, { skip: isRecruiter });
   const { data: recruiterProfileData, isLoading: isLoadingRecruiter, error: recruiterError, refetch: refetchRecruiter } = useGetRecruiterProfileQuery(undefined, { skip: !isRecruiter });
+  const { data: crsData } = useGetMyCRSQuery(undefined, { skip: isRecruiter });
+
+  // Get CRS level display and score
+  const levelDisplay = crsData?.myCrs?.levelDisplay;
+  const crsScore = crsData?.myCrs?.totalScore;
 
   const profileData = isRecruiter ? recruiterProfileData : candidateProfileData;
   const isLoadingProfile = isRecruiter ? isLoadingRecruiter : isLoadingCandidate;
@@ -208,15 +262,6 @@ export default function FullProfileScreen({
       ]).start();
     }, 250);
   }, []);
-
-  // Refetch profile data when component mounts
-  useEffect(() => {
-    if (isRecruiter) {
-      refetchRecruiter();
-    } else {
-      refetchCandidate();
-    }
-  }, [isRecruiter, refetchCandidate, refetchRecruiter]);
 
   // Track if profile is being updated
   const [isProfileUpdating, setIsProfileUpdating] = useState(false);
@@ -309,7 +354,7 @@ export default function FullProfileScreen({
           return {
             id: `exp-${index}`,
             index: index,
-            position: exp.position || '',
+            position: exp.title || exp.position || '',  // Backend sends 'title', map to 'position'
             company: exp.company || '',
             location: exp.location || '',
             startDate: exp.start_date || '',
@@ -352,6 +397,20 @@ export default function FullProfileScreen({
       ];
 
   const getFullName = () => {
+    // First check candidate profile data (has fullName from API)
+    if (!isRecruiter && candidateProfileData?.myProfile?.__typename === 'CandidateType') {
+      const profileUser = candidateProfileData.myProfile.user;
+      if (profileUser?.fullName) {
+        return profileUser.fullName;
+      }
+      if (profileUser?.firstName && profileUser?.lastName) {
+        return `${profileUser.firstName} ${profileUser.lastName}`;
+      }
+      if (profileUser?.firstName) {
+        return profileUser.firstName;
+      }
+    }
+    // Fallback to Redux auth user
     if (user?.firstName && user?.lastName) {
       return `${user.firstName} ${user.lastName}`;
     }
@@ -362,6 +421,24 @@ export default function FullProfileScreen({
   };
 
   const getInitials = () => {
+    // First check candidate profile data (has fullName from API)
+    if (!isRecruiter && candidateProfileData?.myProfile?.__typename === 'CandidateType') {
+      const profileUser = candidateProfileData.myProfile.user;
+      if (profileUser?.fullName) {
+        const parts = profileUser.fullName.trim().split(' ');
+        if (parts.length >= 2) {
+          return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+        }
+        return profileUser.fullName.substring(0, 2).toUpperCase();
+      }
+      if (profileUser?.firstName && profileUser?.lastName) {
+        return `${profileUser.firstName[0]}${profileUser.lastName[0]}`.toUpperCase();
+      }
+      if (profileUser?.firstName) {
+        return profileUser.firstName.substring(0, 2).toUpperCase();
+      }
+    }
+    // Fallback to Redux auth user
     if (user?.firstName && user?.lastName) {
       return `${user.firstName[0]}${user.lastName[0]}`.toUpperCase();
     }
@@ -560,15 +637,43 @@ export default function FullProfileScreen({
     }
   };
 
+  // Memoize profile picture URL to prevent unnecessary re-renders
+  // IMPORTANT: This must be before any early returns to follow Rules of Hooks
+  const profilePictureUrl = useMemo(
+    () => {
+      if (isRecruiter) {
+        const recruiter = recruiterProfileData?.recruiter;
+        if (recruiter && '__typename' in recruiter && recruiter.__typename === 'RecruiterType') {
+          return recruiter.user?.profilePictureUrl || null;
+        }
+        return null;
+      }
+      const candidate = candidateProfileData?.myProfile;
+      if (candidate && '__typename' in candidate && candidate.__typename === 'CandidateType') {
+        return (candidate as any).profilePicture || null;
+      }
+      return null;
+    },
+    [isRecruiter, candidateProfileData?.myProfile, recruiterProfileData?.recruiter]
+  );
+
+  // Memoize search press handler to prevent CandidateLayout re-renders
+  // IMPORTANT: This must be before any early returns to follow Rules of Hooks
+  const handleSearchPress = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setShowSearchModal(true);
+  }, []);
+
   // Show skeleton loader while fetching profile data
   if (isLoadingProfile) {
     return (
       <>
       <CandidateLayout
-        userName={userName}
-        onSearchPress={() => setShowSearchModal(true)}
-        activeTab={activeTab}
-        onTabChange={onTabChange}
+        onSearchPress={handleSearchPress}
+        showGlassPill={true}
+        profilePictureUrl={profilePictureUrl}
+        onNotificationPress={onNotificationPress}
+        onProfilePress={onProfilePress}
       >
         <SkeletonLoader type="profile" />
       </CandidateLayout>
@@ -587,96 +692,92 @@ export default function FullProfileScreen({
   return (
     <>
     <CandidateLayout
-      userName={userName}
-      onSearchPress={() => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        setShowSearchModal(true);
-      }}
-      activeTab={activeTab}
-      onTabChange={onTabChange}
-      hideHeader={true}
+      onSearchPress={handleSearchPress}
+      showGlassPill={true}
+      profilePictureUrl={profilePictureUrl}
+      onNotificationPress={onNotificationPress}
+      onProfilePress={onProfilePress}
     >
       <ScrollView
-        className="bg-white flex-1"
+        style={{ flex: 1, backgroundColor: 'white' }}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+        contentContainerStyle={{ paddingTop: insets.top + 70, paddingBottom: insets.bottom + 100 }}
+        bounces={true}
+        alwaysBounceVertical={true}
+        overScrollMode="always"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
             colors={['#437EF4']}
             tintColor="#437EF4"
+            progressViewOffset={insets.top + 70}
           />
         }
       >
-        {/* Header with Back Button and Profile Text */}
-        <Animated.View
-          className="px-6 pb-4 bg-white flex-row items-center"
-          style={{
-            paddingTop: insets.top + 16,
-            opacity: headerFade,
-            transform: [{ translateY: headerSlide }],
-          }}
-        >
-          <Pressable
-            onPress={handleBackPress}
-            hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
-            style={({ pressed }) => ({
-              marginRight: 8,
-              padding: 8,
-              borderRadius: 12,
-              backgroundColor: pressed ? 'rgba(0, 0, 0, 0.05)' : 'transparent',
-            })}
-          >
-            <Animated.View style={{ transform: [{ scale: backButtonScale }] }}>
-              <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
-                <Path
-                  d="M15 18L9 12L15 6"
-                  stroke="#1F2937"
-                  strokeWidth={2.5}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </Svg>
-            </Animated.View>
-          </Pressable>
-          <View className="flex-1">
-            <Text className="text-gray-900 text-2xl font-bold">My Profile</Text>
-            {isProfileUpdating && (
-              <View className="flex-row items-center mt-1">
-                <View className="w-2 h-2 bg-blue-500 rounded-full mr-2 animate-pulse" />
-                <Text className="text-blue-600 text-xs font-medium">Profile being updated from resume...</Text>
-              </View>
-            )}
-          </View>
-        </Animated.View>
-
-        <View className="px-6 bg-white">
-          {/* Avatar Section with Gradient Arc - matches ProfileScreen */}
-          <Animated.View
-            className="items-center mb-6 bg-white rounded-2xl py-6 mx-0"
-            style={{
-              opacity: avatarFade,
-              transform: [{ scale: avatarScale }],
+        {/* Profile Banner with Overlapping Avatar */}
+        <View style={{ marginBottom: 70 }}>
+          {/* Profile Banner */}
+          <ProfileBannerUpload
+            height={150}
+            editable={true}
+            onUploadSuccess={() => {
+              // Refetch profile after banner upload
+              if (refetchCandidate) refetchCandidate();
             }}
+          />
+
+          {/* Avatar Section - Overlapping Banner */}
+          <Animated.View
+            style={[
+              avatarStyles.overlappingAvatarContainer,
+              {
+                opacity: avatarFade,
+                transform: [{ scale: avatarScale }],
+              },
+            ]}
           >
-            <View style={avatarStyles.avatarWrapper} className="mb-3">
+            <View style={avatarStyles.avatarWrapper}>
               {/* Gradient Arc */}
-              <GradientArc size={110} />
+              <GradientArc size={110} progress={crsScore} />
               {/* Avatar with white ring */}
               <View style={avatarStyles.avatarContainer}>
                 <View style={avatarStyles.whiteRing}>
                   <ProfilePictureUpload
                     initials={getInitials()}
                     size={80}
-                    editable={false}
+                    editable={true}
                   />
                 </View>
               </View>
             </View>
-            <Text className="text-gray-900 text-lg font-bold mb-1">{getFullName()}</Text>
-            <Text className="text-gray-500 text-xs">{user?.email || 'No email'}</Text>
           </Animated.View>
+
+          {/* Profile updating indicator */}
+          {isProfileUpdating && (
+            <View className="flex-row items-center justify-center mt-16">
+              <View className="w-2 h-2 bg-blue-500 rounded-full mr-2 animate-pulse" />
+              <Text className="text-blue-600 text-xs font-medium">Profile being updated from resume...</Text>
+            </View>
+          )}
+        </View>
+
+        {/* User Info Section */}
+        <View className="items-center mb-6 px-6">
+          <Text className="text-gray-900 text-lg font-bold mb-1">{getFullName()}</Text>
+          <Text className="text-gray-500 text-xs">{user?.email || 'No email'}</Text>
+
+          {/* CRS Level Badge */}
+          {!isRecruiter && (levelDisplay || crsScore !== undefined) && (
+            <View style={profileStyles.levelBadge}>
+              <Text style={profileStyles.levelBadgeText}>
+                {levelDisplay}{levelDisplay && crsScore !== undefined ? ' • ' : ''}{crsScore !== undefined ? `${Math.round(crsScore)} CRS` : ''}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        <View className="px-6 bg-white">
 
           {/* Tabs */}
           <Animated.View
@@ -688,32 +789,27 @@ export default function FullProfileScreen({
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              className="mb-6"
-              contentContainerStyle={{ paddingRight: 24 }}
+              style={profileStyles.tabsScroll}
+              contentContainerStyle={profileStyles.tabsContainer}
             >
               {tabs.map((tab) => (
                 <Pressable
                   key={tab.id}
                   onPress={() => handleTabChange(tab.id)}
                   style={({ pressed }) => [
-                    { opacity: pressed ? 0.8 : 1, transform: [{ scale: pressed ? 0.95 : 1 }] }
+                    profileStyles.tab,
+                    selectedTab === tab.id && profileStyles.tabActive,
+                    { opacity: pressed ? 0.9 : 1, transform: [{ scale: pressed ? 0.97 : 1 }] }
                   ]}
                 >
-                  <View
-                    className={`mr-2 px-4 py-2 rounded-full ${
-                      selectedTab === tab.id
-                        ? 'bg-primary-blue'
-                        : 'bg-white border border-gray-200'
-                    }`}
+                  <Text
+                    style={[
+                      profileStyles.tabText,
+                      selectedTab === tab.id && profileStyles.tabTextActive,
+                    ]}
                   >
-                    <Text
-                      className={`text-sm font-medium ${
-                        selectedTab === tab.id ? 'text-white' : 'text-gray-600'
-                      }`}
-                    >
-                      {tab.label}
-                    </Text>
-                  </View>
+                    {tab.label}
+                  </Text>
                 </Pressable>
               ))}
             </ScrollView>
@@ -743,3 +839,48 @@ export default function FullProfileScreen({
     </>
   );
 }
+
+const profileStyles = StyleSheet.create({
+  levelBadge: {
+    marginTop: 12,
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.2)',
+  },
+  levelBadgeText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#3B82F6',
+  },
+  // Tab styles matching ProfileSetupScreen
+  tabsScroll: {
+    marginBottom: 16,
+  },
+  tabsContainer: {
+    paddingHorizontal: 0,
+    gap: 8,
+  },
+  tab: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  tabActive: {
+    backgroundColor: '#2563EB',
+    borderColor: '#2563EB',
+  },
+  tabText: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  tabTextActive: {
+    color: '#FFFFFF',
+  },
+});

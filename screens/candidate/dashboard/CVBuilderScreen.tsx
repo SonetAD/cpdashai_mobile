@@ -1,11 +1,52 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, TextInput, ActivityIndicator, Platform } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, TextInput, ActivityIndicator, StatusBar, TextInput as RNTextInput } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Haptics from 'expo-haptics';
-import CandidateLayout from '../../../components/layouts/CandidateLayout';
-import CandidateNavBar from '../../../components/CandidateNavBar';
+import { GlassDatePicker } from '../../../components/ui/GlassDatePicker';
+import { z } from 'zod';
 import KeyboardDismissWrapper from '../../../components/KeyboardDismissWrapper';
+import FeatureGate, { LockedBadge } from '../../../components/FeatureGate';
+import LogoWhite from '../../../assets/images/logoWhite.svg';
+import ArrowLeft from '../../../assets/images/arrowLeft.svg';
+import { styles } from '../../../styles/CVBuilderStyles';
+
+// Validation schemas
+const urlSchema = z.string().url().optional().or(z.literal(''));
+
+const experienceSchema = z.object({
+  title: z.string().min(1, 'Job title is required'),
+  company: z.string().min(1, 'Company name is required'),
+  location: z.string().optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+  current: z.boolean().optional(),
+  responsibilities: z.array(z.string()).optional(),
+});
+
+const educationSchema = z.object({
+  degree: z.string().min(1, 'Degree is required'),
+  institution: z.string().min(1, 'Institution is required'),
+  location: z.string().optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+  gpa: z.string().optional(),
+  description: z.string().optional(),
+});
+
+const resumeFormSchema = z.object({
+  fullName: z.string().min(2, 'Full name must be at least 2 characters'),
+  email: z.string().email('Please enter a valid email address'),
+  phone: z.string().optional(),
+  location: z.string().optional(),
+  linkedinUrl: urlSchema,
+  githubUrl: urlSchema,
+  portfolioUrl: urlSchema,
+  professionalSummary: z.string().optional(),
+  experience: z.array(experienceSchema).optional(),
+  education: z.array(educationSchema).optional(),
+});
 import {
   useCreateResumeMutation,
   useUpdateResumeMutation,
@@ -16,15 +57,38 @@ import {
   CreateResumeInput,
   ResumeEducation,
   ResumeExperience,
-  ResumeProject,
   ResumeSkill,
 } from '../../../services/api';
 import { useAlert } from '../../../contexts/AlertContext';
 
+// Calendar icon for date pickers
+const CalendarIcon = () => (
+  <Svg width={16} height={16} viewBox="0 0 16 16" fill="none">
+    <Path
+      d="M12.667 2.667H3.333C2.597 2.667 2 3.264 2 4v9.333c0 .737.597 1.334 1.333 1.334h9.334c.736 0 1.333-.597 1.333-1.334V4c0-.736-.597-1.333-1.333-1.333zM10.667 1.333v2.667M5.333 1.333v2.667M2 6.667h12"
+      stroke="#94A3B8"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+);
+
+// Sparkle icon for AI buttons
+const SparkleIcon = () => (
+  <Svg width={12} height={12} viewBox="0 0 12 12" fill="none">
+    <Path
+      d="M6 1v2M6 9v2M1 6h2M9 6h2M2.5 2.5l1.5 1.5M8 8l1.5 1.5M9.5 2.5L8 4M4 8l-1.5 1.5"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+    />
+  </Svg>
+);
+
 interface CVBuilderScreenProps {
-  activeTab?: string;
-  onTabChange?: (tabId: string) => void;
   onBack?: () => void;
+  onComplete?: () => void; // Called after successful save
   resumeId?: string; // For edit mode
 }
 
@@ -37,9 +101,8 @@ interface DatePickerState {
 }
 
 export default function CVBuilderScreen({
-  activeTab = 'jobs',
-  onTabChange,
   onBack,
+  onComplete,
   resumeId,
 }: CVBuilderScreenProps) {
   // Form state
@@ -52,9 +115,19 @@ export default function CVBuilderScreen({
   const [portfolioUrl, setPortfolioUrl] = useState('');
   const [professionalSummary, setProfessionalSummary] = useState('');
 
+  // Input refs for proper tab navigation
+  const fullNameRef = useRef<RNTextInput>(null);
+  const emailRef = useRef<RNTextInput>(null);
+  const phoneRef = useRef<RNTextInput>(null);
+  const locationRef = useRef<RNTextInput>(null);
+  const linkedinRef = useRef<RNTextInput>(null);
+  const githubRef = useRef<RNTextInput>(null);
+  const portfolioRef = useRef<RNTextInput>(null);
+  const summaryRef = useRef<RNTextInput>(null);
+
   // Optional sections toggles
   const [hasExperience, setHasExperience] = useState(true);
-  const [hasEducation, setHasEducation] = useState(true);
+  const [hasEducation] = useState(true);
 
   // Experience
   const [experience, setExperience] = useState<ResumeExperience[]>([{
@@ -92,6 +165,9 @@ export default function CVBuilderScreen({
     category: 'Technical',
     items: [''],
   }]);
+
+  // Validation errors state
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
   // API hooks
   const [createResume, { isLoading: isCreating }] = useCreateResumeMutation();
@@ -132,27 +208,11 @@ export default function CVBuilderScreen({
 
   // Handle save
   const handleSave = async () => {
-    // Validation
-    if (!fullName.trim()) {
-      showAlert({
-        type: 'error',
-        title: 'Validation Error',
-        message: 'Full name is required',
-        buttons: [{ text: 'OK', style: 'default' }],
-      });
-      return;
-    }
-    if (!email.trim()) {
-      showAlert({
-        type: 'error',
-        title: 'Validation Error',
-        message: 'Email is required',
-        buttons: [{ text: 'OK', style: 'default' }],
-      });
-      return;
-    }
+    // Clear previous validation errors
+    setValidationErrors({});
 
-    const resumeInput: CreateResumeInput = {
+    // Build form data for validation
+    const formData = {
       fullName: fullName.trim(),
       email: email.trim(),
       phone: phone.trim() || undefined,
@@ -161,6 +221,52 @@ export default function CVBuilderScreen({
       githubUrl: githubUrl.trim() || undefined,
       portfolioUrl: portfolioUrl.trim() || undefined,
       professionalSummary: professionalSummary.trim() || undefined,
+      experience: hasExperience ? experience.filter(exp => exp.title || exp.company) : undefined,
+      education: hasEducation ? education.filter(edu => edu.degree || edu.institution) : undefined,
+    };
+
+    // Validate with Zod
+    const validationResult = resumeFormSchema.safeParse(formData);
+
+    if (!validationResult.success) {
+      // Extract errors
+      const errors: Record<string, string> = {};
+      validationResult.error.errors.forEach((err) => {
+        const path = err.path.join('.');
+        errors[path] = err.message;
+      });
+      setValidationErrors(errors);
+
+      // Show first error in alert
+      const firstError = validationResult.error.errors[0];
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      showAlert({
+        type: 'error',
+        title: 'Validation Error',
+        message: firstError.message,
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
+
+      // Focus the first invalid field
+      if (firstError.path[0] === 'fullName') fullNameRef.current?.focus();
+      else if (firstError.path[0] === 'email') emailRef.current?.focus();
+      else if (firstError.path[0] === 'phone') phoneRef.current?.focus();
+      else if (firstError.path[0] === 'linkedinUrl') linkedinRef.current?.focus();
+      else if (firstError.path[0] === 'githubUrl') githubRef.current?.focus();
+      else if (firstError.path[0] === 'portfolioUrl') portfolioRef.current?.focus();
+
+      return;
+    }
+
+    const resumeInput: CreateResumeInput = {
+      fullName: formData.fullName,
+      email: formData.email,
+      phone: formData.phone,
+      location: formData.location,
+      linkedinUrl: formData.linkedinUrl,
+      githubUrl: formData.githubUrl,
+      portfolioUrl: formData.portfolioUrl,
+      professionalSummary: formData.professionalSummary,
       experience: hasExperience ? experience.filter(exp => exp.title && exp.company) : [],
       education: hasEducation ? education.filter(edu => edu.degree && edu.institution) : [],
       skills: skills.filter(skill => skill.items.some(item => item.trim())),
@@ -199,7 +305,6 @@ export default function CVBuilderScreen({
             id: resume.id,
             fullName: resume.fullName,
             email: resume.email,
-            atsScore: resume.atsScore,
           });
 
           // Automatically trigger PDF generation
@@ -212,14 +317,15 @@ export default function CVBuilderScreen({
               showAlert({
                 type: 'success',
                 title: 'Success',
-                message: `Resume created successfully!\n\nATS Score: ${resume.atsScore}%\n\nYour PDF is being generated and will be ready in a few seconds.`,
+                message: 'Resume created successfully!\n\nYour PDF is being generated and will be ready in a few seconds.',
                 buttons: [{
                   text: 'OK',
                   style: 'default',
                   onPress: () => {
-                    // Delay to allow backend to commit transaction before navigating back
+                    // Delay to allow backend to commit transaction before navigating
                     setTimeout(() => {
-                      if (onBack) onBack();
+                      if (onComplete) onComplete();
+                      else if (onBack) onBack();
                     }, 1000);
                   }
                 }],
@@ -229,13 +335,14 @@ export default function CVBuilderScreen({
               showAlert({
                 type: 'warning',
                 title: 'Partial Success',
-                message: `Resume created with ATS Score: ${resume.atsScore}%\n\nPDF generation will be available from the CV Manager.`,
+                message: 'Resume created successfully!\n\nPDF generation will be available from the CV Manager.',
                 buttons: [{
                   text: 'OK',
                   style: 'default',
                   onPress: () => {
                     setTimeout(() => {
-                      if (onBack) onBack();
+                      if (onComplete) onComplete();
+                      else if (onBack) onBack();
                     }, 1000);
                   }
                 }],
@@ -247,13 +354,14 @@ export default function CVBuilderScreen({
             showAlert({
               type: 'success',
               title: 'Resume Created',
-              message: `Resume created with ATS Score: ${resume.atsScore}%\n\nYou can generate the PDF from the CV Manager.`,
+              message: 'Resume created successfully!\n\nYou can generate the PDF from the CV Manager.',
               buttons: [{
                 text: 'OK',
                 style: 'default',
                 onPress: () => {
                   setTimeout(() => {
-                    if (onBack) onBack();
+                    if (onComplete) onComplete();
+                    else if (onBack) onBack();
                   }, 1000);
                 }
               }],
@@ -355,10 +463,11 @@ export default function CVBuilderScreen({
       }).unwrap();
 
       if ('improved_content' in data.improveContent) {
+        const improvedContent = (data.improveContent as { improved_content: string }).improved_content;
         showAlert({
           type: 'success',
           title: 'Improved Content',
-          message: data.improveContent.improved_content,
+          message: improvedContent,
           buttons: [
             { text: 'Cancel', style: 'cancel' },
             {
@@ -366,7 +475,7 @@ export default function CVBuilderScreen({
               style: 'default',
               onPress: () => {
                 if (contentType === 'summary') {
-                  setProfessionalSummary(data.improveContent.improved_content);
+                  setProfessionalSummary(improvedContent);
                 }
               },
             },
@@ -463,36 +572,28 @@ export default function CVBuilderScreen({
     });
   };
 
-  const handleDateChange = (event: any, selectedDate?: Date) => {
-    if (Platform.OS === 'android') {
-      setDatePicker(prev => ({ ...prev, show: false }));
+  const handleDateSelect = (selectedDate: Date) => {
+    const formattedDate = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}`;
+
+    if (datePicker.field === 'experience') {
+      const updated = [...experience];
+      if (datePicker.mode === 'start') {
+        updated[datePicker.index].startDate = formattedDate;
+      } else {
+        updated[datePicker.index].endDate = formattedDate;
+      }
+      setExperience(updated);
+    } else if (datePicker.field === 'education') {
+      const updated = [...education];
+      if (datePicker.mode === 'start') {
+        updated[datePicker.index].startDate = formattedDate;
+      } else {
+        updated[datePicker.index].endDate = formattedDate;
+      }
+      setEducation(updated);
     }
 
-    if (selectedDate && event.type !== 'dismissed') {
-      const formattedDate = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}`;
-
-      if (datePicker.field === 'experience') {
-        const updated = [...experience];
-        if (datePicker.mode === 'start') {
-          updated[datePicker.index].startDate = formattedDate;
-        } else {
-          updated[datePicker.index].endDate = formattedDate;
-        }
-        setExperience(updated);
-      } else if (datePicker.field === 'education') {
-        const updated = [...education];
-        if (datePicker.mode === 'start') {
-          updated[datePicker.index].startDate = formattedDate;
-        } else {
-          updated[datePicker.index].endDate = formattedDate;
-        }
-        setEducation(updated);
-      }
-
-      if (Platform.OS === 'ios') {
-        setDatePicker(prev => ({ ...prev, currentDate: selectedDate }));
-      }
-    }
+    setDatePicker(prev => ({ ...prev, show: false }));
   };
 
   const closeDatePicker = () => {
@@ -509,470 +610,668 @@ export default function CVBuilderScreen({
 
   const isLoading = isCreating || isUpdating;
 
+  const handleBack = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onBack?.();
+  };
+
   return (
-    <CandidateLayout
-      showBackButton={true}
-      onBack={onBack}
-      headerTitle={resumeId ? 'Edit Resume' : 'Create Resume'}
-      headerSubtitle={resumeId ? 'Update your resume' : 'Build your professional resume'}
-    >
-      {/* Content */}
-      <KeyboardDismissWrapper>
-        <ScrollView
-          className="flex-1 px-6"
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 120 }}
-          onScrollBeginDrag={() => Haptics.selectionAsync()}
-        >
-        {/* Personal Information */}
-        <View className="mt-6 mb-6">
-          <Text className="text-gray-900 text-lg font-bold mb-4">Personal Information</Text>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <StatusBar barStyle="light-content" />
 
-          <Text className="text-gray-700 text-sm font-medium mb-2">Full Name *</Text>
-          <TextInput
-            placeholder="John Doe"
-            placeholderTextColor="#9CA3AF"
-            className="bg-white rounded-xl px-4 py-3 text-gray-900 text-sm mb-4 border border-gray-200"
-            value={fullName}
-            onChangeText={setFullName}
-          />
-
-          <Text className="text-gray-700 text-sm font-medium mb-2">Email *</Text>
-          <TextInput
-            placeholder="john.doe@example.com"
-            placeholderTextColor="#9CA3AF"
-            className="bg-white rounded-xl px-4 py-3 text-gray-900 text-sm mb-4 border border-gray-200"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-          />
-
-          <Text className="text-gray-700 text-sm font-medium mb-2">Phone</Text>
-          <TextInput
-            placeholder="+1-555-0123"
-            placeholderTextColor="#9CA3AF"
-            className="bg-white rounded-xl px-4 py-3 text-gray-900 text-sm mb-4 border border-gray-200"
-            value={phone}
-            onChangeText={setPhone}
-            keyboardType="phone-pad"
-          />
-
-          <Text className="text-gray-700 text-sm font-medium mb-2">Location</Text>
-          <TextInput
-            placeholder="New York, USA"
-            placeholderTextColor="#9CA3AF"
-            className="bg-white rounded-xl px-4 py-3 text-gray-900 text-sm mb-4 border border-gray-200"
-            value={location}
-            onChangeText={setLocation}
-          />
-
-          <Text className="text-gray-700 text-sm font-medium mb-2">LinkedIn URL</Text>
-          <TextInput
-            placeholder="https://linkedin.com/in/johndoe"
-            placeholderTextColor="#9CA3AF"
-            className="bg-white rounded-xl px-4 py-3 text-gray-900 text-sm mb-4 border border-gray-200"
-            value={linkedinUrl}
-            onChangeText={setLinkedinUrl}
-            autoCapitalize="none"
-          />
-
-          <Text className="text-gray-700 text-sm font-medium mb-2">GitHub URL</Text>
-          <TextInput
-            placeholder="https://github.com/johndoe"
-            placeholderTextColor="#9CA3AF"
-            className="bg-white rounded-xl px-4 py-3 text-gray-900 text-sm mb-4 border border-gray-200"
-            value={githubUrl}
-            onChangeText={setGithubUrl}
-            autoCapitalize="none"
-          />
-
-          <Text className="text-gray-700 text-sm font-medium mb-2">Portfolio URL</Text>
-          <TextInput
-            placeholder="https://johndoe.com"
-            placeholderTextColor="#9CA3AF"
-            className="bg-white rounded-xl px-4 py-3 text-gray-900 text-sm mb-4 border border-gray-200"
-            value={portfolioUrl}
-            onChangeText={setPortfolioUrl}
-            autoCapitalize="none"
-          />
-        </View>
-
-        {/* Professional Summary */}
-        <View className="mb-6">
-          <View className="flex-row items-center justify-between mb-3">
-            <Text className="text-gray-900 text-lg font-bold">Professional Summary</Text>
-            {resumeId && (
-              <TouchableOpacity
-                className="bg-primary-blue rounded-lg px-3 py-1"
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  handleGenerateSummary();
-                }}
-                disabled={isGeneratingSummary}
-              >
-                {isGeneratingSummary ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Text className="text-white text-xs font-semibold">AI Generate</Text>
-                )}
-              </TouchableOpacity>
-            )}
+      {/* Blue Header */}
+      <LinearGradient
+        colors={['#437EF4', '#3B71E0']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.header}
+      >
+        <View style={styles.headerContent}>
+          <LogoWhite width={48} height={48} />
+          <View style={styles.headerText}>
+            <Text style={styles.headerTitle}>
+              {resumeId ? 'Edit Resume' : 'Create Resume'}
+            </Text>
+            <Text style={styles.headerSubtitle}>
+              {resumeId ? 'Update your professional resume' : 'Build your professional resume'}
+            </Text>
           </View>
+        </View>
+      </LinearGradient>
 
-          <TextInput
-            placeholder="Write a compelling professional summary highlighting your key skills and achievements..."
-            placeholderTextColor="#9CA3AF"
-            className="bg-white rounded-xl px-4 py-3 text-gray-900 text-sm border border-gray-200"
-            multiline
-            numberOfLines={5}
-            value={professionalSummary}
-            onChangeText={setProfessionalSummary}
-            style={{ minHeight: 120 }}
-          />
-
-          {resumeId && professionalSummary && (
-            <TouchableOpacity
-              className="bg-blue-50 rounded-lg px-3 py-2 mt-2"
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                handleImproveContent(professionalSummary, 'summary');
-              }}
-              disabled={isImproving}
-            >
-              <Text className="text-primary-blue text-xs font-medium text-center">
-                {isImproving ? 'Improving...' : 'Improve with AI'}
-              </Text>
-            </TouchableOpacity>
-          )}
+      {/* Content */}
+      <View style={styles.content}>
+        {/* Back Button Row */}
+        <View style={styles.backRow}>
+          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+            <ArrowLeft width={24} height={24} />
+          </TouchableOpacity>
+          <Text style={styles.backText}>
+            {resumeId ? 'Edit Your CV' : 'Create Your CV'}
+          </Text>
         </View>
 
-        {/* Work Experience */}
-        <View className="mb-6">
-          <View className="flex-row items-center justify-between mb-3">
-            <View className="flex-row items-center">
-              <Text className="text-gray-900 text-lg font-bold mr-3">Work Experience</Text>
+        <KeyboardDismissWrapper>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContent}
+            onScrollBeginDrag={() => Haptics.selectionAsync()}
+          >
+            {/* Personal Information Section */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Personal Information</Text>
+              </View>
+
+              <View style={styles.innerCard}>
+                <View>
+                  <Text style={styles.inputLabel}>
+                    Full Name <Text style={styles.inputLabelRequired}>*</Text>
+                  </Text>
+                  <TextInput
+                    ref={fullNameRef}
+                    placeholder="John Doe"
+                    placeholderTextColor="#94A3B8"
+                    style={[styles.textInput, validationErrors.fullName && styles.textInputError]}
+                    value={fullName}
+                    onChangeText={(text) => {
+                      setFullName(text);
+                      if (validationErrors.fullName) {
+                        setValidationErrors(prev => ({ ...prev, fullName: '' }));
+                      }
+                    }}
+                    returnKeyType="next"
+                    onSubmitEditing={() => {
+                      Haptics.selectionAsync();
+                      emailRef.current?.focus();
+                    }}
+                    onFocus={() => Haptics.selectionAsync()}
+                  />
+                  {validationErrors.fullName && (
+                    <Text style={styles.errorText}>{validationErrors.fullName}</Text>
+                  )}
+                </View>
+
+                <View>
+                  <Text style={styles.inputLabel}>
+                    Email <Text style={styles.inputLabelRequired}>*</Text>
+                  </Text>
+                  <TextInput
+                    ref={emailRef}
+                    placeholder="john.doe@example.com"
+                    placeholderTextColor="#94A3B8"
+                    style={[styles.textInput, validationErrors.email && styles.textInputError]}
+                    value={email}
+                    onChangeText={(text) => {
+                      setEmail(text);
+                      if (validationErrors.email) {
+                        setValidationErrors(prev => ({ ...prev, email: '' }));
+                      }
+                    }}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    returnKeyType="next"
+                    onSubmitEditing={() => {
+                      Haptics.selectionAsync();
+                      phoneRef.current?.focus();
+                    }}
+                    onFocus={() => Haptics.selectionAsync()}
+                  />
+                  {validationErrors.email && (
+                    <Text style={styles.errorText}>{validationErrors.email}</Text>
+                  )}
+                </View>
+
+                <View style={styles.inputRow}>
+                  <View style={styles.inputHalf}>
+                    <Text style={styles.inputLabel}>Phone</Text>
+                    <TextInput
+                      ref={phoneRef}
+                      placeholder="+1-555-0123"
+                      placeholderTextColor="#94A3B8"
+                      style={styles.textInput}
+                      value={phone}
+                      onChangeText={(text) => {
+                        // Only allow numbers, +, -, spaces, and parentheses
+                        const filtered = text.replace(/[^0-9+\-\s()]/g, '');
+                        setPhone(filtered);
+                      }}
+                      keyboardType="phone-pad"
+                      returnKeyType="next"
+                      onSubmitEditing={() => {
+                        Haptics.selectionAsync();
+                        locationRef.current?.focus();
+                      }}
+                      onFocus={() => Haptics.selectionAsync()}
+                    />
+                  </View>
+                  <View style={styles.inputHalf}>
+                    <Text style={styles.inputLabel}>Location</Text>
+                    <TextInput
+                      ref={locationRef}
+                      placeholder="New York, USA"
+                      placeholderTextColor="#94A3B8"
+                      style={styles.textInput}
+                      value={location}
+                      onChangeText={setLocation}
+                      returnKeyType="next"
+                      onSubmitEditing={() => {
+                        Haptics.selectionAsync();
+                        linkedinRef.current?.focus();
+                      }}
+                      onFocus={() => Haptics.selectionAsync()}
+                    />
+                  </View>
+                </View>
+
+                <View>
+                  <Text style={styles.inputLabel}>LinkedIn URL</Text>
+                  <TextInput
+                    ref={linkedinRef}
+                    placeholder="https://linkedin.com/in/johndoe"
+                    placeholderTextColor="#94A3B8"
+                    style={[styles.textInput, validationErrors.linkedinUrl && styles.textInputError]}
+                    value={linkedinUrl}
+                    onChangeText={(text) => {
+                      setLinkedinUrl(text);
+                      if (validationErrors.linkedinUrl) {
+                        setValidationErrors(prev => ({ ...prev, linkedinUrl: '' }));
+                      }
+                    }}
+                    autoCapitalize="none"
+                    keyboardType="url"
+                    returnKeyType="next"
+                    onSubmitEditing={() => {
+                      Haptics.selectionAsync();
+                      githubRef.current?.focus();
+                    }}
+                    onFocus={() => Haptics.selectionAsync()}
+                  />
+                  {validationErrors.linkedinUrl && (
+                    <Text style={styles.errorText}>{validationErrors.linkedinUrl}</Text>
+                  )}
+                </View>
+
+                <View>
+                  <Text style={styles.inputLabel}>GitHub URL</Text>
+                  <TextInput
+                    ref={githubRef}
+                    placeholder="https://github.com/johndoe"
+                    placeholderTextColor="#94A3B8"
+                    style={[styles.textInput, validationErrors.githubUrl && styles.textInputError]}
+                    value={githubUrl}
+                    onChangeText={(text) => {
+                      setGithubUrl(text);
+                      if (validationErrors.githubUrl) {
+                        setValidationErrors(prev => ({ ...prev, githubUrl: '' }));
+                      }
+                    }}
+                    autoCapitalize="none"
+                    keyboardType="url"
+                    returnKeyType="next"
+                    onSubmitEditing={() => {
+                      Haptics.selectionAsync();
+                      portfolioRef.current?.focus();
+                    }}
+                    onFocus={() => Haptics.selectionAsync()}
+                  />
+                  {validationErrors.githubUrl && (
+                    <Text style={styles.errorText}>{validationErrors.githubUrl}</Text>
+                  )}
+                </View>
+
+                <View>
+                  <Text style={styles.inputLabel}>Portfolio URL</Text>
+                  <TextInput
+                    ref={portfolioRef}
+                    placeholder="https://johndoe.com"
+                    placeholderTextColor="#94A3B8"
+                    style={[styles.textInput, validationErrors.portfolioUrl && styles.textInputError]}
+                    value={portfolioUrl}
+                    onChangeText={(text) => {
+                      setPortfolioUrl(text);
+                      if (validationErrors.portfolioUrl) {
+                        setValidationErrors(prev => ({ ...prev, portfolioUrl: '' }));
+                      }
+                    }}
+                    autoCapitalize="none"
+                    keyboardType="url"
+                    returnKeyType="next"
+                    onSubmitEditing={() => {
+                      Haptics.selectionAsync();
+                      summaryRef.current?.focus();
+                    }}
+                    onFocus={() => Haptics.selectionAsync()}
+                  />
+                  {validationErrors.portfolioUrl && (
+                    <Text style={styles.errorText}>{validationErrors.portfolioUrl}</Text>
+                  )}
+                </View>
+              </View>
+            </View>
+
+            {/* Professional Summary Section */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeader}>
+                <View>
+                  <Text style={styles.sectionTitle}>Professional Summary</Text>
+                  <Text style={styles.sectionSubtitle}>A brief overview of your professional background</Text>
+                </View>
+                {resumeId && (
+                  <FeatureGate featureId="skill_recommendations" featureName="AI Generate" showLockedState={false} fallback={<LockedBadge featureId="skill_recommendations" size="medium" />}>
+                    <TouchableOpacity
+                      style={styles.aiButton}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                        handleGenerateSummary();
+                      }}
+                      disabled={isGeneratingSummary}
+                    >
+                      {isGeneratingSummary ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                      ) : (
+                        <Text style={styles.aiButtonText}>AI Generate</Text>
+                      )}
+                    </TouchableOpacity>
+                  </FeatureGate>
+                )}
+              </View>
+
+              <View style={styles.innerCard}>
+                <TextInput
+                  ref={summaryRef}
+                  nativeID="input-summary"
+                  placeholder="Write a compelling professional summary highlighting your key skills and achievements..."
+                  placeholderTextColor="#94A3B8"
+                  style={[styles.textInput, styles.textInputMultiline]}
+                  multiline
+                  numberOfLines={5}
+                  value={professionalSummary}
+                  onChangeText={setProfessionalSummary}
+                  returnKeyType="default"
+                  onFocus={() => Haptics.selectionAsync()}
+                />
+
+                {resumeId && professionalSummary && (
+                  <FeatureGate featureId="skill_recommendations" featureName="AI Improve" showLockedState={false} fallback={<View style={styles.actionButtonsRow}><LockedBadge featureId="skill_recommendations" size="medium" /></View>}>
+                    <View style={styles.actionButtonsRow}>
+                      <TouchableOpacity
+                        style={styles.actionButton}
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          handleImproveContent(professionalSummary, 'summary');
+                        }}
+                        disabled={isImproving}
+                      >
+                        <SparkleIcon />
+                        <Text style={styles.actionButtonText}>
+                          {isImproving ? 'Improving...' : 'Improve Clarity'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </FeatureGate>
+                )}
+              </View>
+            </View>
+
+            {/* Work Experience Section */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeader}>
+                <View>
+                  <Text style={styles.sectionTitle}>Work Experience</Text>
+                  <Text style={styles.sectionSubtitle}>Your professional work history</Text>
+                </View>
+                {hasExperience && (
+                  <TouchableOpacity
+                    style={styles.addButton}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      addExperience();
+                    }}
+                  >
+                    <Text style={styles.addButtonText}>+ Add</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* Toggle switch for experience */}
               <TouchableOpacity
-                className="flex-row items-center"
+                style={styles.toggleContainer}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   setHasExperience(!hasExperience);
                 }}
+                activeOpacity={0.8}
               >
-                <View className={`w-5 h-5 rounded border-2 mr-2 items-center justify-center ${hasExperience ? 'bg-primary-blue border-primary-blue' : 'border-gray-300'}`}>
-                  {hasExperience && (
-                    <Text className="text-white text-xs">✓</Text>
-                  )}
+                <View style={styles.toggleTextContainer}>
+                  <Text style={styles.toggleTitle}>
+                    {hasExperience ? 'I have work experience' : 'No work experience yet'}
+                  </Text>
+                  <Text style={styles.toggleSubtitle}>
+                    {hasExperience
+                      ? 'Add your professional history below'
+                      : 'Toggle on if you have previous jobs to add'}
+                  </Text>
                 </View>
-                <Text className="text-gray-600 text-xs">{hasExperience ? 'I have experience' : 'No experience yet'}</Text>
+                <View style={[styles.toggleSwitch, hasExperience && styles.toggleSwitchActive]}>
+                  <View style={[styles.toggleKnob, hasExperience && styles.toggleKnobActive]} />
+                </View>
               </TouchableOpacity>
-            </View>
-            {hasExperience && (
-              <TouchableOpacity
-                className="bg-primary-blue rounded-lg px-3 py-1"
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  addExperience();
-                }}
-              >
-                <Text className="text-white text-xs font-semibold">+ Add</Text>
-              </TouchableOpacity>
-            )}
-          </View>
 
-          {!hasExperience && (
-            <View className="bg-gray-100 rounded-xl p-4 mb-3">
-              <Text className="text-gray-500 text-sm text-center">
-                No problem! You can skip this section and fill it in later.
-              </Text>
-            </View>
-          )}
+              {!hasExperience && (
+                <View style={styles.emptyStateCard}>
+                  <Text style={styles.emptyStateText}>
+                    No problem! You can skip this section and fill it in later.
+                  </Text>
+                </View>
+              )}
 
-          {hasExperience && experience.map((exp, index) => (
-            <View key={index} className="bg-white rounded-xl p-4 mb-3 border border-gray-200">
-              <View className="flex-row items-center justify-between mb-3">
-                <Text className="text-gray-700 text-sm font-bold">Experience #{index + 1}</Text>
-                {experience.length > 1 && (
-                  <TouchableOpacity onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                    removeExperience(index);
-                  }}>
-                    <Text className="text-red-500 text-xs font-medium">Remove</Text>
+              {hasExperience && experience.map((exp, index) => (
+                <View key={index} style={styles.itemCard}>
+                  <View style={styles.itemHeader}>
+                    <Text style={styles.itemTitle}>Experience #{index + 1}</Text>
+                    {experience.length > 1 && (
+                      <TouchableOpacity
+                        style={styles.removeButton}
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                          removeExperience(index);
+                        }}
+                      >
+                        <Text style={styles.removeButtonText}>Remove</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+
+                  <View>
+                    <Text style={styles.inputLabel}>Job Title</Text>
+                    <TextInput
+                      placeholder="Software Engineer"
+                      placeholderTextColor="#94A3B8"
+                      style={styles.textInput}
+                      value={exp.title}
+                      onChangeText={(value) => updateExperienceField(index, 'title', value)}
+                    />
+                  </View>
+
+                  <View>
+                    <Text style={styles.inputLabel}>Company</Text>
+                    <TextInput
+                      placeholder="Company Name"
+                      placeholderTextColor="#94A3B8"
+                      style={styles.textInput}
+                      value={exp.company}
+                      onChangeText={(value) => updateExperienceField(index, 'company', value)}
+                    />
+                  </View>
+
+                  <View>
+                    <Text style={styles.inputLabel}>Location</Text>
+                    <TextInput
+                      placeholder="City, Country"
+                      placeholderTextColor="#94A3B8"
+                      style={styles.textInput}
+                      value={exp.location}
+                      onChangeText={(value) => updateExperienceField(index, 'location', value)}
+                    />
+                  </View>
+
+                  <View style={styles.inputRow}>
+                    <View style={styles.inputHalf}>
+                      <Text style={styles.inputLabel}>Start Date</Text>
+                      <TouchableOpacity
+                        style={styles.dateButton}
+                        onPress={() => {
+                          Haptics.selectionAsync();
+                          showDatePickerModal('experience', index, 'start', exp.startDate || '');
+                        }}
+                      >
+                        <Text style={[styles.dateButtonText, !exp.startDate && styles.dateButtonPlaceholder]}>
+                          {formatDateDisplay(exp.startDate || '')}
+                        </Text>
+                        <CalendarIcon />
+                      </TouchableOpacity>
+                    </View>
+                    <View style={styles.inputHalf}>
+                      <Text style={styles.inputLabel}>End Date</Text>
+                      <TouchableOpacity
+                        style={[styles.dateButton, exp.current && { opacity: 0.5 }]}
+                        onPress={() => {
+                          if (!exp.current) {
+                            Haptics.selectionAsync();
+                            showDatePickerModal('experience', index, 'end', exp.endDate || '');
+                          }
+                        }}
+                        disabled={exp.current}
+                      >
+                        <Text style={[styles.dateButtonText, !exp.endDate && styles.dateButtonPlaceholder]}>
+                          {exp.current ? 'Present' : formatDateDisplay(exp.endDate || '')}
+                        </Text>
+                        <CalendarIcon />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.checkboxRow}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      updateExperienceField(index, 'current', !exp.current);
+                    }}
+                  >
+                    <View style={[styles.checkbox, exp.current && styles.checkboxChecked]}>
+                      {exp.current && <Text style={{ color: '#FFFFFF', fontSize: 12 }}>✓</Text>}
+                    </View>
+                    <Text style={styles.checkboxText}>Currently working here</Text>
+                  </TouchableOpacity>
+
+                  <View>
+                    <Text style={styles.inputLabel}>Key Responsibilities</Text>
+                    <TextInput
+                      placeholder="Enter key responsibilities (one per line)"
+                      placeholderTextColor="#94A3B8"
+                      style={[styles.textInput, styles.textInputMultiline, { minHeight: 80 }]}
+                      multiline
+                      numberOfLines={3}
+                      value={exp.responsibilities?.join('\n') || ''}
+                      onChangeText={(value) => updateExperienceField(index, 'responsibilities', value.split('\n'))}
+                    />
+                  </View>
+                </View>
+              ))}
+            </View>
+
+            {/* Education Section */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeader}>
+                <View>
+                  <Text style={styles.sectionTitle}>Education</Text>
+                  <Text style={styles.sectionSubtitle}>Your educational background</Text>
+                </View>
+                {hasEducation && (
+                  <TouchableOpacity
+                    style={styles.addButton}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      addEducation();
+                    }}
+                  >
+                    <Text style={styles.addButtonText}>+ Add</Text>
                   </TouchableOpacity>
                 )}
               </View>
 
-              <TextInput
-                placeholder="Job Title"
-                placeholderTextColor="#9CA3AF"
-                className="bg-gray-50 rounded-lg px-3 py-2 text-gray-900 text-sm mb-2"
-                value={exp.title}
-                onChangeText={(value) => updateExperienceField(index, 'title', value)}
-              />
-
-              <TextInput
-                placeholder="Company"
-                placeholderTextColor="#9CA3AF"
-                className="bg-gray-50 rounded-lg px-3 py-2 text-gray-900 text-sm mb-2"
-                value={exp.company}
-                onChangeText={(value) => updateExperienceField(index, 'company', value)}
-              />
-
-              <TextInput
-                placeholder="Location"
-                placeholderTextColor="#9CA3AF"
-                className="bg-gray-50 rounded-lg px-3 py-2 text-gray-900 text-sm mb-2"
-                value={exp.location}
-                onChangeText={(value) => updateExperienceField(index, 'location', value)}
-              />
-
-              <View className="flex-row gap-2 mb-2">
-                <TouchableOpacity
-                  className="bg-gray-50 rounded-lg px-3 py-2 flex-1 border border-gray-200"
-                  onPress={() => {
-                    Haptics.selectionAsync();
-                    showDatePickerModal('experience', index, 'start', exp.startDate);
-                  }}
-                >
-                  <Text className={`text-sm ${exp.startDate ? 'text-gray-900' : 'text-gray-400'}`}>
-                    {formatDateDisplay(exp.startDate)}
+              {!hasEducation && (
+                <View style={styles.emptyStateCard}>
+                  <Text style={styles.emptyStateText}>
+                    That's okay! You can skip this section.
                   </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  className={`bg-gray-50 rounded-lg px-3 py-2 flex-1 border border-gray-200 ${exp.current ? 'opacity-50' : ''}`}
-                  onPress={() => {
-                    if (!exp.current) {
-                      Haptics.selectionAsync();
-                      showDatePickerModal('experience', index, 'end', exp.endDate);
-                    }
-                  }}
-                  disabled={exp.current}
-                >
-                  <Text className={`text-sm ${exp.endDate ? 'text-gray-900' : 'text-gray-400'}`}>
-                    {exp.current ? 'Present' : formatDateDisplay(exp.endDate)}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              <TouchableOpacity
-                className="flex-row items-center mb-2"
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  updateExperienceField(index, 'current', !exp.current);
-                }}
-              >
-                <View className={`w-5 h-5 rounded border-2 mr-2 items-center justify-center ${exp.current ? 'bg-primary-blue border-primary-blue' : 'border-gray-300'}`}>
-                  {exp.current && (
-                    <Text className="text-white text-xs">✓</Text>
-                  )}
                 </View>
-                <Text className="text-gray-700 text-sm">Currently working here</Text>
-              </TouchableOpacity>
+              )}
 
-              <TextInput
-                placeholder="Key responsibilities (one per line)"
-                placeholderTextColor="#9CA3AF"
-                className="bg-gray-50 rounded-lg px-3 py-2 text-gray-900 text-sm"
-                multiline
-                numberOfLines={3}
-                value={exp.responsibilities.join('\n')}
-                onChangeText={(value) => updateExperienceField(index, 'responsibilities', value.split('\n'))}
-                style={{ minHeight: 80 }}
-              />
-            </View>
-          ))}
-        </View>
+              {hasEducation && education.map((edu, index) => (
+                <View key={index} style={styles.itemCard}>
+                  <View style={styles.itemHeader}>
+                    <Text style={styles.itemTitle}>Education #{index + 1}</Text>
+                    {education.length > 1 && (
+                      <TouchableOpacity
+                        style={styles.removeButton}
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                          removeEducation(index);
+                        }}
+                      >
+                        <Text style={styles.removeButtonText}>Remove</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
 
-        {/* Education */}
-        <View className="mb-6">
-          <View className="flex-row items-center justify-between mb-3">
-            <View className="flex-row items-center">
-              <Text className="text-gray-900 text-lg font-bold mr-3">Education</Text>
-            </View>
-            {hasEducation && (
-              <TouchableOpacity
-                className="bg-primary-blue rounded-lg px-3 py-1"
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  addEducation();
-                }}
-              >
-                <Text className="text-white text-xs font-semibold">+ Add</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+                  <View>
+                    <Text style={styles.inputLabel}>Degree</Text>
+                    <TextInput
+                      placeholder="Bachelor of Science"
+                      placeholderTextColor="#94A3B8"
+                      style={styles.textInput}
+                      value={edu.degree}
+                      onChangeText={(value) => updateEducationField(index, 'degree', value)}
+                    />
+                  </View>
 
-          {!hasEducation && (
-            <View className="bg-gray-100 rounded-xl p-4 mb-3">
-              <Text className="text-gray-500 text-sm text-center">
-                That's okay! You can skip this section.
-              </Text>
+                  <View>
+                    <Text style={styles.inputLabel}>Institution</Text>
+                    <TextInput
+                      placeholder="University Name"
+                      placeholderTextColor="#94A3B8"
+                      style={styles.textInput}
+                      value={edu.institution}
+                      onChangeText={(value) => updateEducationField(index, 'institution', value)}
+                    />
+                  </View>
+
+                  <View>
+                    <Text style={styles.inputLabel}>Location</Text>
+                    <TextInput
+                      placeholder="City, Country"
+                      placeholderTextColor="#94A3B8"
+                      style={styles.textInput}
+                      value={edu.location}
+                      onChangeText={(value) => updateEducationField(index, 'location', value)}
+                    />
+                  </View>
+
+                  <View style={styles.inputRow}>
+                    <View style={styles.inputHalf}>
+                      <Text style={styles.inputLabel}>Start Date</Text>
+                      <TouchableOpacity
+                        style={styles.dateButton}
+                        onPress={() => {
+                          Haptics.selectionAsync();
+                          showDatePickerModal('education', index, 'start', edu.startDate || '');
+                        }}
+                      >
+                        <Text style={[styles.dateButtonText, !edu.startDate && styles.dateButtonPlaceholder]}>
+                          {formatDateDisplay(edu.startDate || '')}
+                        </Text>
+                        <CalendarIcon />
+                      </TouchableOpacity>
+                    </View>
+                    <View style={styles.inputHalf}>
+                      <Text style={styles.inputLabel}>End Date</Text>
+                      <TouchableOpacity
+                        style={styles.dateButton}
+                        onPress={() => {
+                          Haptics.selectionAsync();
+                          showDatePickerModal('education', index, 'end', edu.endDate || '');
+                        }}
+                      >
+                        <Text style={[styles.dateButtonText, !edu.endDate && styles.dateButtonPlaceholder]}>
+                          {formatDateDisplay(edu.endDate || '')}
+                        </Text>
+                        <CalendarIcon />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  <View style={styles.inputRow}>
+                    <View style={styles.inputHalf}>
+                      <Text style={styles.inputLabel}>GPA (optional)</Text>
+                      <TextInput
+                        placeholder="3.8"
+                        placeholderTextColor="#94A3B8"
+                        style={styles.textInput}
+                        value={edu.gpa}
+                        onChangeText={(value) => updateEducationField(index, 'gpa', value)}
+                      />
+                    </View>
+                  </View>
+
+                  <View>
+                    <Text style={styles.inputLabel}>Description (optional)</Text>
+                    <TextInput
+                      placeholder="Additional details about your education"
+                      placeholderTextColor="#94A3B8"
+                      style={[styles.textInput, styles.textInputMultiline, { minHeight: 60 }]}
+                      multiline
+                      numberOfLines={2}
+                      value={edu.description}
+                      onChangeText={(value) => updateEducationField(index, 'description', value)}
+                    />
+                  </View>
+                </View>
+              ))}
             </View>
+          </ScrollView>
+        </KeyboardDismissWrapper>
+      </View>
+
+      {/* Bottom Action Buttons */}
+      <View style={styles.bottomButtonContainer}>
+        <TouchableOpacity
+          style={styles.saveButton}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            handleSave();
+          }}
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <ActivityIndicator size="small" color="#2563EB" />
+          ) : (
+            <Text style={styles.saveButtonText}>Save</Text>
           )}
+        </TouchableOpacity>
 
-          {hasEducation && education.map((edu, index) => (
-            <View key={index} className="bg-white rounded-xl p-4 mb-3 border border-gray-200">
-              <View className="flex-row items-center justify-between mb-3">
-                <Text className="text-gray-700 text-sm font-bold">Education #{index + 1}</Text>
-                {education.length > 1 && (
-                  <TouchableOpacity onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                    removeEducation(index);
-                  }}>
-                    <Text className="text-red-500 text-xs font-medium">Remove</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              <TextInput
-                placeholder="Degree"
-                placeholderTextColor="#9CA3AF"
-                className="bg-gray-50 rounded-lg px-3 py-2 text-gray-900 text-sm mb-2"
-                value={edu.degree}
-                onChangeText={(value) => updateEducationField(index, 'degree', value)}
-              />
-
-              <TextInput
-                placeholder="Institution"
-                placeholderTextColor="#9CA3AF"
-                className="bg-gray-50 rounded-lg px-3 py-2 text-gray-900 text-sm mb-2"
-                value={edu.institution}
-                onChangeText={(value) => updateEducationField(index, 'institution', value)}
-              />
-
-              <TextInput
-                placeholder="Location"
-                placeholderTextColor="#9CA3AF"
-                className="bg-gray-50 rounded-lg px-3 py-2 text-gray-900 text-sm mb-2"
-                value={edu.location}
-                onChangeText={(value) => updateEducationField(index, 'location', value)}
-              />
-
-              <View className="flex-row gap-2 mb-2">
-                <TouchableOpacity
-                  className="bg-gray-50 rounded-lg px-3 py-2 flex-1 border border-gray-200"
-                  onPress={() => {
-                    Haptics.selectionAsync();
-                    showDatePickerModal('education', index, 'start', edu.startDate);
-                  }}
-                >
-                  <Text className={`text-sm ${edu.startDate ? 'text-gray-900' : 'text-gray-400'}`}>
-                    {formatDateDisplay(edu.startDate)}
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  className="bg-gray-50 rounded-lg px-3 py-2 flex-1 border border-gray-200"
-                  onPress={() => {
-                    Haptics.selectionAsync();
-                    showDatePickerModal('education', index, 'end', edu.endDate);
-                  }}
-                >
-                  <Text className={`text-sm ${edu.endDate ? 'text-gray-900' : 'text-gray-400'}`}>
-                    {formatDateDisplay(edu.endDate)}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              <TextInput
-                placeholder="GPA (optional)"
-                placeholderTextColor="#9CA3AF"
-                className="bg-gray-50 rounded-lg px-3 py-2 text-gray-900 text-sm mb-2"
-                value={edu.gpa}
-                onChangeText={(value) => updateEducationField(index, 'gpa', value)}
-              />
-
-              <TextInput
-                placeholder="Description (optional)"
-                placeholderTextColor="#9CA3AF"
-                className="bg-gray-50 rounded-lg px-3 py-2 text-gray-900 text-sm"
-                multiline
-                numberOfLines={2}
-                value={edu.description}
-                onChangeText={(value) => updateEducationField(index, 'description', value)}
-                style={{ minHeight: 60 }}
-              />
-            </View>
-          ))}
-        </View>
-
-        {/* Action Buttons */}
-        <View className="flex-row gap-3 mb-8">
+        <View style={styles.exportButtonWrapper}>
           <TouchableOpacity
-            className="bg-gray-200 rounded-xl py-4 flex-1 items-center"
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              onBack?.();
-            }}
-            disabled={isLoading}
-          >
-            <Text className="text-gray-700 text-sm font-semibold">Cancel</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            className="bg-primary-blue rounded-xl py-4 flex-1 items-center"
+            style={styles.exportButton}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
               handleSave();
             }}
             disabled={isLoading}
           >
-            {isLoading ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Text className="text-white text-sm font-semibold">
-                {resumeId ? 'Update Resume' : 'Create Resume'}
-              </Text>
-            )}
+            <View style={styles.exportButtonInner}>
+              {isLoading ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.exportButtonText}>
+                  {resumeId ? 'Update Resume' : 'Create Resume'}
+                </Text>
+              )}
+            </View>
           </TouchableOpacity>
         </View>
-        </ScrollView>
-      </KeyboardDismissWrapper>
+      </View>
 
-      {/* Date Picker Modal */}
-      {datePicker.show && (
-        <>
-          {Platform.OS === 'ios' && (
-            <View className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-200 pb-8">
-              <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-200">
-                <TouchableOpacity onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  closeDatePicker();
-                }}>
-                  <Text className="text-primary-blue text-base font-medium">Cancel</Text>
-                </TouchableOpacity>
-                <Text className="text-gray-900 text-base font-semibold">
-                  Select {datePicker.mode === 'start' ? 'Start' : 'End'} Date
-                </Text>
-                <TouchableOpacity onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  closeDatePicker();
-                }}>
-                  <Text className="text-primary-blue text-base font-semibold">Done</Text>
-                </TouchableOpacity>
-              </View>
-              <DateTimePicker
-                value={datePicker.currentDate}
-                mode="date"
-                display="spinner"
-                onChange={handleDateChange}
-              />
-            </View>
-          )}
-          {Platform.OS === 'android' && (
-            <DateTimePicker
-              value={datePicker.currentDate}
-              mode="date"
-              display="default"
-              onChange={handleDateChange}
-            />
-          )}
-        </>
-      )}
-
-      {/* Bottom Nav Bar */}
-      <CandidateNavBar activeTab={activeTab} onTabPress={onTabChange} />
-    </CandidateLayout>
+      {/* Glass Date Picker */}
+      <GlassDatePicker
+        visible={datePicker.show}
+        onClose={closeDatePicker}
+        onSelect={handleDateSelect}
+        selectedDate={datePicker.currentDate}
+        title={`Select ${datePicker.mode === 'start' ? 'Start' : 'End'} Date`}
+        maxDate={datePicker.mode === 'start' ? new Date() : undefined}
+      />
+    </SafeAreaView>
   );
 }

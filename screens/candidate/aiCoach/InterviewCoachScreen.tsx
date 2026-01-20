@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -17,17 +17,25 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import Svg, { Path } from 'react-native-svg';
-import LogoWhite from '../../../assets/images/logoWhite.svg';
-import GirlAvatar from '../../../assets/images/aiInterview/girl.svg';
+import { useRouter } from 'expo-router';
+import RayAvatar from '../../../assets/images/aiInterview/ray.svg';
 import DotsDecoration from '../../../assets/images/aiInterview/dots.svg';
+import DefaultAvatar from '../../../assets/images/default.svg';
+import MicIconSvg from '../../../assets/images/aiInterview/mic.svg';
+import ChatIconSvg from '../../../assets/images/aiInterview/chat.svg';
+import PlayIconSvg from '../../../assets/images/aiInterview/play.svg';
+import ChevronRightSvg from '../../../assets/images/aiInterview/chevron-right.svg';
+import CandidateLayout from '../../../components/layouts/CandidateLayout';
 import CandidateNavBar from '../../../components/CandidateNavBar';
 import KeyboardDismissWrapper from '../../../components/KeyboardDismissWrapper';
+import SearchModal from '../../../components/SearchModal';
+import { useFeatureAccess } from '../../../contexts/FeatureGateContext';
 import { useAlert } from '../../../contexts/AlertContext';
 import {
   useStartInterviewSessionMutation,
   useGetInterviewCoachSessionsQuery,
   useGetInterviewCoachStatsQuery,
-  InterviewCoachSession,
+  useGetMyProfileQuery,
 } from '../../../services/api';
 
 // Icon Components
@@ -72,6 +80,13 @@ const ChartIcon = ({ size = 24, color = "#10B981" }) => (
 const CloseIcon = ({ size = 24, color = "#6B7280" }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <Path d="M18 6L6 18M6 6L18 18" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+  </Svg>
+);
+
+const LockIcon = ({ size = 24, color = "#6B7280" }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M19 11H5C3.89543 11 3 11.8954 3 13V20C3 21.1046 3.89543 22 5 22H19C20.1046 22 21 21.1046 21 20V13C21 11.8954 20.1046 11 19 11Z" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    <Path d="M7 11V7C7 5.67392 7.52678 4.40215 8.46447 3.46447C9.40215 2.52678 10.6739 2 12 2C13.3261 2 14.5979 2.52678 15.5355 3.46447C16.4732 4.40215 17 5.67392 17 7V11" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
   </Svg>
 );
 
@@ -124,8 +139,8 @@ interface InterviewCoachScreenProps {
   onAIAssistantPress?: () => void;
   onStartSession?: (data: InterviewSessionData) => void;
   onViewSession?: (sessionId: string) => void;
-  onAskClara?: () => void;
   onAskRay?: () => void;
+  onSearchNavigate?: (route: string) => void;
 }
 
 // Interview Type Card Component
@@ -135,19 +150,59 @@ interface InterviewTypeCardProps {
   onSelect: () => void;
 }
 
+// Interview Type Icons (dark outline style)
+const BehavioralIcon = ({ size = 24, color = "#1F2937" }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M19.4003 18C19.7837 17.2499 20 16.4002 20 15.5C20 12.4624 17.5376 10 14.5 10C11.4624 10 9 12.4624 9 15.5C9 18.5376 11.4624 21 14.5 21L21 21C21 21 20 20 19.4143 18.0292M18.85 12C18.9484 11.5153 19 11.0137 19 10.5C19 6.35786 15.6421 3 11.5 3C7.35786 3 4 6.35786 4 10.5C4 11.3766 4.15039 12.2181 4.42676 13C5.50098 16.0117 3 18 3 18H9.5" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+  </Svg>
+);
+
+const TechnicalIcon = ({ size = 24, color = "#1F2937" }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M4 4H20C21.1 4 22 4.9 22 6V18C22 19.1 21.1 20 20 20H4C2.9 20 2 19.1 2 18V6C2 4.9 2.9 4 4 4Z" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    <Path d="M8 12L11 15L16 9" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+  </Svg>
+);
+
+const SituationalIcon = ({ size = 24, color = "#1F2937" }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M3 3V21H21" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    <Path d="M18 17V9" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    <Path d="M13 17V5" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    <Path d="M8 17V11" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+  </Svg>
+);
+
+const HRCulturalIcon = ({ size = 24, color = "#1F2937" }) => (
+  <Svg width={size} height={size} viewBox="0 0 35 35" fill="none">
+    <Path d="M17.5003 24.7917C12.2651 24.7917 8.02116 20.5477 8.02116 15.3125V6.64352C8.02116 5.88786 8.02116 5.51003 8.15779 5.21702C8.30269 4.90628 8.55244 4.65653 8.86317 4.51163C9.15619 4.375 9.53402 4.375 10.2897 4.375H24.711C25.4666 4.375 25.8445 4.375 26.1375 4.51163C26.4482 4.65653 26.698 4.90628 26.8429 5.21702C26.9795 5.51003 26.9795 5.88786 26.9795 6.64352V15.3125C26.9795 20.5477 22.7355 24.7917 17.5003 24.7917ZM17.5003 24.7917V30.625M24.792 30.625H10.2087M32.0837 7.29167V14.5833M2.91699 7.29167V14.5833" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+  </Svg>
+);
+
+const MixedIcon = ({ size = 24, color = "#1F2937" }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M12 14C13.66 14 15 12.66 15 11V5C15 3.34 13.66 2 12 2C10.34 2 9 3.34 9 5V11C9 12.66 10.34 14 12 14Z" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    <Path d="M19 11C19 14.866 15.866 18 12 18C8.13401 18 5 14.866 5 11" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    <Path d="M12 18V22M12 22H8M12 22H16" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+  </Svg>
+);
+
 const InterviewTypeCard: React.FC<InterviewTypeCardProps> = ({ type, selected, onSelect }) => {
   const getIcon = () => {
+    const iconColor = selected ? "#FFF" : "#1F2937";
     switch (type.value) {
       case 'behavioral':
-        return <ChatIcon size={28} color={selected ? "#FFF" : "#437EF4"} />;
+        return <BehavioralIcon size={24} color={iconColor} />;
       case 'technical':
-        return <BriefcaseIcon size={28} color={selected ? "#FFF" : "#437EF4"} />;
+        return <TechnicalIcon size={24} color={iconColor} />;
       case 'situational':
-        return <ChartIcon size={28} color={selected ? "#FFF" : "#10B981"} />;
+        return <SituationalIcon size={24} color={iconColor} />;
       case 'hr_cultural':
-        return <TrophyIcon size={28} color={selected ? "#FFF" : "#F59E0B"} />;
+        return <HRCulturalIcon size={24} color={iconColor} />;
+      case 'mixed':
+        return <MixedIcon size={24} color={iconColor} />;
       default:
-        return <MicIcon size={28} color={selected ? "#FFF" : "#437EF4"} />;
+        return <BehavioralIcon size={24} color={iconColor} />;
     }
   };
 
@@ -156,111 +211,49 @@ const InterviewTypeCard: React.FC<InterviewTypeCardProps> = ({ type, selected, o
     onSelect();
   };
 
-  return (
-    <Pressable
-      onPress={handlePress}
-      style={({ pressed }) => [
-        { transform: [{ scale: pressed ? 0.98 : 1 }], opacity: pressed ? 0.9 : 1 }
-      ]}
-    >
-      <View
-        className={`p-4 rounded-2xl border-2 mb-3 ${
-          selected
-            ? 'border-primary-blue bg-primary-blue'
-            : 'border-gray-200 bg-white'
-        }`}
+  if (selected) {
+    return (
+      <Pressable
+        onPress={handlePress}
+        style={({ pressed }) => [
+          { transform: [{ scale: pressed ? 0.98 : 1 }], opacity: pressed ? 0.9 : 1, marginBottom: 12 }
+        ]}
       >
-        <View className="flex-row items-center">
-          <View className={`w-12 h-12 rounded-xl items-center justify-center ${
-            selected ? 'bg-white/20' : 'bg-blue-50'
-          }`}>
+        <LinearGradient
+          colors={['#6B8BF5', '#5B7EE5', '#4B6FD5']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.interviewTypeCardSelected}
+        >
+          <View style={styles.interviewTypeIconContainer}>
             {getIcon()}
           </View>
-          <View className="flex-1 ml-4">
-            <Text className={`text-base font-bold ${selected ? 'text-white' : 'text-gray-900'}`}>
-              {type.label}
-            </Text>
-            <Text className={`text-xs mt-1 ${selected ? 'text-white/80' : 'text-gray-500'}`}>
-              {type.description}
-            </Text>
+          <View style={styles.interviewTypeContent}>
+            <Text style={styles.interviewTypeTextSelected}>{type.label}</Text>
+            <Text style={styles.interviewTypeDescSelected}>{type.description}</Text>
           </View>
-          {selected && (
-            <View className="bg-white rounded-full p-1">
-              <CheckIcon size={20} color="#437EF4" />
-            </View>
-          )}
-        </View>
-      </View>
-    </Pressable>
-  );
-};
-
-// Session History Card Component
-interface SessionCardProps {
-  session: InterviewCoachSession;
-  onPress: () => void;
-}
-
-const SessionCard: React.FC<SessionCardProps> = ({ session, onPress }) => {
-  const getStatusColor = () => {
-    switch (session.status) {
-      case 'completed':
-        return '#10B981';
-      case 'in_progress':
-        return '#F59E0B';
-      case 'abandoned':
-        return '#EF4444';
-      default:
-        return '#6B7280';
-    }
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  };
-
-  const handlePress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    onPress();
-  };
+          <View style={styles.interviewTypeCheckmark}>
+            <CheckIcon size={18} color="#FFF" />
+          </View>
+        </LinearGradient>
+      </Pressable>
+    );
+  }
 
   return (
     <Pressable
       onPress={handlePress}
       style={({ pressed }) => [
-        { transform: [{ scale: pressed ? 0.98 : 1 }], opacity: pressed ? 0.9 : 1 }
+        { transform: [{ scale: pressed ? 0.98 : 1 }], opacity: pressed ? 0.9 : 1, marginBottom: 12 }
       ]}
     >
-      <View className="bg-white rounded-2xl p-4 mb-3 border border-gray-100 shadow-sm">
-        <View className="flex-row items-center justify-between mb-2">
-          <View className="flex-row items-center">
-            <View className="w-2 h-2 rounded-full mr-2" style={{ backgroundColor: getStatusColor() }} />
-            <Text className="text-xs font-semibold capitalize" style={{ color: getStatusColor() }}>
-              {session.status.replace('_', ' ')}
-            </Text>
-          </View>
-          <Text className="text-xs text-gray-400">{formatDate(session.createdAt)}</Text>
+      <View style={styles.interviewTypeCard}>
+        <View style={[styles.interviewTypeIconContainer, { backgroundColor: 'transparent' }]}>
+          {getIcon()}
         </View>
-
-        <Text className="text-base font-bold text-gray-900 mb-1 capitalize">
-          {session.interviewType.replace('_', ' ')} Interview
-        </Text>
-        <Text className="text-sm text-gray-600 mb-2">{session.jobRole}</Text>
-
-        <View className="flex-row items-center justify-between">
-          <View className="flex-row items-center">
-            <Text className="text-xs text-gray-500">
-              {session.totalQuestions} Questions
-            </Text>
-          </View>
-          {session.overallScore !== null && session.overallScore !== undefined && (
-            <View className="bg-blue-50 px-3 py-1 rounded-full">
-              <Text className="text-primary-blue text-xs font-bold">
-                Score: {Math.round(session.overallScore)}%
-              </Text>
-            </View>
-          )}
+        <View style={styles.interviewTypeContent}>
+          <Text style={styles.interviewTypeText}>{type.label}</Text>
+          <Text style={styles.interviewTypeDesc}>{type.description}</Text>
         </View>
       </View>
     </Pressable>
@@ -273,13 +266,31 @@ export default function InterviewCoachScreen({
   onAIAssistantPress,
   onStartSession,
   onViewSession,
-  onAskClara,
   onAskRay,
+  onSearchNavigate,
 }: InterviewCoachScreenProps) {
   const { showAlert } = useAlert();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+
+  // Feature access check
+  const { hasAccess: hasInterviewAccess, requiredLevelDisplay } = useFeatureAccess('interview_coach_full');
+
+  // Profile data for avatar
+  const { data: profileData } = useGetMyProfileQuery();
+  const profilePictureUrl = profileData?.myProfile?.profilePicture || null;
+
+  // Navigation handlers
+  const handleNotificationPress = useCallback(() => {
+    router.push('/(candidate)/notifications' as any);
+  }, [router]);
+
+  const handleProfilePress = useCallback(() => {
+    router.push('/(candidate)/(tabs)/profile' as any);
+  }, [router]);
 
   // State
+  const [showSearchModal, setShowSearchModal] = useState(false);
   const [showModeModal, setShowModeModal] = useState(false);
   const [showSetupModal, setShowSetupModal] = useState(false);
   const [selectedType, setSelectedType] = useState('behavioral');
@@ -292,7 +303,6 @@ export default function InterviewCoachScreen({
   // Animation values
   const modeModalScale = useRef(new Animated.Value(0.9)).current;
   const modeModalOpacity = useRef(new Animated.Value(0)).current;
-  const headerFade = useRef(new Animated.Value(0)).current;
   const contentFade = useRef(new Animated.Value(0)).current;
   const contentSlide = useRef(new Animated.Value(30)).current;
 
@@ -306,27 +316,19 @@ export default function InterviewCoachScreen({
 
   // Entrance animations
   useEffect(() => {
-    Animated.timing(headerFade, {
-      toValue: 1,
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
-
-    setTimeout(() => {
-      Animated.parallel([
-        Animated.timing(contentFade, {
-          toValue: 1,
-          duration: 400,
-          useNativeDriver: true,
-        }),
-        Animated.spring(contentSlide, {
-          toValue: 0,
-          friction: 8,
-          tension: 40,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }, 150);
+    Animated.parallel([
+      Animated.timing(contentFade, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: true,
+      }),
+      Animated.spring(contentSlide, {
+        toValue: 0,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+    ]).start();
   }, []);
 
   // Mode modal animation
@@ -490,32 +492,21 @@ export default function InterviewCoachScreen({
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {/* Header */}
-      <Animated.View style={{ opacity: headerFade }}>
-        <LinearGradient
-          colors={['#437EF4', '#437EF4']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          className="px-6 py-4"
-        >
-          <View className="flex-row items-center">
-            <LogoWhite width={39} height={33} />
-            <View className="flex-1 ml-4">
-              <Text className="text-white text-lg font-bold">AI Career Coach</Text>
-              <Text className="text-white/90 text-xs mt-0.5">
-                AI powered career companion with chat, interview and more
-              </Text>
-            </View>
-          </View>
-        </LinearGradient>
-      </Animated.View>
-
+    <>
+    <CandidateLayout
+      headerTitle="AI Career Coach"
+      headerSubtitle="AI powered career companion"
+      showGlassPill={true}
+      onSearchPress={() => setShowSearchModal(true)}
+      onNotificationPress={handleNotificationPress}
+      onProfilePress={handleProfilePress}
+      profilePictureUrl={profilePictureUrl}
+    >
       {/* Content */}
       <ScrollView
         className="flex-1"
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 100 }}
+        contentContainerStyle={{ paddingBottom: 100, paddingTop: 120 }}
         refreshControl={
           <RefreshControl
             refreshing={isLoadingSessions}
@@ -564,144 +555,231 @@ export default function InterviewCoachScreen({
           )}
 
           {/* Start New Session Card */}
-          <Pressable
-            onPress={showModeModalWithAnimation}
-            style={({ pressed }) => [
-              { transform: [{ scale: pressed ? 0.98 : 1 }], opacity: pressed ? 0.9 : 1 }
-            ]}
-          >
-            <LinearGradient
-              colors={['#437EF4', '#6366F1']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              className="rounded-2xl p-6 mb-6"
-            >
-              <View className="flex-row items-center">
-                <View className="bg-white/20 rounded-2xl p-4">
-                  <PlayIcon size={32} color="#FFF" />
-                </View>
-                <View className="flex-1 ml-4">
-                  <Text className="text-white text-xl font-bold">Start New Practice</Text>
-                  <Text className="text-white/80 text-sm mt-1">
-                    Practice with AI Powered Interview Companion Ray
-                  </Text>
-                </View>
-                <ArrowRightIcon size={24} color="#FFF" />
-              </View>
-            </LinearGradient>
-          </Pressable>
-
-          {/* Practice Modes */}
-          <Text className="text-lg font-bold text-gray-900 mb-4">Practice Modes</Text>
-          <View className="flex-row mb-3 -mx-1">
+          {hasInterviewAccess ? (
             <Pressable
-              className="flex-1 mx-1"
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                setSelectedMode('text');
-                setShowSetupModal(true);
-              }}
+              onPress={showModeModalWithAnimation}
               style={({ pressed }) => [
-                { transform: [{ scale: pressed ? 0.95 : 1 }], opacity: pressed ? 0.8 : 1 }
+                styles.startPracticeCard,
+                { transform: [{ scale: pressed ? 0.98 : 1 }], opacity: pressed ? 0.9 : 1 }
               ]}
             >
-              <View className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm items-center">
-                <View className="bg-blue-50 rounded-xl p-3 mb-3">
-                  <ChatIcon size={28} color="#437EF4" />
+              <LinearGradient
+                colors={['rgba(6, 182, 212, 0.9)', 'rgba(37, 99, 235, 0.8)', 'rgba(6, 182, 212, 0.9)']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                locations={[0.16, 0.5, 1]}
+                style={styles.startPracticeGradient}
+              >
+                <View style={styles.startPracticeContent}>
+                  <View style={styles.startPracticeLeft}>
+                    <View style={styles.startPracticeHeader}>
+                      <PlayIconSvg width={28} height={28} />
+                      <Text style={styles.startPracticeTitle}>Start New Practice</Text>
+                    </View>
+                    <Text style={styles.startPracticeDescription}>
+                      Practice with AI Powered Interview Companion RAY
+                    </Text>
+                  </View>
+                  <ChevronRightSvg width={24} height={24} />
                 </View>
-                <Text className="text-base font-bold text-gray-900">Text Mode</Text>
-                <Text className="text-xs text-gray-500 text-center mt-1">
-                  Type your answers
-                </Text>
+              </LinearGradient>
+            </Pressable>
+          ) : (
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                showAlert({
+                  type: 'info',
+                  title: 'Feature Locked',
+                  message: `Unlock Interview Coach at ${requiredLevelDisplay || 'next'} Badge. Complete your profile to level up!`,
+                  buttons: [{ text: 'OK', style: 'default' }],
+                });
+              }}
+              style={({ pressed }) => [
+                { transform: [{ scale: pressed ? 0.98 : 1 }], opacity: pressed ? 0.9 : 1 }
+              ]}
+            >
+              <View style={styles.startPracticeCardLocked}>
+                <View style={styles.startPracticeContent}>
+                  <View style={styles.startPracticeLeft}>
+                    <View style={styles.startPracticeHeader}>
+                      <View style={styles.lockedIconCircle}>
+                        <LockIcon size={20} color="#9CA3AF" />
+                      </View>
+                      <Text style={styles.startPracticeTitleLocked}>Start New Practice</Text>
+                    </View>
+                    <Text style={styles.startPracticeDescriptionLocked}>
+                      Unlock at {requiredLevelDisplay || 'next'} Badge
+                    </Text>
+                  </View>
+                  <LockIcon size={24} color="#9CA3AF" />
+                </View>
               </View>
             </Pressable>
+          )}
+
+          {/* Practice Modes */}
+          <Text style={styles.recentSessionsTitle}>Practice Mode</Text>
+          <View style={{ flexDirection: 'row', gap: 12, marginTop: 16, marginBottom: 24 }}>
             <Pressable
-              className="flex-1 mx-1"
+              style={{ flex: 1 }}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                setSelectedMode('voice');
-                setShowSetupModal(true);
+                if (hasInterviewAccess) {
+                  setSelectedMode('voice');
+                  setShowSetupModal(true);
+                } else {
+                  showAlert({
+                    type: 'info',
+                    title: 'Feature Locked',
+                    message: `Unlock Practice Modes at ${requiredLevelDisplay || 'next'} Badge. Complete your profile to level up!`,
+                    buttons: [{ text: 'OK', style: 'default' }],
+                  });
+                }
               }}
-              style={({ pressed }) => [
-                { transform: [{ scale: pressed ? 0.95 : 1 }], opacity: pressed ? 0.8 : 1 }
-              ]}
             >
-              <View className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm items-center">
-                <View className="bg-purple-50 rounded-xl p-3 mb-3">
-                  <MicIcon size={28} color="#8B5CF6" />
+              {({ pressed }) => (
+                <View style={[styles.practiceModeCard, { transform: [{ scale: pressed ? 0.95 : 1 }], opacity: pressed ? 0.8 : 1 }]}>
+                  <View style={styles.practiceModeIconContainer}>
+                    <MicIconSvg width={56} height={56} />
+                  </View>
+                  <Text style={styles.practiceModeTitle}>Voice Mode</Text>
+                  <Text style={styles.practiceModeDescription}>
+                    Speak naturally and{'\n'}get audio feedback.
+                  </Text>
                 </View>
-                <Text className="text-base font-bold text-gray-900">Voice Mode</Text>
-                <Text className="text-xs text-gray-500 text-center mt-1">
-                  Speak your answers
-                </Text>
-              </View>
+              )}
+            </Pressable>
+            <Pressable
+              style={{ flex: 1 }}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                if (hasInterviewAccess) {
+                  setSelectedMode('text');
+                  setShowSetupModal(true);
+                } else {
+                  showAlert({
+                    type: 'info',
+                    title: 'Feature Locked',
+                    message: `Unlock Practice Modes at ${requiredLevelDisplay || 'next'} Badge. Complete your profile to level up!`,
+                    buttons: [{ text: 'OK', style: 'default' }],
+                  });
+                }
+              }}
+            >
+              {({ pressed }) => (
+                <View style={[styles.practiceModeCard, { transform: [{ scale: pressed ? 0.95 : 1 }], opacity: pressed ? 0.8 : 1 }]}>
+                  <View style={styles.practiceModeIconContainer}>
+                    <ChatIconSvg width={56} height={56} />
+                  </View>
+                  <Text style={styles.practiceModeTitle}>Chat Mode</Text>
+                  <Text style={styles.practiceModeDescription}>
+                    Type your answers{'\n'}at your own pace.
+                  </Text>
+                </View>
+              )}
             </Pressable>
           </View>
 
-          {/* Ask Ray Button */}
+          {/* Ask Ray Card */}
           <Pressable
-            className="mb-6"
+            style={styles.askRayContainer}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
               onAskRay?.();
             }}
-            style={({ pressed }) => [
-              { transform: [{ scale: pressed ? 0.98 : 1 }], opacity: pressed ? 0.9 : 1 }
-            ]}
           >
-            <View className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex-row items-center">
-              <View className="rounded-full w-14 h-14 items-center justify-center overflow-hidden">
-                <Image
-                  source={require('../../../assets/images/aiInterview/ray.jpg')}
-                  style={{ width: 56, height: 56 }}
-                  resizeMode="cover"
-                />
+            {({ pressed }) => (
+              <View style={[styles.askRayRow, { opacity: pressed ? 0.9 : 1 }]}>
+                {/* Ray Avatar - Outside the gradient */}
+                <View style={styles.askRayAvatarCircle}>
+                  <RayAvatar width={48} height={48} />
+                </View>
+                {/* Glass Card */}
+                <View style={styles.askRayGlassCard}>
+                  <BlurView
+                    style={StyleSheet.absoluteFill}
+                    blurType="light"
+                    blurAmount={20}
+                    reducedTransparencyFallbackColor="rgba(6, 182, 212, 0.5)"
+                  />
+                  <LinearGradient
+                    colors={['rgba(6, 182, 212, 0.7)', 'rgba(37, 99, 235, 0.6)', 'rgba(6, 182, 212, 0.7)']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    locations={[0.16, 0.5, 1]}
+                    style={styles.askRayGradient}
+                  >
+                    <View style={styles.askRayContent}>
+                      <View style={styles.askRayTextContainer}>
+                        <Text style={styles.askRayTitle}>Ask Ray</Text>
+                        <Text style={styles.askRaySubtitle}>Chat With AI Career Coach</Text>
+                      </View>
+                      <ArrowRightIcon size={24} color="rgba(255, 255, 255, 0.9)" />
+                    </View>
+                  </LinearGradient>
+                </View>
               </View>
-              <View className="flex-1 ml-4">
-                <Text className="text-base font-bold text-gray-900">Ask Ray</Text>
-                <Text className="text-xs text-gray-500 mt-0.5">
-                  Chat with your AI career coach
-                </Text>
-              </View>
-              <ArrowRightIcon size={20} color="#437EF4" />
-            </View>
+            )}
           </Pressable>
 
           {/* Recent Sessions */}
-          <View className="flex-row items-center justify-between mb-4">
-            <Text className="text-lg font-bold text-gray-900">Recent Sessions</Text>
+          <View style={styles.recentSessionsHeader}>
+            <Text style={styles.recentSessionsTitle}>Recent Sessions</Text>
             <Pressable
-              className="flex-row items-center"
+              style={styles.viewAllButton}
               onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
-              style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
             >
-              <HistoryIcon size={18} color="#437EF4" />
-              <Text className="text-primary-blue text-sm font-semibold ml-1">View All</Text>
+              {({ pressed }) => (
+                <Text style={[styles.viewAllText, { opacity: pressed ? 0.7 : 1 }]}>View All</Text>
+              )}
             </Pressable>
           </View>
 
           {isLoadingSessions ? (
-            <View className="items-center py-8">
+            <View style={{ alignItems: 'center', paddingVertical: 32 }}>
               <ActivityIndicator size="large" color="#437EF4" />
             </View>
           ) : sessions.length === 0 ? (
-            <View className="bg-white rounded-2xl p-6 border border-gray-100 items-center">
-              <View className="bg-gray-100 rounded-full p-4 mb-4">
-                <HistoryIcon size={32} color="#9CA3AF" />
+            <View style={styles.sessionCard}>
+              <View style={{ alignItems: 'center', paddingVertical: 16 }}>
+                <View style={{ backgroundColor: '#F3F4F6', borderRadius: 24, padding: 16, marginBottom: 16 }}>
+                  <HistoryIcon size={32} color="#9CA3AF" />
+                </View>
+                <Text style={styles.sessionTitle}>No Sessions Yet</Text>
+                <Text style={[styles.sessionMeta, { textAlign: 'center' }]}>
+                  Start your first practice session to see your history here
+                </Text>
               </View>
-              <Text className="text-gray-900 font-bold text-base mb-1">No Sessions Yet</Text>
-              <Text className="text-gray-500 text-sm text-center">
-                Start your first practice session to see your history here
-              </Text>
             </View>
           ) : (
-            sessions.slice(0, 5).map((session) => (
-              <SessionCard
-                key={session.id}
-                session={session}
-                onPress={() => onViewSession?.(session.id)}
-              />
-            ))
+            sessions.slice(0, 5).map((session, index) => {
+              const dotColors = ['#437EF4', '#F59E0B', '#F59E0B'];
+              const dotColor = dotColors[index % dotColors.length];
+              const statusText = session.status === 'completed' ? 'View' : 'Review';
+              return (
+                <Pressable
+                  key={session.id}
+                  onPress={() => onViewSession?.(session.id)}
+                  style={({ pressed }) => [{ opacity: pressed ? 0.8 : 1 }]}
+                >
+                  <View style={styles.sessionCard}>
+                    <View style={styles.sessionCardContent}>
+                      <View style={[styles.sessionDot, { backgroundColor: dotColor }]} />
+                      <View style={styles.sessionInfo}>
+                        <Text style={styles.sessionTitle}>{session.jobRole || 'Practice Session'}</Text>
+                        <Text style={styles.sessionMeta}>
+                          Difficulty: {session.difficulty} | Total: {session.totalQuestions || 0}
+                        </Text>
+                      </View>
+                      <Pressable style={styles.sessionViewButton}>
+                        <Text style={styles.sessionViewText}>{statusText}</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                </Pressable>
+              );
+            })
           )}
         </Animated.View>
       </ScrollView>
@@ -743,7 +821,7 @@ export default function InterviewCoachScreen({
               <View style={styles.modeModalImageContainer}>
                 <DotsDecoration width={200} height={200} style={styles.dotsDecoration} />
                 <View style={styles.girlAvatarContainer}>
-                  <GirlAvatar width={150} height={150} />
+                  <RayAvatar width={150} height={150} />
                 </View>
               </View>
 
@@ -804,21 +882,20 @@ export default function InterviewCoachScreen({
       <Modal
         visible={showSetupModal}
         animationType="slide"
-        presentationStyle="pageSheet"
+        presentationStyle="fullScreen"
         onRequestClose={() => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           setShowSetupModal(false);
         }}
       >
-        <SafeAreaView className="flex-1 bg-white">
-          {/* Modal Header */}
-          <View className="flex-row items-center justify-between px-6 py-4 border-b border-gray-100">
-            <View>
-              <Text className="text-xl font-bold text-gray-900">New Practice Session</Text>
-              <Text className="text-sm text-gray-500 mt-1">
-                {selectedMode === 'voice' ? '🎤 Voice Mode' : '💬 Text Mode'}
-              </Text>
-            </View>
+        <View style={styles.setupModalContainer}>
+          {/* Gradient Header */}
+          <LinearGradient
+            colors={['#8BB4F8', '#6B9CF4', '#4A7EF0']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[styles.setupModalHeader, { paddingTop: insets.top + 12 }]}
+          >
             <Pressable
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -826,50 +903,108 @@ export default function InterviewCoachScreen({
               }}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               style={({ pressed }) => [
+                styles.setupBackButton,
                 { opacity: pressed ? 0.7 : 1, transform: [{ scale: pressed ? 0.9 : 1 }] }
               ]}
-              className="bg-gray-100 rounded-full p-2"
             >
-              <CloseIcon size={24} />
+              <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+                <Path d="M15 18L9 12L15 6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </Svg>
             </Pressable>
-          </View>
+            <View style={styles.setupHeaderContent}>
+              <Text style={styles.setupHeaderTitle}>New Practice Session</Text>
+              <Text style={styles.setupHeaderSubtitle}>Your AI-powered career snapshot is ready.</Text>
+            </View>
+            {/* Header Right - Glass Pill (matching CandidateLayout style) */}
+            <View style={styles.headerGlassPill}>
+              <Pressable
+                style={styles.headerIconButton}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setShowSetupModal(false);
+                  setShowSearchModal(true);
+                }}
+              >
+                <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+                  <Path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </Svg>
+              </Pressable>
+              <Pressable
+                style={styles.headerIconButton}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setShowSetupModal(false);
+                  handleNotificationPress();
+                }}
+              >
+                <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+                  <Path d="M18 8A6 6 0 1 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </Svg>
+              </Pressable>
+              <Pressable
+                style={styles.headerAvatar}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setShowSetupModal(false);
+                  handleProfilePress();
+                }}
+              >
+                {profilePictureUrl ? (
+                  <Image
+                    source={{ uri: profilePictureUrl }}
+                    style={{ width: 36, height: 36, borderRadius: 18 }}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <DefaultAvatar width={36} height={36} />
+                )}
+              </Pressable>
+            </View>
+          </LinearGradient>
 
           <KeyboardDismissWrapper>
             <ScrollView
-              className="flex-1 px-6 py-4"
+              style={styles.setupScrollView}
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+              contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
               onScrollBeginDrag={() => Haptics.selectionAsync()}
             >
-              {/* Job Role Input */}
-              <View className="mb-5">
-                <Text className="text-sm font-semibold text-gray-700 mb-2">Job Role *</Text>
-                <TextInput
-                  className="bg-gray-50 rounded-xl px-4 py-3.5 text-gray-900 border border-gray-200"
-                  placeholder="e.g., Software Engineer, Product Manager"
-                  placeholderTextColor="#9CA3AF"
-                  value={jobRole}
-                  onChangeText={setJobRole}
-                  onFocus={() => Haptics.selectionAsync()}
-                />
-              </View>
+              {/* Glass Card - Mode & Inputs */}
+              <View style={styles.glassCard}>
+                <Text style={styles.glassCardTitle}>
+                  {selectedMode === 'voice' ? 'Voice Mode' : 'Text Mode'} / {selectedMode === 'voice' ? 'Text Mode' : 'Voice Mode'}
+                </Text>
 
-              {/* Industry Input */}
-              <View className="mb-5">
-                <Text className="text-sm font-semibold text-gray-700 mb-2">Industry *</Text>
-                <TextInput
-                  className="bg-gray-50 rounded-xl px-4 py-3.5 text-gray-900 border border-gray-200"
-                  placeholder="e.g., Technology, Finance, Healthcare"
-                  placeholderTextColor="#9CA3AF"
-                  value={industry}
-                  onChangeText={setIndustry}
-                  onFocus={() => Haptics.selectionAsync()}
-                />
+                {/* Job Role Input */}
+                <View style={styles.inputContainer}>
+                  <Text style={styles.inputLabel}>Job Role *</Text>
+                  <TextInput
+                    style={styles.glassInput}
+                    placeholder="E.g., Software Eng, Product manager"
+                    placeholderTextColor="#9CA3AF"
+                    value={jobRole}
+                    onChangeText={setJobRole}
+                    onFocus={() => Haptics.selectionAsync()}
+                  />
+                </View>
+
+                {/* Industry Input */}
+                <View style={styles.inputContainer}>
+                  <Text style={styles.inputLabel}>Industry *</Text>
+                  <TextInput
+                    style={styles.glassInput}
+                    placeholder="e.g., School, Hospitality"
+                    placeholderTextColor="#9CA3AF"
+                    value={industry}
+                    onChangeText={setIndustry}
+                    onFocus={() => Haptics.selectionAsync()}
+                  />
+                </View>
               </View>
 
               {/* Interview Type Selection */}
-              <View className="mb-5">
-                <Text className="text-sm font-semibold text-gray-700 mb-3">Interview Type</Text>
+              <View style={styles.sectionContainer}>
+                <Text style={styles.sectionTitle}>Interview Type</Text>
                 {interviewTypes.map((type) => (
                   <InterviewTypeCard
                     key={type.value}
@@ -881,9 +1016,9 @@ export default function InterviewCoachScreen({
               </View>
 
               {/* Difficulty Level */}
-              <View className="mb-5">
-                <Text className="text-sm font-semibold text-gray-700 mb-3">Difficulty Level</Text>
-                <View className="flex-row -mx-1">
+              <View style={styles.sectionContainer}>
+                <Text style={styles.sectionTitle}>Difficulty Level</Text>
+                <View style={styles.pillsContainer}>
                   {difficultyLevels.map((level) => (
                     <Pressable
                       key={level.value}
@@ -892,19 +1027,19 @@ export default function InterviewCoachScreen({
                         setSelectedDifficulty(level.value);
                       }}
                       style={({ pressed }) => [
-                        { flex: 1, marginHorizontal: 4, transform: [{ scale: pressed ? 0.95 : 1 }] }
+                        { transform: [{ scale: pressed ? 0.95 : 1 }] }
                       ]}
                     >
                       <View
-                        className={`py-3 rounded-xl border-2 items-center ${
-                          selectedDifficulty === level.value
-                            ? 'border-primary-blue bg-blue-50'
-                            : 'border-gray-200 bg-white'
-                        }`}
+                        style={[
+                          styles.glassPill,
+                          selectedDifficulty === level.value && styles.glassPillSelected
+                        ]}
                       >
-                        <Text className={`font-semibold ${
-                          selectedDifficulty === level.value ? 'text-primary-blue' : 'text-gray-600'
-                        }`}>
+                        <Text style={[
+                          styles.glassPillText,
+                          selectedDifficulty === level.value && styles.glassPillTextSelected
+                        ]}>
                           {level.label}
                         </Text>
                       </View>
@@ -914,11 +1049,9 @@ export default function InterviewCoachScreen({
               </View>
 
               {/* Number of Questions */}
-              <View className="mb-5">
-                <Text className="text-sm font-semibold text-gray-700 mb-3">
-                  Number of Questions: {numQuestions}
-                </Text>
-                <View className="flex-row items-center -mx-1">
+              <View style={styles.sectionContainer}>
+                <Text style={styles.sectionTitle}>Number of Questions</Text>
+                <View style={styles.pillsContainer}>
                   {[5, 10, 15, 20].map((num) => (
                     <Pressable
                       key={num}
@@ -927,19 +1060,19 @@ export default function InterviewCoachScreen({
                         setNumQuestions(num);
                       }}
                       style={({ pressed }) => [
-                        { flex: 1, marginHorizontal: 4, transform: [{ scale: pressed ? 0.95 : 1 }] }
+                        { transform: [{ scale: pressed ? 0.95 : 1 }] }
                       ]}
                     >
                       <View
-                        className={`py-3 rounded-xl border-2 items-center ${
-                          numQuestions === num
-                            ? 'border-primary-blue bg-blue-50'
-                            : 'border-gray-200 bg-white'
-                        }`}
+                        style={[
+                          styles.glassPillSmall,
+                          numQuestions === num && styles.glassPillSelected
+                        ]}
                       >
-                        <Text className={`font-semibold ${
-                          numQuestions === num ? 'text-primary-blue' : 'text-gray-600'
-                        }`}>
+                        <Text style={[
+                          styles.glassPillText,
+                          numQuestions === num && styles.glassPillTextSelected
+                        ]}>
                           {num}
                         </Text>
                       </View>
@@ -947,41 +1080,42 @@ export default function InterviewCoachScreen({
                   ))}
                 </View>
               </View>
-
-              {/* Start Button */}
-              <Pressable
-                onPress={() => {
-                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                  handleStartNewSession();
-                }}
-                disabled={isStarting}
-                style={({ pressed }) => [
-                  {
-                    opacity: isStarting ? 0.6 : pressed ? 0.9 : 1,
-                    transform: [{ scale: pressed && !isStarting ? 0.98 : 1 }],
-                  }
-                ]}
-              >
-                <View
-                  className={`rounded-2xl py-4 items-center ${
-                    isStarting ? 'bg-gray-300' : 'bg-primary-blue'
-                  }`}
-                >
-                  {isStarting ? (
-                    <ActivityIndicator color="#FFF" />
-                  ) : (
-                    <View className="flex-row items-center">
-                      <PlayIcon size={20} color="#FFF" />
-                      <Text className="text-white text-base font-bold ml-2">
-                        Start Practice Session
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              </Pressable>
             </ScrollView>
           </KeyboardDismissWrapper>
-        </SafeAreaView>
+
+          {/* Fixed Start Button */}
+          <View style={[styles.startButtonContainer, { paddingBottom: insets.bottom + 16 }]}>
+            <Pressable
+              onPress={() => {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                handleStartNewSession();
+              }}
+              disabled={isStarting}
+              style={({ pressed }) => [
+                {
+                  opacity: isStarting ? 0.6 : pressed ? 0.9 : 1,
+                  transform: [{ scale: pressed && !isStarting ? 0.98 : 1 }],
+                }
+              ]}
+            >
+              <LinearGradient
+                colors={isStarting ? ['#9CA3AF', '#9CA3AF'] : ['#6B8BF5', '#4A6FD5', '#3A5FC5']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.startButton}
+              >
+                {isStarting ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <View style={styles.startButtonContent}>
+                    <PlayIcon size={20} color="#FFF" />
+                    <Text style={styles.startButtonText}>Start Practice Session</Text>
+                  </View>
+                )}
+              </LinearGradient>
+            </Pressable>
+          </View>
+        </View>
       </Modal>
 
       {/* Bottom Nav Bar */}
@@ -990,7 +1124,16 @@ export default function InterviewCoachScreen({
         onTabPress={onTabChange}
         onAIAssistantPress={onAIAssistantPress}
       />
-    </SafeAreaView>
+    </CandidateLayout>
+    <SearchModal
+      visible={showSearchModal}
+      onClose={() => setShowSearchModal(false)}
+      onNavigate={(route) => {
+        setShowSearchModal(false);
+        onSearchNavigate?.(route);
+      }}
+    />
+    </>
   );
 }
 
@@ -1090,5 +1233,483 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
     lineHeight: 16,
+  },
+  // Start New Practice Card Styles
+  startPracticeCard: {
+    marginBottom: 24,
+    borderRadius: 12,
+    shadowColor: 'rgba(6, 182, 212, 1)',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  startPracticeGradient: {
+    borderRadius: 12,
+    padding: 15,
+  },
+  startPracticeContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  startPracticeLeft: {
+    flex: 1,
+    gap: 15,
+  },
+  startPracticeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 15,
+  },
+  startPracticeTitle: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.6)',
+    textShadowColor: 'rgba(37, 99, 235, 0.25)',
+    textShadowOffset: { width: 0, height: 5 },
+    textShadowRadius: 10,
+  },
+  startPracticeDescription: {
+    fontSize: 16,
+    fontWeight: '400',
+    color: 'rgba(255, 255, 255, 0.75)',
+    lineHeight: 24,
+    textShadowColor: 'rgba(37, 99, 235, 0.25)',
+    textShadowOffset: { width: 0, height: 5 },
+    textShadowRadius: 10,
+  },
+  startPracticeCardLocked: {
+    marginBottom: 24,
+    borderRadius: 12,
+    backgroundColor: '#E5E7EB',
+    padding: 15,
+  },
+  startPracticeTitleLocked: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: '#9CA3AF',
+  },
+  startPracticeDescriptionLocked: {
+    fontSize: 16,
+    fontWeight: '400',
+    color: '#9CA3AF',
+    lineHeight: 24,
+  },
+  lockedIconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#D1D5DB',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  // Practice Mode Cards
+  practiceModeCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  practiceModeIconContainer: {
+    width: 72,
+    height: 72,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  practiceModeTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  practiceModeDescription: {
+    fontSize: 12,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+  // Ask Ray Card Styles
+  askRayContainer: {
+    marginBottom: 24,
+  },
+  askRayRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  askRayAvatarCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+    marginRight: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  askRayGlassCard: {
+    flex: 1,
+    borderRadius: 26,
+    overflow: 'hidden',
+    shadowColor: 'rgba(6, 182, 212, 1)',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  askRayGradient: {
+    paddingVertical: 8,
+    paddingLeft: 16,
+    paddingRight: 16,
+  },
+  askRayContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  askRayTextContainer: {
+    flex: 1,
+  },
+  askRayTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.9)',
+  },
+  askRaySubtitle: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: 'rgba(255, 255, 255, 0.75)',
+    marginTop: 2,
+  },
+  // Recent Sessions
+  recentSessionsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  recentSessionsTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  viewAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  viewAllText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#437EF4',
+  },
+  sessionCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  sessionCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  sessionDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 12,
+  },
+  sessionInfo: {
+    flex: 1,
+  },
+  sessionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 2,
+  },
+  sessionMeta: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  sessionViewButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  sessionViewText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#437EF4',
+  },
+  // Setup Modal Styles
+  setupModalContainer: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
+  },
+  setupModalHeader: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  setupBackButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  setupHeaderContent: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  setupHeaderTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  setupHeaderSubtitle: {
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginTop: 2,
+  },
+  headerGlassPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    borderRadius: 24,
+    paddingLeft: 12,
+    paddingRight: 4,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  headerIconButton: {
+    width: 36,
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  setupScrollView: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  // Glass Card Styles
+  glassCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.8)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  glassCardTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 20,
+  },
+  inputContainer: {
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  glassInput: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 15,
+    color: '#1F2937',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  // Section Styles
+  sectionContainer: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 16,
+  },
+  // Interview Type Card Styles
+  interviewTypeCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 16,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.8)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  interviewTypeCardSelected: {
+    borderRadius: 16,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#437EF4',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  interviewTypeIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  interviewTypeContent: {
+    flex: 1,
+    marginLeft: 14,
+  },
+  interviewTypeText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  interviewTypeTextSelected: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  interviewTypeDesc: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  interviewTypeDescSelected: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginTop: 2,
+  },
+  interviewTypeCheckmark: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  // Pills Styles
+  pillsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  glassPill: {
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(229, 231, 235, 0.8)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  glassPillSmall: {
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(229, 231, 235, 0.8)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  glassPillSelected: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#437EF4',
+    borderWidth: 2,
+  },
+  glassPillText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  glassPillTextSelected: {
+    color: '#437EF4',
+  },
+  // Start Button Styles
+  startButtonContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    backgroundColor: 'rgba(243, 244, 246, 0.95)',
+  },
+  startButton: {
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#437EF4',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  startButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  startButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginLeft: 8,
   },
 });

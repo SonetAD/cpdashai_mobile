@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { View, Text, ScrollView, RefreshControl, StyleSheet, Animated, Pressable } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../../store/store';
 import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg';
@@ -8,7 +9,7 @@ import CandidateLayout from '../../../components/layouts/CandidateLayout';
 import SearchModal from '../../../components/SearchModal';
 import SettingsScreen from './SettingsScreen';
 import ProfilePictureUpload from '../../../components/profile/ProfilePictureUpload';
-import { useCheckSubscriptionStatusQuery, useGetMyProfileQuery, useGetMySubscriptionQuery, useGetMyResumesQuery } from '../../../services/api';
+import { useCheckSubscriptionStatusQuery, useGetMyProfileQuery, useGetMySubscriptionQuery, useGetMyResumesQuery, useGetMyCRSQuery } from '../../../services/api';
 import { useAlert } from '../../../contexts/AlertContext';
 
 // Import icons
@@ -27,45 +28,70 @@ const ChevronRightIcon = () => (
   </Svg>
 );
 
-// Gradient Arc around avatar - matches Figma design
-// border: 5px solid; border-image-source: linear-gradient(180deg, #0E3FC8 0%, #8C6BFF 100%);
-const GradientArc = ({ size = 140 }: { size?: number }) => {
+// Gradient Arc around avatar with progress fill
+const GradientArc = ({ size = 140, progress = 0 }: { size?: number; progress?: number }) => {
   const strokeWidth = 7;
   const radius = (size - strokeWidth) / 2;
   const center = size / 2;
 
-  // Create arc path (incomplete circle with gap at 9 o'clock position)
-  // In SVG: 0°=right, 90°=down, 180°=left, 270°=up
-  // Gap from 8 to 10 o'clock = around 150-210 degrees
-  const startAngle = 210; // Start at 10 o'clock
-  const endAngle = 150; // End at 8 o'clock
-  const largeArcFlag = 1; // Use large arc
+  // Arc parameters - gap at bottom left (9 o'clock position)
+  const gapAngle = 60; // degrees of gap
+  const totalArcAngle = 360 - gapAngle; // 300 degrees of arc
+  const startAngle = 210; // Start at 10 o'clock (right side of gap)
+  const endAngle = 150; // End at 8 o'clock (left side of gap)
 
-  const startRad = (startAngle * Math.PI) / 180;
-  const endRad = (endAngle * Math.PI) / 180;
+  // Convert angles to cartesian coordinates
+  const polarToCartesian = (angle: number) => {
+    const rad = (angle * Math.PI) / 180;
+    return {
+      x: center + radius * Math.cos(rad),
+      y: center + radius * Math.sin(rad),
+    };
+  };
 
-  const startX = center + radius * Math.cos(startRad);
-  const startY = center + radius * Math.sin(startRad);
-  const endX = center + radius * Math.cos(endRad);
-  const endY = center + radius * Math.sin(endRad);
+  const arcStart = polarToCartesian(startAngle);
+  const arcEnd = polarToCartesian(endAngle);
+  const largeArcFlag = totalArcAngle > 180 ? 1 : 0;
 
-  const pathD = `M ${startX} ${startY} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${endX} ${endY}`;
+  // Background arc path (full arc from start to end)
+  const backgroundArc = `M ${arcStart.x} ${arcStart.y} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${arcEnd.x} ${arcEnd.y}`;
+
+  // Progress arc - fills based on percentage (minimum 5% if > 0)
+  const displayProgress = progress === 0 ? 0 : Math.max(progress, 5);
+  const progressAngle = (displayProgress / 100) * totalArcAngle;
+
+  // Progress fills from start angle clockwise
+  const progressEndAngle = startAngle + progressAngle;
+  const progressEnd = polarToCartesian(progressEndAngle > 360 ? progressEndAngle - 360 : progressEndAngle);
+  const progressLargeArc = progressAngle > 180 ? 1 : 0;
+  const progressArc = `M ${arcStart.x} ${arcStart.y} A ${radius} ${radius} 0 ${progressLargeArc} 1 ${progressEnd.x} ${progressEnd.y}`;
 
   return (
     <Svg width={size} height={size} style={styles.gradientArc}>
       <Defs>
-        <LinearGradient id="arcGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+        <LinearGradient id="arcGradientProfile" x1="0%" y1="0%" x2="0%" y2="100%">
           <Stop offset="0%" stopColor="#0E3FC8" />
           <Stop offset="100%" stopColor="#8C6BFF" />
         </LinearGradient>
       </Defs>
+      {/* Background arc - gray */}
       <Path
-        d={pathD}
-        stroke="url(#arcGradient)"
+        d={backgroundArc}
+        stroke="#E5E7EB"
         strokeWidth={strokeWidth}
         strokeLinecap="round"
         fill="none"
       />
+      {/* Progress arc - gradient fill */}
+      {displayProgress > 0 && (
+        <Path
+          d={progressArc}
+          stroke="url(#arcGradientProfile)"
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+          fill="none"
+        />
+      )}
     </Svg>
   );
 };
@@ -127,23 +153,31 @@ interface ProfileScreenProps {
   onLogout?: () => void;
   onViewPricing?: () => void;
   onViewBillingHistory?: () => void;
-  onViewFullProfile?: () => void;
   onSearchNavigate?: (route: string) => void;
+  onBack?: () => void;
+  onNotificationPress?: () => void;
+  onProfilePress?: () => void;
 }
 
 export default function ProfileScreen({
-  activeTab = 'profile',
+  activeTab = 'home', // Default to home since this is accessed from top navbar
   onTabChange,
   onAIAssistantPress,
   onLogout,
   onViewPricing,
   onViewBillingHistory,
-  onViewFullProfile,
   onSearchNavigate,
+  onBack,
+  onNotificationPress,
+  onProfilePress,
 }: ProfileScreenProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Safe area for dynamic header height
+  const insets = useSafeAreaInsets();
+  const HEADER_HEIGHT = insets.top + 70;
 
   // Animation values
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -161,7 +195,12 @@ export default function ProfileScreen({
   const { data: profileData, refetch: refetchProfile } = useGetMyProfileQuery();
   const { data: subscriptionData, refetch: refetchSubscription } = useGetMySubscriptionQuery();
   const { data: resumesData, refetch: refetchResumes } = useGetMyResumesQuery();
+  const { data: crsData, refetch: refetchCRS } = useGetMyCRSQuery();
   const { showAlert } = useAlert();
+
+  // Get CRS level display and score
+  const levelDisplay = crsData?.myCrs?.levelDisplay;
+  const crsScore = crsData?.myCrs?.totalScore;
 
   const subscription = subscriptionData?.mySubscription;
 
@@ -223,6 +262,24 @@ export default function ProfileScreen({
 
   // Generate initials from user name
   const getInitials = () => {
+    // First check profile data (has fullName from API)
+    if (profileData?.myProfile?.__typename === 'CandidateType') {
+      const profileUser = (profileData.myProfile as any).user;
+      if (profileUser?.fullName) {
+        const parts = profileUser.fullName.trim().split(' ');
+        if (parts.length >= 2) {
+          return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+        }
+        return profileUser.fullName.substring(0, 2).toUpperCase();
+      }
+      if (profileUser?.firstName && profileUser?.lastName) {
+        return `${profileUser.firstName[0]}${profileUser.lastName[0]}`.toUpperCase();
+      }
+      if (profileUser?.firstName) {
+        return profileUser.firstName.substring(0, 2).toUpperCase();
+      }
+    }
+    // Fallback to Redux auth user
     if (user?.firstName && user?.lastName) {
       return `${user.firstName[0]}${user.lastName[0]}`.toUpperCase();
     }
@@ -234,6 +291,20 @@ export default function ProfileScreen({
 
   // Get full name
   const getFullName = () => {
+    // First check profile data (has fullName from API)
+    if (profileData?.myProfile?.__typename === 'CandidateType') {
+      const profileUser = (profileData.myProfile as any).user;
+      if (profileUser?.fullName) {
+        return profileUser.fullName;
+      }
+      if (profileUser?.firstName && profileUser?.lastName) {
+        return `${profileUser.firstName} ${profileUser.lastName}`;
+      }
+      if (profileUser?.firstName) {
+        return profileUser.firstName;
+      }
+    }
+    // Fallback to Redux auth user
     if (user?.firstName && user?.lastName) {
       return `${user.firstName} ${user.lastName}`;
     }
@@ -262,6 +333,7 @@ export default function ProfileScreen({
       if (refetchSubscription) refetchPromises.push(refetchSubscription().catch(() => console.log('Subscription refetch skipped')));
       if (refetchProfile) refetchPromises.push(refetchProfile().catch(() => console.log('Profile refetch skipped')));
       if (refetchResumes) refetchPromises.push(refetchResumes().catch(() => console.log('Resumes refetch skipped')));
+      if (refetchCRS) refetchPromises.push(refetchCRS().catch(() => console.log('CRS refetch skipped')));
       await Promise.all(refetchPromises);
       // Success haptic on completion
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -273,18 +345,17 @@ export default function ProfileScreen({
     }
   };
 
-  // Handle profile picture upload success with haptic feedback
-  const handleProfilePictureUploadSuccess = async () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    try {
-      const refetchPromises = [];
-      if (refetchSubscription) refetchPromises.push(refetchSubscription().catch(() => console.log('Subscription refetch skipped')));
-      if (refetchProfile) refetchPromises.push(refetchProfile().catch(() => console.log('Profile refetch skipped')));
-      await Promise.all(refetchPromises);
-    } catch (error) {
-      console.log('Error refetching after profile picture update:', error);
-    }
-  };
+  // Memoize profile picture URL to prevent unnecessary re-renders
+  const profilePictureUrl = useMemo(
+    () => profileData?.myProfile?.profilePicture || null,
+    [profileData?.myProfile?.profilePicture]
+  );
+
+  // Memoize search press handler to prevent CandidateLayout re-renders
+  const handleSearchPress = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setShowSearchModal(true);
+  }, []);
 
   // Handle logout with confirmation
   const handleLogoutPress = () => {
@@ -333,20 +404,18 @@ export default function ProfileScreen({
   return (
     <>
       <CandidateLayout
-        onSearchPress={() => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          setShowSearchModal(true);
-        }}
-        activeTab={activeTab}
-        onTabChange={onTabChange}
-        onAIAssistantPress={onAIAssistantPress}
-        headerTitle={hasResume ? "My Profile" : "Create Your Profile"}
-        headerSubtitle={hasResume ? "Your AI-powered career snapshot." : "Your AI-powered career snapshot is ready."}
+        onSearchPress={handleSearchPress}
+        showBackButton={true}
+        onBack={onBack}
+        showGlassPill={true}
+        profilePictureUrl={profilePictureUrl}
+        onNotificationPress={onNotificationPress}
+        onProfilePress={onProfilePress}
       >
         <ScrollView
           className="flex-1 bg-gray-50"
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 140 }}
+          contentContainerStyle={{ paddingTop: HEADER_HEIGHT, paddingBottom: 140 }}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -370,15 +439,14 @@ export default function ProfileScreen({
             >
               <Animated.View style={[styles.avatarWrapper, { transform: [{ scale: avatarScale }] }]}>
                 {/* Gradient Arc */}
-                <GradientArc size={110} />
+                <GradientArc size={110} progress={crsScore || 0} />
                 {/* Avatar with white ring */}
                 <View style={styles.avatarContainer}>
                   <View style={styles.whiteRing}>
                     <ProfilePictureUpload
                       initials={getInitials()}
                       size={80}
-                      editable={true}
-                      onUploadSuccess={handleProfilePictureUploadSuccess}
+                      editable={false}
                     />
                   </View>
                 </View>
@@ -387,6 +455,15 @@ export default function ProfileScreen({
             <Text className="text-gray-900 text-2xl font-bold mt-4">{getFullName()}</Text>
             <Text className="text-gray-500 text-sm mt-1">{getJobTitle()}</Text>
             <Text className="text-gray-500 text-sm mt-0.5">{user?.email || 'No email'}</Text>
+
+            {/* CRS Level Badge */}
+            {(levelDisplay || crsScore !== undefined) && (
+              <View style={styles.levelBadge}>
+                <Text style={styles.levelBadgeText}>
+                  {levelDisplay}{levelDisplay && crsScore !== undefined ? ' • ' : ''}{crsScore !== undefined ? `${Math.round(crsScore)} CRS` : ''}
+                </Text>
+              </View>
+            )}
 
             {/* Subscription Badge */}
             {subscription && (
@@ -408,28 +485,6 @@ export default function ProfileScreen({
               </View>
             )}
 
-            {/* View Full Profile Button */}
-            <Pressable
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                onViewFullProfile?.();
-              }}
-              style={({ pressed }) => [
-                styles.viewProfileButton,
-                pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }
-              ]}
-            >
-              <Text style={styles.viewProfileButtonText}>View Full Profile</Text>
-              <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-                <Path
-                  d="M9 18l6-6-6-6"
-                  stroke="#FFFFFF"
-                  strokeWidth={2}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </Svg>
-            </Pressable>
           </Animated.View>
 
           {/* Subscription Section */}
@@ -608,6 +663,20 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
+  levelBadge: {
+    marginTop: 8,
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.2)',
+  },
+  levelBadgeText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#3B82F6',
+  },
   subscriptionBadge: {
     marginTop: 12,
   },
@@ -641,26 +710,5 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     backgroundColor: '#10B981',
     marginLeft: 6,
-  },
-  viewProfileButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#437EF4',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    marginTop: 16,
-    gap: 8,
-    shadowColor: '#437EF4',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  viewProfileButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
   },
 });

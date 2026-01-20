@@ -158,13 +158,16 @@ export const ResumeTab: React.FC = () => {
 
       const file = result.assets[0];
 
-      // Validate file size (10MB limit)
-      const maxSize = 10 * 1024 * 1024; // 10MB
+      // Validate file size
+      // Note: Base64 encoding adds ~33% overhead
+      // 5MB file becomes ~6.7MB after encoding, nginx limit is 10MB
+      const maxSize = 5 * 1024 * 1024; // 5MB original file limit
+
       if (file.size && file.size > maxSize) {
         showAlert({
           type: 'error',
           title: 'File Too Large',
-          message: 'Please select a file smaller than 10MB.',
+          message: `This file is ${((file.size || 0) / 1024 / 1024).toFixed(1)}MB. Please select a file smaller than 5MB.`,
           buttons: [{ text: 'OK', style: 'default' }],
         });
         return;
@@ -205,22 +208,87 @@ export const ResumeTab: React.FC = () => {
   const handleUploadResume = async (file: DocumentPicker.DocumentPickerAsset) => {
     try {
       console.log('📤 Reading file from path:', file.uri);
+      console.log('📊 Original file size:', ((file.size || 0) / 1024 / 1024).toFixed(2), 'MB');
 
       // Read file as base64
-      const base64 = await FileSystem.readAsStringAsync(file.uri, {
-        encoding: 'base64',
-      });
+      let base64: string;
+      try {
+        base64 = await FileSystem.readAsStringAsync(file.uri, {
+          encoding: 'base64',
+        });
+      } catch (readError: any) {
+        console.error('❌ Failed to read file:', readError);
+        showAlert({
+          type: 'error',
+          title: 'File Read Error',
+          message: 'Failed to read the file. Please try selecting it again.',
+          buttons: [{ text: 'OK', style: 'default' }],
+        });
+        return;
+      }
 
       // Add data URI prefix
       const fileData = `data:${file.mimeType};base64,${base64}`;
+      const payloadSizeMB = (fileData.length / 1024 / 1024).toFixed(2);
 
-      console.log('📦 File converted to base64, uploading...');
+      console.log('📦 File converted to base64');
+      console.log('📊 Base64 payload size:', payloadSizeMB, 'MB');
 
-      // Use async parsing mutation
-      const data = await parseResumeAsync({
-        fileName: file.name,
-        fileData: fileData,
-      }).unwrap();
+      // Warn if payload is very large (over 5MB after encoding)
+      if (fileData.length > 5 * 1024 * 1024) {
+        console.warn('⚠️ Large payload detected:', payloadSizeMB, 'MB - this may take longer');
+      }
+
+      // Use async parsing mutation with timeout handling
+      console.log('📤 Starting upload to server...');
+      const startTime = Date.now();
+
+      let data;
+      try {
+        data = await parseResumeAsync({
+          fileName: file.name,
+          fileData: fileData,
+        }).unwrap();
+      } catch (uploadError: any) {
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        console.error('❌ Upload failed after', elapsed, 'seconds:', uploadError);
+
+        // Check both status and originalStatus (RTK Query sets originalStatus for HTTP errors)
+        const httpStatus = uploadError?.originalStatus || uploadError?.status;
+
+        // Provide more specific error messages
+        let errorMessage = 'Failed to upload resume. Please try again.';
+        let errorTitle = 'Upload Failed';
+
+        if (httpStatus === 413) {
+          // 413 Request Entity Too Large - file is too big for server
+          errorTitle = 'File Too Large';
+          errorMessage = `This file (${payloadSizeMB}MB encoded) exceeds the server limit. Please try a smaller file or compress your PDF before uploading.`;
+        } else if (uploadError?.message?.includes('timeout') || uploadError?.name === 'AbortError') {
+          errorMessage = 'Upload timed out. The file may be too large. Try a smaller file or check your connection.';
+        } else if (httpStatus === 502 || httpStatus === 504) {
+          errorMessage = 'Server is temporarily unavailable. Please try again later.';
+        } else if (httpStatus === 500) {
+          errorMessage = 'Server error occurred. Please try again later.';
+        } else if (uploadError?.data?.parseResumeAsync?.message) {
+          errorMessage = uploadError.data.parseResumeAsync.message;
+        } else if (uploadError?.error?.includes('JSON Parse error')) {
+          // Server returned non-JSON response (likely HTML error page)
+          errorMessage = 'Server returned an unexpected response. The file may be too large.';
+        } else if (uploadError?.message) {
+          errorMessage = uploadError.message;
+        }
+
+        showAlert({
+          type: 'error',
+          title: errorTitle,
+          message: errorMessage,
+          buttons: [{ text: 'OK', style: 'default' }],
+        });
+        return;
+      }
+
+      console.log('✅ Upload completed in', ((Date.now() - startTime) / 1000).toFixed(1), 'seconds');
 
       if (data.parseResumeAsync.__typename === 'ResumeParsingTaskSuccessType') {
         const taskId = data.parseResumeAsync.task.taskId;
@@ -281,20 +349,23 @@ export const ResumeTab: React.FC = () => {
               // Still in minimum display time, queue the latest update
               console.log('⏳ Queuing update until minimum 0% display time passes');
               queuedUpdate = update;
-              
+
               // Check every 100ms if we can show the queued update
               const checkInterval = setInterval(() => {
                 if (canShowProgress && queuedUpdate) {
-                  console.log('🎬 Showing queued progress:', queuedUpdate.progress + '%');
-                  setPendingTasks(prev => new Map(prev).set(taskId, {
-                    fileName: file.name,
-                    progress: queuedUpdate!.progress,
-                    stage: queuedUpdate!.stage,
-                    stageLabel: queuedUpdate!.stageLabel,
-                    status: queuedUpdate!.status
-                  }));
+                  // Capture the update before clearing
+                  const updateToShow = queuedUpdate;
                   queuedUpdate = null;
                   clearInterval(checkInterval);
+
+                  console.log('🎬 Showing queued progress:', updateToShow.progress + '%');
+                  setPendingTasks(prev => new Map(prev).set(taskId, {
+                    fileName: file.name,
+                    progress: updateToShow.progress,
+                    stage: updateToShow.stage,
+                    stageLabel: updateToShow.stageLabel,
+                    status: updateToShow.status
+                  }));
                 }
               }, 100);
             }
@@ -302,14 +373,14 @@ export const ResumeTab: React.FC = () => {
           // On completed
           async (resumeId: string) => {
             console.log('✅ Parsing completed! Resume ID:', resumeId);
-            
+
             // Remove from pending tasks
             setPendingTasks(prev => {
               const newMap = new Map(prev);
               newMap.delete(taskId);
               return newMap;
             });
-            
+
             // Remove from active subscriptions
             setActiveSubscriptions(prev => {
               const newSet = new Set(prev);
@@ -318,8 +389,12 @@ export const ResumeTab: React.FC = () => {
             });
 
             // Refetch resumes to show the new one
-            await refetch();
-            
+            try {
+              await refetch();
+            } catch (refetchError) {
+              console.log('Refetch skipped - query may not be initialized:', refetchError);
+            }
+
             // No success alert - user already got confirmation when upload started
           },
           // On error
@@ -357,11 +432,12 @@ export const ResumeTab: React.FC = () => {
         });
       }
     } catch (error: any) {
-      console.error('❌ Failed to upload resume:', error);
+      // This catches unexpected errors (file system, memory, etc.)
+      console.error('❌ Unexpected error during resume upload:', error);
       showAlert({
         type: 'error',
-        title: 'Upload Failed',
-        message: error?.data?.parseResumeAsync?.message || error?.message || 'Failed to upload resume. Please try again.',
+        title: 'Unexpected Error',
+        message: 'An unexpected error occurred. Please try again or select a different file.',
         buttons: [{ text: 'OK', style: 'default' }],
       });
     }
@@ -369,7 +445,7 @@ export const ResumeTab: React.FC = () => {
 
   // Handle download resume
   const handleDownloadResume = async (resume: Resume) => {
-    const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2:8000';
+    const API_URL = (process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2:8000').replace(/\/$/, '');
     const downloadUrl = `${API_URL}/api/resume/build/${resume.id}/download/`;
 
     try {

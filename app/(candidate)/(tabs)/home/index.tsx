@@ -1,160 +1,139 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, Animated, Modal, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
+import { View, Text, TouchableOpacity, Animated, Modal, ActivityIndicator, StyleSheet, ScrollView, Dimensions } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
-import Svg, { Path } from 'react-native-svg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Haptics from 'expo-haptics';
+import { BlurView } from '@react-native-community/blur';
+import { LinearGradient as ExpoLinearGradient } from 'expo-linear-gradient';
 import CandidateLayout from '../../../../components/layouts/CandidateLayout';
 import SearchModal from '../../../../components/SearchModal';
 import PremiumUpgradeBanner from '../../../../components/PremiumUpgradeBanner';
-import { useParseAndCreateResumeMutation, useExportResumePdfMutation, useCheckSubscriptionStatusQuery } from '../../../../services/api';
+import JobMatchCard from '../../../../components/JobMatchCard';
+import CRSInfoPopup from '../../../../components/CRSInfoPopup';
+import { useParseAndCreateResumeMutation, useCheckSubscriptionStatusQuery, useGetMyProfileQuery, useGetMyCRSQuery, useGetRecentActivityQuery, useGetMyJobMatchesQuery } from '../../../../services/api';
 import { useAlert } from '../../../../contexts/AlertContext';
 import { RootState } from '../../../../store/store';
 
-// Import SVG assets
-import UploadCVIcon from '../../../../assets/images/homepage/uploadCV.svg';
-import FindJobsIcon from '../../../../assets/images/homepage/findJobs.svg';
-import PracticeInterviewIcon from '../../../../assets/images/homepage/practiceInterview.svg';
-import SkillGraphIcon from '../../../../assets/images/homepage/skillGraph.svg';
-import TrophyIcon from '../../../../assets/images/homepage/trophy.svg';
-import CircleCheckIcon from '../../../../assets/images/homepage/circleCheck.svg';
-import MessageIcon from '../../../../assets/images/homepage/message.svg';
-import IdeaIcon from '../../../../assets/images/homepage/idea.svg';
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// Quick Action Card Component with haptics and animations
-interface QuickActionCardProps {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-  onPress: () => void;
-  delay?: number;
-}
+// CRS Score Ring Component - Pie chart style with glass overlay and animation
+const CRSScoreRing = ({ score, size = 81, animate = false }: { score: number; size?: number; animate?: boolean }) => {
+  const center = size / 2;
+  const radius = size / 2;
+  const innerCircleSize = 67;
 
-const QuickActionCard: React.FC<QuickActionCardProps> = ({ icon, title, description, onPress, delay = 0 }) => {
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
+  // Animated score value
+  const [displayScore, setDisplayScore] = useState(animate ? 0 : score);
 
+  // Animate score from 0 to actual value
   useEffect(() => {
-    // Entrance animation with delay
-    const timer = setTimeout(() => {
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 400,
-          useNativeDriver: true,
-        }),
-        Animated.spring(slideAnim, {
-          toValue: 0,
-          friction: 8,
-          tension: 40,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }, delay);
-    return () => clearTimeout(timer);
-  }, []);
+    if (animate && score > 0) {
+      const duration = 1200; // Animation duration in ms
+      const startTime = Date.now();
+      const startScore = 0;
 
-  const handlePressIn = () => {
-    Animated.spring(scaleAnim, {
-      toValue: 0.95,
-      useNativeDriver: true,
-      speed: 50,
-      bounciness: 4,
-    }).start();
-  };
+      const animateScore = () => {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        // Easing function for smooth animation (ease-out)
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+        const currentScore = Math.round(startScore + (score - startScore) * easeOut);
 
-  const handlePressOut = () => {
-    Animated.spring(scaleAnim, {
-      toValue: 1,
-      useNativeDriver: true,
-      speed: 50,
-      bounciness: 4,
-    }).start();
-  };
+        setDisplayScore(currentScore);
 
-  const handlePress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    onPress();
-  };
+        if (progress < 1) {
+          requestAnimationFrame(animateScore);
+        }
+      };
+
+      // Delay animation start slightly
+      const timer = setTimeout(() => {
+        requestAnimationFrame(animateScore);
+      }, 300);
+
+      return () => clearTimeout(timer);
+    } else {
+      setDisplayScore(score);
+    }
+  }, [score, animate]);
+
+  // Calculate the arc path for the filled portion
+  // Start from 180 degrees (left/9 o'clock) and go clockwise
+  const percentage = Math.min(Math.max(displayScore, 0), 100);
+  const endAngle = (percentage / 100) * 360;
+
+  // Convert angle to radians and calculate points
+  // Start at 180 degrees (left side)
+  const startAngleRad = 180 * (Math.PI / 180);
+  const endAngleRad = (180 + endAngle) * (Math.PI / 180);
+
+  const startX = center + radius * Math.cos(startAngleRad);
+  const startY = center + radius * Math.sin(startAngleRad);
+  const endX = center + radius * Math.cos(endAngleRad);
+  const endY = center + radius * Math.sin(endAngleRad);
+
+  // Large arc flag: 1 if angle > 180 degrees
+  const largeArcFlag = endAngle > 180 ? 1 : 0;
+
+  // Create pie slice path (from center to arc and back)
+  const piePath = percentage === 100
+    ? `M ${center} ${center} m -${radius}, 0 a ${radius},${radius} 0 1,1 ${radius * 2},0 a ${radius},${radius} 0 1,1 -${radius * 2},0`
+    : percentage === 0
+    ? ''
+    : `M ${center} ${center} L ${startX} ${startY} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${endX} ${endY} Z`;
 
   return (
-    <Animated.View
-      style={{
-        flex: 1,
-        opacity: fadeAnim,
-        transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
-      }}
-    >
-      <TouchableOpacity
-        onPress={handlePress}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        className="bg-white rounded-2xl p-4 items-center flex-1 shadow-sm"
-        style={{ minHeight: 160 }}
-        activeOpacity={1}
-      >
-        <View className="mb-3">{icon}</View>
-        <Text className="text-gray-900 text-base font-bold mb-2 text-center">{title}</Text>
-        <Text className="text-gray-400 text-xs text-center leading-4">{description}</Text>
-      </TouchableOpacity>
-    </Animated.View>
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      {/* Gradient filled pie */}
+      <Svg width={size} height={size} style={{ position: 'absolute' }}>
+        <Defs>
+          <LinearGradient id="crsGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <Stop offset="-8.38%" stopColor="#06B6D4" />
+            <Stop offset="86.81%" stopColor="#8B5CF6" />
+          </LinearGradient>
+        </Defs>
+        {/* The pie slice showing the score */}
+        {percentage > 0 && (
+          <Path
+            d={piePath}
+            fill="url(#crsGradient)"
+          />
+        )}
+      </Svg>
+
+      {/* Inner glass circle overlay */}
+      <View style={[crsStyles.innerCircle, { width: innerCircleSize, height: innerCircleSize, borderRadius: Math.floor(innerCircleSize / 2) }]}>
+        <Text style={crsStyles.scoreText}>{displayScore}%</Text>
+      </View>
+    </View>
   );
 };
 
-// Job Card Component with haptics and animations
-interface JobCardProps {
-  position: string;
-  description: string;
-  company: string;
-  location: string;
-  jobType: string;
-  salary: string;
-  skills: string[];
-  aiInsight: string;
-  badgeColor?: string;
-  onViewAll?: () => void;
-  onApply?: () => void;
-  onSave?: () => void;
-}
-
-const JobCard: React.FC<JobCardProps> = ({
-  position,
-  description,
-  company,
-  location,
-  jobType,
-  salary,
-  skills,
-  aiInsight,
-  badgeColor = '#437EF4',
-  onViewAll,
-  onApply,
-  onSave,
-}) => {
+// Career Readiness Score Card Component
+const CRSCard = ({ score, onPress, animate = false }: { score: number; onPress?: () => void; animate?: boolean }) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(40)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
 
   useEffect(() => {
-    // Entrance animation
-    setTimeout(() => {
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 500,
-          useNativeDriver: true,
-        }),
-        Animated.spring(slideAnim, {
-          toValue: 0,
-          friction: 8,
-          tension: 40,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }, 300);
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: true,
+      }),
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+    ]).start();
   }, []);
 
   const handlePressIn = () => {
@@ -177,110 +156,469 @@ const JobCard: React.FC<JobCardProps> = ({
 
   const handlePress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    onViewAll?.();
+    onPress?.();
   };
 
-  const handleApply = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    onApply?.();
-  };
-
-  const handleSave = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    onSave?.();
+  // Generate dynamic message based on score
+  const getMessage = () => {
+    const roundedScore = Math.round(score);
+    if (score >= 80) {
+      return `Excellent! Your CV is ${roundedScore}% optimized. You're ready for top opportunities!`;
+    } else if (score >= 60) {
+      return `Nice! Your CV is ${roundedScore}% optimized. Quick win: add metrics to one experience bullet.`;
+    } else if (score >= 40) {
+      return `Good start! Your CV is ${roundedScore}% optimized. Add more skills to boost your score.`;
+    } else {
+      return `Your CV is ${roundedScore}% optimized. Complete your profile to improve your score.`;
+    }
   };
 
   return (
     <Animated.View
-      style={{
-        opacity: fadeAnim,
-        transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
-      }}
+      style={[
+        crsStyles.cardContainer,
+        {
+          opacity: fadeAnim,
+          transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
+        },
+      ]}
     >
       <TouchableOpacity
-        className="bg-white rounded-2xl p-5 mb-4 shadow-sm"
-        activeOpacity={1}
         onPress={handlePress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
+        activeOpacity={1}
+        style={crsStyles.cardTouchable}
       >
-        <View className="flex-row items-center mb-3">
-          <View
-            className="rounded-full mr-2"
-            style={{ width: 8, height: 8, backgroundColor: badgeColor }}
-          />
-          <Text className="text-gray-500 text-xs">Position</Text>
-        </View>
-        <Text className="text-gray-900 text-xl font-bold mb-2">{position}</Text>
-        <Text className="text-gray-400 text-sm leading-5 mb-4">{description}</Text>
-        <Text className="text-primary-blue text-base font-semibold mb-3">{company}</Text>
-        <View className="mb-4">
-          <Text className="text-gray-500 text-sm mb-1">• {location}</Text>
-          <Text className="text-gray-500 text-sm mb-1">• {jobType}</Text>
-          <Text className="text-gray-500 text-sm">• {salary}</Text>
-        </View>
-        <View className="flex-row flex-wrap mb-4">
-          {skills.map((skill, index) => (
-            <View key={index} className="bg-primary-cyan/20 rounded-lg px-3 py-2 mr-2 mb-2">
-              <Text className="text-primary-cyan text-xs font-medium">{skill}</Text>
-            </View>
-          ))}
-        </View>
-        <View className="bg-yellow-50 rounded-xl p-3 flex-row items-start mb-4">
-          <View className="mr-2 mt-0.5">
-            <IdeaIcon width={17} height={18} />
+        {/* Glass background */}
+        <BlurView
+          style={crsStyles.blurView}
+          blurType="light"
+          blurAmount={2}
+          reducedTransparencyFallbackColor="rgba(255, 255, 255, 0.75)"
+        />
+        <View style={crsStyles.cardOverlay} />
+
+        {/* Card content */}
+        <View style={crsStyles.cardContent}>
+          <CRSScoreRing score={score} animate={animate} />
+          <View style={crsStyles.textContainer}>
+            <Text style={crsStyles.titleText}>Career Score</Text>
+            <Text style={crsStyles.descriptionText}>{getMessage()}</Text>
           </View>
-          <Text className="text-gray-700 text-xs flex-1 leading-4">{aiInsight}</Text>
-        </View>
-        <View className="flex-row gap-3">
-          <TouchableOpacity
-            className="bg-primary-blue rounded-xl py-3 flex-1 items-center"
-            onPress={handleApply}
-            activeOpacity={0.8}
-          >
-            <Text className="text-white text-sm font-semibold">Apply Now</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            className="bg-primary-cyan rounded-xl py-3 flex-1 items-center"
-            onPress={handleSave}
-            activeOpacity={0.8}
-          >
-            <Text className="text-white text-sm font-semibold">Save</Text>
-          </TouchableOpacity>
         </View>
       </TouchableOpacity>
     </Animated.View>
   );
 };
 
-// Activity Item Component with haptics and animations
-interface ActivityItemProps {
+const crsStyles = StyleSheet.create({
+  cardContainer: {
+    marginBottom: 16,
+  },
+  cardTouchable: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  blurView: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  cardOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255, 255, 255, 0.75)',
+  },
+  cardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 18,
+    paddingHorizontal: 25,
+    gap: 15,
+  },
+  innerCircle: {
+    width: 67,
+    height: 67,
+    borderRadius: 34,
+    backgroundColor: 'rgba(241, 245, 249, 0.75)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 4,
+    overflow: 'hidden',
+  },
+  scoreText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#64748B',
+    textAlign: 'center',
+  },
+  textContainer: {
+    flex: 1,
+    gap: 5,
+  },
+  titleText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  descriptionText: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: '#64748B',
+    lineHeight: 20,
+  },
+});
+
+// Import SVG assets
+import UploadCVIcon from '../../../../assets/images/homepage/uploadCV.svg';
+import FindJobsIcon from '../../../../assets/images/homepage/findJobs.svg';
+import SkillGraphIcon from '../../../../assets/images/homepage/skillGraph.svg';
+import WeeklyTasksIcon from '../../../../assets/images/homepage/weeklyTasks.svg';
+import RayIcon from '../../../../assets/images/aiInterview/ray.svg';
+import ClaraIcon from '../../../../assets/images/clara.svg';
+
+// RAY Career Coach Card Component with glass effect
+const RayCareerCoachCard = memo(({ onPress }: { onPress: () => void }) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: true,
+      }),
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.97,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
+  };
+
+  const handlePress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    onPress();
+  };
+
+  return (
+    <Animated.View
+      style={[
+        rayCardStyles.container,
+        {
+          opacity: fadeAnim,
+          transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
+        },
+      ]}
+    >
+      <TouchableOpacity
+        onPress={handlePress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        activeOpacity={1}
+        style={rayCardStyles.touchable}
+      >
+        <ExpoLinearGradient
+          colors={[
+            '#06B6D4',
+            '#818CF8',
+            '#8B5CF6',
+          ]}
+          locations={[0, 0.5, 1]}
+          start={{ x: 0, y: 0.3 }}
+          end={{ x: 1, y: 0.7 }}
+          style={rayCardStyles.gradient}
+        >
+          <View style={rayCardStyles.content}>
+            <View style={rayCardStyles.textContainer}>
+              <Text style={rayCardStyles.title}>Meet with the RAY Career Coach.</Text>
+              <Text style={rayCardStyles.description}>
+                Explore additional opportunities to secure a new job and accumulate points.
+              </Text>
+            </View>
+            <View style={rayCardStyles.iconContainer}>
+              <RayIcon width={64} height={64} />
+            </View>
+          </View>
+        </ExpoLinearGradient>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+});
+
+const rayCardStyles = StyleSheet.create({
+  container: {
+    marginBottom: 16,
+  },
+  touchable: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    // Shadow for glow effect
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.45,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  gradient: {
+    padding: 10,
+    borderRadius: 12,
+  },
+  content: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+  },
+  textContainer: {
+    flex: 1,
+    paddingRight: 10,
+  },
+  title: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginBottom: 5,
+  },
+  description: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: '#FFFFFF',
+    lineHeight: 16,
+    opacity: 0.9,
+  },
+  iconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    overflow: 'hidden',
+  },
+});
+
+// CLARA AI Companion Card Component with glass effect
+const ClaraAICompanionCard = memo(({ onPress }: { onPress: () => void }) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 400,
+        delay: 100, // Slight delay after Ray card
+        useNativeDriver: true,
+      }),
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.97,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
+  };
+
+  const handlePress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    onPress();
+  };
+
+  return (
+    <Animated.View
+      style={[
+        claraCardStyles.container,
+        {
+          opacity: fadeAnim,
+          transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
+        },
+      ]}
+    >
+      <TouchableOpacity
+        onPress={handlePress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        activeOpacity={1}
+        style={claraCardStyles.touchable}
+      >
+        {/* Glass background */}
+        <BlurView
+          style={claraCardStyles.blurView}
+          blurType="light"
+          blurAmount={2}
+          reducedTransparencyFallbackColor="rgba(255, 255, 255, 0.75)"
+        />
+        <View style={claraCardStyles.cardOverlay} />
+
+        {/* Card content - Icon on LEFT, text on RIGHT */}
+        <View style={claraCardStyles.content}>
+          <View style={claraCardStyles.iconContainer}>
+            <ClaraIcon width={64} height={64} />
+          </View>
+          <View style={claraCardStyles.textContainer}>
+            <Text style={claraCardStyles.title}>Meet CLARA, Your AI Companion.</Text>
+            <Text style={claraCardStyles.description}>
+              Your AI support system for career progress, confidence, and overall well-being.
+            </Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+});
+
+const claraCardStyles = StyleSheet.create({
+  container: {
+    marginBottom: 16,
+  },
+  touchable: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    // Shadow for glow effect (blue/purple like other glass cards)
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  blurView: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  cardOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255, 255, 255, 0.75)',
+  },
+  content: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 18,
+    paddingHorizontal: 20,
+    gap: 15,
+  },
+  textContainer: {
+    flex: 1,
+    gap: 5,
+  },
+  title: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  description: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: '#64748B',
+    lineHeight: 20,
+  },
+  iconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    overflow: 'hidden',
+  },
+});
+
+// Quick Action Card Styles
+const quickActionStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  card: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    minHeight: 180,
+    // Shadow for the blue/purple glow effect
+    shadowColor: '#818CF8',
+    shadowOffset: { width: -4, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  iconContainer: {
+    marginBottom: 16,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  description: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: '#6B7280',
+    lineHeight: 20,
+  },
+});
+
+// Quick Action Card Component with haptics and animations
+interface QuickActionCardProps {
+  icon: React.ReactNode;
   title: string;
-  subtitle: string;
-  dotColor: string;
-  actionText: string;
-  onActionPress: () => void;
+  description: string;
+  onPress: () => void;
   delay?: number;
 }
 
-const ActivityItem: React.FC<ActivityItemProps> = ({
-  title,
-  subtitle,
-  dotColor,
-  actionText,
-  onActionPress,
-  delay = 0,
-}) => {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(20)).current;
+const QuickActionCard = memo(({ icon, title, description, onPress, delay = 0 }: QuickActionCardProps) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
 
   useEffect(() => {
     const timer = setTimeout(() => {
       Animated.parallel([
         Animated.timing(fadeAnim, {
           toValue: 1,
-          duration: 350,
+          duration: 400,
           useNativeDriver: true,
         }),
         Animated.spring(slideAnim, {
@@ -294,121 +632,161 @@ const ActivityItem: React.FC<ActivityItemProps> = ({
     return () => clearTimeout(timer);
   }, []);
 
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.97,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
+  };
+
   const handlePress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Animated.sequence([
-      Animated.timing(scaleAnim, {
-        toValue: 0.95,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        friction: 3,
-        tension: 40,
-        useNativeDriver: true,
-      }),
-    ]).start();
-    onActionPress();
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    onPress();
   };
 
   return (
     <Animated.View
-      style={{
-        opacity: fadeAnim,
-        transform: [{ translateX: slideAnim }, { scale: scaleAnim }],
-      }}
-      className="flex-row items-center justify-between mb-4"
+      style={[
+        quickActionStyles.container,
+        {
+          opacity: fadeAnim,
+          transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
+        },
+      ]}
     >
-      <View className="flex-row items-start flex-1">
-        <View
-          className="rounded-full mt-1 mr-3"
-          style={{ width: 8, height: 8, backgroundColor: dotColor }}
-        />
-        <View className="flex-1">
-          <Text className="text-gray-900 text-sm font-semibold mb-0.5">{title}</Text>
-          <Text className="text-gray-400 text-xs">{subtitle}</Text>
+      <TouchableOpacity
+        onPress={handlePress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        style={quickActionStyles.card}
+        activeOpacity={1}
+      >
+        <View style={quickActionStyles.iconContainer}>
+          {icon}
         </View>
-      </View>
-      <TouchableOpacity onPress={handlePress} activeOpacity={0.7}>
-        <Text className="text-primary-blue text-sm font-medium">{actionText}</Text>
+        <Text style={quickActionStyles.title}>{title}</Text>
+        <Text style={quickActionStyles.description}>{description}</Text>
       </TouchableOpacity>
     </Animated.View>
   );
-};
+});
 
-// Gamification Badge Component with haptics and animations
-interface GamificationBadgeProps {
-  icon: React.ReactNode;
+// Activity Item Component with haptics and animations
+interface ActivityItemProps {
   title: string;
-  delay?: number;
-  onPress?: () => void;
+  subtitle: string;
+  dotColor: string;
+  actionText: string;
+  onActionPress: () => void;
+  isLast?: boolean;
 }
 
-const GamificationBadge: React.FC<GamificationBadgeProps> = ({ icon, title, delay = 0, onPress }) => {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.5)).current;
-  const bounceAnim = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 400,
-          useNativeDriver: true,
-        }),
-        Animated.spring(scaleAnim, {
-          toValue: 1,
-          friction: 4,
-          tension: 40,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }, delay);
-    return () => clearTimeout(timer);
-  }, []);
-
+const ActivityItem: React.FC<ActivityItemProps> = ({
+  title,
+  subtitle,
+  dotColor,
+  actionText,
+  onActionPress,
+  isLast = false,
+}) => {
   const handlePress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Animated.sequence([
-      Animated.timing(bounceAnim, {
-        toValue: 1.15,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-      Animated.spring(bounceAnim, {
-        toValue: 1,
-        friction: 3,
-        tension: 40,
-        useNativeDriver: true,
-      }),
-    ]).start();
-    onPress?.();
+    onActionPress();
   };
 
   return (
-    <TouchableOpacity onPress={handlePress} activeOpacity={0.8} style={{ flex: 1 }}>
-      <Animated.View
-        style={{
-          opacity: fadeAnim,
-          transform: [{ scale: Animated.multiply(scaleAnim, bounceAnim) }],
-          alignItems: 'center',
-        }}
-      >
-        <View style={{ marginBottom: 8 }}>{icon}</View>
-        <Text style={{ color: '#111827', fontSize: 12, fontWeight: '700', textAlign: 'center' }}>{title}</Text>
-      </Animated.View>
-    </TouchableOpacity>
+    <View style={[activityStyles.item, !isLast && activityStyles.itemBorder]}>
+      <View style={activityStyles.itemContent}>
+        <View style={[activityStyles.dot, { backgroundColor: dotColor }]} />
+        <View style={activityStyles.textContainer}>
+          <Text style={activityStyles.title}>{title}</Text>
+          <Text style={activityStyles.subtitle}>{subtitle}</Text>
+        </View>
+      </View>
+      <TouchableOpacity onPress={handlePress} activeOpacity={0.7}>
+        <Text style={activityStyles.actionText}>{actionText}</Text>
+      </TouchableOpacity>
+    </View>
   );
 };
 
+// Recent Activity Card Styles
+const activityStyles = StyleSheet.create({
+  container: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#818CF8',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  item: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+  },
+  itemBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  itemContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    flex: 1,
+  },
+  dot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginTop: 6,
+    marginRight: 12,
+  },
+  textContainer: {
+    flex: 1,
+  },
+  title: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: '#9CA3AF',
+  },
+  actionText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#437EF4',
+  },
+});
+
 export default function HomeScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const user = useSelector((state: RootState) => state.auth.user);
   const userName = user?.email?.split('@')[0] || 'User';
 
+  // Header height for scroll padding (safe area + header content)
+  const HEADER_HEIGHT = insets.top + 70;
+
   const [showSearchModal, setShowSearchModal] = useState(false);
+  const [showCRSInfoPopup, setShowCRSInfoPopup] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState('');
 
@@ -420,12 +798,43 @@ export default function HomeScreen() {
 
   // API hooks
   const [parseAndCreateResume] = useParseAndCreateResumeMutation();
-  const [exportPdf] = useExportResumePdfMutation();
   const { showAlert } = useAlert();
 
   // Subscription status
   const { data: subscriptionData, refetch: refetchSubscription } = useCheckSubscriptionStatusQuery();
   const canUseAiFeatures = subscriptionData?.subscriptionStatus?.canUseAiFeatures || false;
+
+  // Profile data for avatar
+  const { data: profileData } = useGetMyProfileQuery();
+
+  // Memoize profile picture URL to prevent unnecessary re-renders
+  const profilePictureUrl = useMemo(
+    () => profileData?.myProfile?.profilePicture || null,
+    [profileData?.myProfile?.profilePicture]
+  );
+
+  // CRS (Career Readiness Score) data from API
+  const { data: crsData, isLoading: isCrsLoading, refetch: refetchCRS } = useGetMyCRSQuery();
+  const crsScore = crsData?.myCrs?.totalScore || 0;
+
+  // Recent Activity data from API
+  const { data: activityData, refetch: refetchActivity } = useGetRecentActivityQuery({ limit: 3 });
+  const recentActivities = activityData?.recentActivity?.activities || [];
+  const hasMoreActivities = activityData?.recentActivity?.hasMore ?? false;
+
+  // Job Matches data from API
+  const { data: jobMatchesData, refetch: refetchJobMatches } = useGetMyJobMatchesQuery({ pageSize: 3 });
+  const jobMatches = jobMatchesData?.myJobMatches?.matches || [];
+
+  // Refresh data when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      // Refetch all dashboard data when screen is focused
+      refetchActivity();
+      refetchCRS();
+      refetchJobMatches();
+    }, [refetchActivity, refetchCRS, refetchJobMatches])
+  );
 
   useEffect(() => {
     refetchSubscription();
@@ -566,75 +975,88 @@ export default function HomeScreen() {
     }
   };
 
+  // Memoize callbacks to prevent CandidateLayout re-renders
+  const handleSearchPress = useCallback(() => {
+    setShowSearchModal(true);
+  }, []);
+
+  const handleNotificationPress = useCallback(() => {
+    router.push('/(candidate)/notifications' as any);
+  }, [router]);
+
+  const handleProfilePress = useCallback(() => {
+    router.push('/(candidate)/(tabs)/profile' as any);
+  }, [router]);
+
   return (
     <>
       <CandidateLayout
-        onSearchPress={() => setShowSearchModal(true)}
+        onSearchPress={handleSearchPress}
         hideHeader={false}
+        showGlassPill={true}
+        profilePictureUrl={profilePictureUrl}
+        onNotificationPress={handleNotificationPress}
+        onProfilePress={handleProfilePress}
       >
         <Animated.ScrollView
           className="flex-1"
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 100 }}
+          contentContainerStyle={{ paddingTop: HEADER_HEIGHT, paddingBottom: 100 }}
           style={{ opacity: pageOpacity }}
         >
           <View className="px-6 mt-6">
-            {/* AI Companion Section */}
+            {/* Career Readiness Score Section */}
             <View className="mb-6">
-              <Text className="text-gray-900 text-lg font-bold mb-4">Your AI Companion</Text>
-              <TouchableOpacity onPress={handleAiCompanionPress} activeOpacity={1}>
-                <Animated.View
-                  className="bg-white rounded-2xl p-4 shadow-sm flex-row items-center"
-                  style={{
-                    opacity: aiCompanionFade,
-                    transform: [{ translateY: aiCompanionSlide }, { scale: aiCompanionScale }],
-                  }}
-                >
-                  <View className="bg-primary-cyan rounded-xl items-center justify-center mr-4" style={{ width: 48, height: 48 }}>
-                    <Text className="text-white text-xl font-bold">AI</Text>
-                  </View>
-                  <View className="flex-1">
-                    <Text className="text-gray-900 text-base font-bold mb-1">AI Companion</Text>
-                    <Text className="text-gray-400 text-xs leading-4">
-                      Your AI support system for career progress, confidence, and overall well-being.
-                    </Text>
-                  </View>
-                </Animated.View>
-              </TouchableOpacity>
+              <Text className="text-gray-900 text-lg font-bold mb-4">Career Readiness Score</Text>
+              <CRSCard
+                score={crsScore}
+                onPress={() => setShowCRSInfoPopup(true)}
+                animate={!isCrsLoading}
+              />
             </View>
+
+            {/* RAY Career Coach Card */}
+            <RayCareerCoachCard
+              onPress={() => router.push('/(candidate)/(tabs)/ai-coach' as any)}
+            />
+
+            {/* CLARA AI Companion Card */}
+            <ClaraAICompanionCard
+              onPress={handleAiCompanionPress}
+            />
 
             {/* Quick Actions Section */}
             <View className="mb-6">
               <Text className="text-gray-900 text-lg font-bold mb-4">Quick Actions</Text>
               <View className="flex-row mb-3" style={{ gap: 12 }}>
                 <QuickActionCard
-                  icon={<UploadCVIcon width={40} height={40} />}
-                  title="Upload CV"
-                  description="Drag & drop a file or browse an active resume from device for AI's swift analysis and feedback!"
-                  onPress={handleQuickUploadCV}
+                  icon={<UploadCVIcon width={56} height={56} />}
+                  title="Edit Your CV"
+                  description="Manage your resumes, create new ones, and get AI-powered improvements."
+                  onPress={() => router.push('/(candidate)/(tabs)/jobs/cv-upload' as any)}
                   delay={100}
                 />
                 <QuickActionCard
-                  icon={<FindJobsIcon width={40} height={40} />}
+                  icon={<FindJobsIcon width={56} height={56} />}
                   title="Find Jobs"
-                  description="Discover your dream job effortlessly in the sea of opportunities! Dive in and explore"
+                  description="Your UX Research experience fits perfectly with this company's focus on Human-Centered Design."
                   onPress={() => router.push('/(candidate)/(tabs)/jobs' as any)}
                   delay={200}
                 />
               </View>
               <View className="flex-row" style={{ gap: 12 }}>
                 <QuickActionCard
-                  icon={<PracticeInterviewIcon width={40} height={40} />}
-                  title="Practice Interview"
-                  description="Prepare with confidence for real moments, by simulating AI-driven mock sessions"
-                  onPress={() => router.push('/(candidate)/(tabs)/ai-coach' as any)}
+                  icon={<SkillGraphIcon width={56} height={56} />}
+                  title="Career Dashboard"
+                  description="Track your career progress, view skill stats, and get personalized recommendations"
+                  onPress={() => router.push('/(candidate)/career-dashboard' as any)}
                   delay={300}
                 />
                 <QuickActionCard
-                  icon={<SkillGraphIcon width={32} height={32} />}
-                  title="Skill Gap"
-                  description="Identify all the skills they need to improve to reach their desired career path"
-                  onPress={() => console.log('Skill Gap')}
+                  icon={<WeeklyTasksIcon width={56} height={56} />}
+                  title="Weekly Missions"
+                  description="Complete missions to earn CRS points and level up your career readiness."
+                  onPress={() => router.push('/(candidate)/missions' as any)}
                   delay={400}
                 />
               </View>
@@ -647,81 +1069,163 @@ export default function HomeScreen() {
 
             {/* Top Job Matches */}
             <View className="mb-6">
-              <Text className="text-gray-900 text-lg font-bold mb-4">Top Job Matches for You</Text>
-              <JobCard
-                position="Product Designer"
-                description="Design intuitive user experiences for our flagship products. Work with cross-functional teams to create beautiful, accessible interfaces."
-                company="Chawla Solution"
-                location="Remote - Pakistan"
-                jobType="Full Time"
-                salary="$45K - $60K / year"
-                skills={['Figma', 'UX Research', 'Prototyping']}
-                aiInsight="AI Insight: Your design portfolio shows strong UX depth 87% fit for this role."
-                badgeColor="#437EF4"
-                onViewAll={() => router.push('/(candidate)/(tabs)/jobs' as any)}
-              />
-            </View>
-
-            {/* View All Jobs Link */}
-            <TouchableOpacity
-              className="items-end mb-6"
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                router.push('/(candidate)/(tabs)/jobs' as any);
-              }}
-              activeOpacity={0.7}
-            >
-              <View className="flex-row items-center">
-                <Text className="text-primary-blue text-sm font-medium mr-1">View All Jobs</Text>
-                <Svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                  <Path d="M6 12L10 8L6 4" stroke="#437EF4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </Svg>
+              <View className="flex-row items-center justify-between mb-4">
+                <Text className="text-gray-900 text-lg font-bold">Top Jobs Matches for you</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    router.push('/(candidate)/(tabs)/jobs' as any);
+                  }}
+                  activeOpacity={0.7}
+                  className="flex-row items-center"
+                >
+                  <Text className="text-primary-blue text-sm font-medium mr-1">View All</Text>
+                  <Svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    <Path d="M6 12L10 8L6 4" stroke="#437EF4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </Svg>
+                </TouchableOpacity>
               </View>
-            </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Horizontal Job Cards - Outside padding container */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: 24, paddingVertical: 16, gap: 16 }}
+            style={{ marginBottom: 8, overflow: 'visible' }}
+          >
+            {jobMatches.length > 0 ? (
+              jobMatches.slice(0, 3).map((match) => (
+                <JobMatchCard
+                  key={match.id}
+                  data={{
+                    id: match.id,
+                    matchPercentage: parseFloat(String(match.matchPercentage)) || 0,
+                    matchedSkills: match.matchedSkills || [],
+                    missingSkills: match.missingSkills || [],
+                    recommendation: match.recommendation,
+                    isSaved: match.isSaved,
+                    isApplied: match.isApplied,
+                    jobPosting: {
+                      id: match.jobPosting.id,
+                      title: match.jobPosting.title,
+                      companyName: match.jobPosting.companyName,
+                      description: match.jobPosting.description || '',
+                      location: match.jobPosting.location || '',
+                      workMode: match.jobPosting.workMode || 'onsite',
+                      jobType: match.jobPosting.jobType || 'full_time',
+                      requiredSkills: match.jobPosting.requiredSkills || [],
+                      salaryMin: match.jobPosting.salaryMin,
+                      salaryMax: match.jobPosting.salaryMax,
+                      salaryCurrency: match.jobPosting.salaryCurrency,
+                    },
+                  }}
+                  width={SCREEN_WIDTH - 64}
+                  onViewDetails={() => router.push(`/(candidate)/jobs/${match.jobPosting.id}` as any)}
+                  onApply={() => router.push(`/(candidate)/jobs/${match.jobPosting.id}/apply` as any)}
+                />
+              ))
+            ) : (
+              <View style={{ width: SCREEN_WIDTH - 64, backgroundColor: '#FFFFFF', borderRadius: 16, padding: 40, alignItems: 'center', shadowColor: '#818CF8', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 12, elevation: 4 }}>
+                <Text style={{ color: '#6B7280', fontSize: 15, textAlign: 'center' }}>No job matches yet. Complete your profile to get personalized matches!</Text>
+                <TouchableOpacity
+                  style={{ marginTop: 16, backgroundColor: '#437EF4', paddingVertical: 12, paddingHorizontal: 24, borderRadius: 20 }}
+                  onPress={() => router.push('/(candidate)/(tabs)/profile' as any)}
+                >
+                  <Text style={{ color: '#FFFFFF', fontWeight: '600' }}>Complete Profile</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </ScrollView>
+
+          <View className="px-6">
 
             {/* Recent Activity */}
             <View className="mb-6">
-              <Text className="text-gray-900 text-lg font-bold mb-4">Recent Activity</Text>
-              <ActivityItem
-                title="Uploaded CV"
-                subtitle="Today - Created and scored"
-                dotColor="#437EF4"
-                actionText="View"
-                onActionPress={() => router.push('/(candidate)/(tabs)/jobs/cv-upload' as any)}
-                delay={500}
-              />
-              <ActivityItem
-                title="Practice session"
-                subtitle="Yesterday - 1 mock interview"
-                dotColor="#FF8D28"
-                actionText="View"
-                onActionPress={() => router.push('/(candidate)/(tabs)/ai-coach' as any)}
-                delay={600}
-              />
-            </View>
+              <View className="flex-row items-center justify-between mb-4">
+                <Text className="text-gray-900 text-lg font-bold">Recent Activity</Text>
+                {hasMoreActivities && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      router.push('/(candidate)/activity' as any);
+                    }}
+                    activeOpacity={0.7}
+                    className="flex-row items-center"
+                  >
+                    <Text className="text-primary-blue text-sm font-medium mr-1">View All</Text>
+                    <Svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                      <Path d="M6 12L10 8L6 4" stroke="#437EF4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </Svg>
+                  </TouchableOpacity>
+                )}
+              </View>
+              <View style={activityStyles.container}>
+                {recentActivities.length > 0 ? (
+                  recentActivities.map((activity, index) => {
+                    // Determine dot color based on activity type
+                    const getDotColor = (type: string) => {
+                      switch (type) {
+                        case 'CV_UPLOAD':
+                          return '#437EF4'; // Blue
+                        case 'PRACTICE_SESSION':
+                        case 'JOB_MATCH':
+                          return '#F59E0B'; // Orange/Amber
+                        case 'MISSION_COMPLETED':
+                          return '#10B981'; // Green
+                        case 'APPLICATION_SUBMITTED':
+                          return '#8B5CF6'; // Purple
+                        default:
+                          return '#437EF4';
+                      }
+                    };
 
-            {/* Gamification */}
-            <View className="mb-6">
-              <Text className="text-gray-900 text-lg font-bold mb-4">Gamification</Text>
-              <View className="flex-row gap-4">
-                <GamificationBadge icon={<TrophyIcon width={27} height={27} />} title="CV Master" delay={700} />
-                <GamificationBadge icon={<CircleCheckIcon width={27} height={27} />} title="Interview Pro" delay={800} />
-                <GamificationBadge icon={<SkillGraphIcon width={27} height={27} />} title="Skill Builder" delay={900} />
+                    // Handle navigation based on activity type
+                    const handleActivityPress = () => {
+                      switch (activity.activityType) {
+                        case 'CV_UPLOAD':
+                          router.push('/(candidate)/(tabs)/jobs/cv-upload' as any);
+                          break;
+                        case 'PRACTICE_SESSION':
+                          router.push('/(candidate)/(tabs)/ai-coach' as any);
+                          break;
+                        case 'JOB_MATCH':
+                          router.push('/(candidate)/(tabs)/jobs' as any);
+                          break;
+                        case 'APPLICATION_SUBMITTED':
+                          router.push('/(candidate)/(tabs)/jobs' as any);
+                          break;
+                        case 'MISSION_COMPLETED':
+                          router.push('/(candidate)/missions' as any);
+                          break;
+                        default:
+                          if (activity.actionUrl) {
+                            router.push(activity.actionUrl as any);
+                          }
+                      }
+                    };
+
+                    return (
+                      <ActivityItem
+                        key={activity.id}
+                        title={activity.title}
+                        subtitle={activity.description}
+                        dotColor={getDotColor(activity.activityType)}
+                        actionText={activity.actionLabel}
+                        onActionPress={handleActivityPress}
+                        isLast={index === recentActivities.length - 1}
+                      />
+                    );
+                  })
+                ) : (
+                  <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+                    <Text style={{ color: '#9CA3AF', fontSize: 14 }}>No recent activity</Text>
+                  </View>
+                )}
               </View>
             </View>
 
-            {/* Ask Clara Button */}
-            <TouchableOpacity
-              className="bg-primary-blue rounded-xl py-4 flex-row items-center justify-center mb-6"
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                router.push('/(candidate)/(tabs)/ai-coach/clara-assistant' as any);
-              }}
-              activeOpacity={0.8}
-            >
-              <MessageIcon width={24} height={24} />
-              <Text className="text-white text-base font-semibold ml-2">Ask to Clara</Text>
-            </TouchableOpacity>
           </View>
         </Animated.ScrollView>
       </CandidateLayout>
@@ -733,6 +1237,12 @@ export default function HomeScreen() {
           setShowSearchModal(false);
           router.push(route as any);
         }}
+      />
+
+      {/* CRS Info Popup */}
+      <CRSInfoPopup
+        visible={showCRSInfoPopup}
+        onClose={() => setShowCRSInfoPopup(false)}
       />
 
       {/* Upload Loading Modal */}

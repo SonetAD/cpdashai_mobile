@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,8 @@ import {
   ScrollView,
   RefreshControl,
   ActivityIndicator,
+  StyleSheet,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -17,6 +19,21 @@ import {
 } from '../../../services/api';
 import TalentPartnerLayout from '../../../components/layouts/TalentPartnerLayout';
 import { useAlert } from '../../../contexts/AlertContext';
+import { GlassButton } from '../../../components/ui/GlassButton';
+import { GlassSectionCard } from '../../../components/ui/GlassSectionCard';
+
+// Glass styling constants
+const GLASS_COLORS = {
+  cardBg: 'rgba(255, 255, 255, 0.85)',
+  cardBorder: 'rgba(255, 255, 255, 0.6)',
+  filterActive: 'rgba(67, 126, 244, 0.95)',
+  filterInactive: 'rgba(255, 255, 255, 0.8)',
+  statusActive: 'rgba(16, 185, 129, 0.9)',
+  statusDraft: 'rgba(156, 163, 175, 0.9)',
+  statusPaused: 'rgba(255, 204, 0, 0.9)',
+  statusClosed: 'rgba(239, 68, 68, 0.9)',
+  statusFilled: 'rgba(67, 126, 244, 0.9)',
+};
 
 interface JobPostingCardProps {
   jobPosting: any;
@@ -35,13 +52,13 @@ const JobPostingCard: React.FC<JobPostingCardProps> = ({
 }) => {
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
-      draft: '#9CA3AF',
-      active: '#10B981',
-      paused: '#FFCC00',
-      closed: '#EF4444',
-      filled: '#437EF4',
+      draft: GLASS_COLORS.statusDraft,
+      active: GLASS_COLORS.statusActive,
+      paused: GLASS_COLORS.statusPaused,
+      closed: GLASS_COLORS.statusClosed,
+      filled: GLASS_COLORS.statusFilled,
     };
-    return colors[status] || '#9CA3AF';
+    return colors[status] || GLASS_COLORS.statusDraft;
   };
 
   const getStatusText = (status: string) => {
@@ -71,62 +88,82 @@ const JobPostingCard: React.FC<JobPostingCardProps> = ({
   return (
     <TouchableOpacity
       onPress={handlePress}
-      className="bg-white rounded-2xl p-5 mb-4 shadow-sm"
+      style={glassStyles.jobCard}
       activeOpacity={0.7}
     >
       {/* Status Badge */}
-      <View className="flex-row items-center justify-between mb-3">
+      <View style={glassStyles.cardHeader}>
         <View
-          className="rounded-full px-3 py-1"
-          style={{ backgroundColor: getStatusColor(jobPosting.status) }}
+          style={[
+            glassStyles.statusBadge,
+            { backgroundColor: getStatusColor(jobPosting.status) }
+          ]}
         >
-          <Text className="text-white text-xs font-bold">
+          <Text style={glassStyles.statusText}>
             {getStatusText(jobPosting.status)}
           </Text>
         </View>
-        <Text className="text-gray-400 text-xs">
+        <Text style={glassStyles.dateText}>
           Posted: {new Date(jobPosting.createdAt).toLocaleDateString()}
         </Text>
       </View>
 
       {/* Job Title */}
-      <Text className="text-gray-900 text-xl font-bold mb-2">{jobPosting.title}</Text>
+      <Text style={glassStyles.jobTitle}>{jobPosting.title}</Text>
 
       {/* Company Name */}
-      <Text className="text-primary-blue text-base font-semibold mb-3">
+      <Text style={glassStyles.companyName}>
         {jobPosting.companyName}
       </Text>
 
       {/* Stats */}
-      <View className="flex-row items-center mb-4">
-        <View className="flex-row items-center">
+      <View style={glassStyles.statsContainer}>
+        <View style={glassStyles.statItem}>
           <Svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ marginRight: 4 }}>
             <Path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" fill="#6B7280" />
           </Svg>
-          <Text className="text-gray-600 text-sm">{jobPosting.applicationsCount} applications</Text>
+          <Text style={glassStyles.statText}>{jobPosting.applicationsCount} applications</Text>
         </View>
       </View>
 
-      {/* Actions */}
-      <View className="flex-row gap-2">
-        <TouchableOpacity
-          onPress={handleViewApplications}
-          className="bg-primary-blue rounded-xl py-2 px-3 flex-1 items-center"
-        >
-          <Text className="text-white text-xs font-semibold">Applications</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={handleEdit}
-          className="bg-primary-cyan rounded-xl py-2 px-3 flex-1 items-center"
-        >
-          <Text className="text-white text-xs font-semibold">Edit</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={handleDelete}
-          className="bg-red-500 rounded-xl py-2 px-3 items-center"
-        >
-          <Text className="text-white text-xs font-semibold">Delete</Text>
-        </TouchableOpacity>
+      {/* Actions - Glass Buttons */}
+      <View style={glassStyles.actionsContainer}>
+        <View style={glassStyles.actionButtonWrapper}>
+          <GlassButton
+            text="Applications"
+            colors={['#437EF4', '#6366F1']}
+            onPress={handleViewApplications}
+            height={40}
+            borderRadius={12}
+            fullWidth
+            textStyle={glassStyles.actionButtonText}
+            style={glassStyles.actionButton}
+          />
+        </View>
+        <View style={glassStyles.actionButtonWrapperSmall}>
+          <GlassButton
+            text="Edit"
+            colors={['#10B981', '#34D399']}
+            onPress={handleEdit}
+            height={40}
+            borderRadius={12}
+            fullWidth
+            textStyle={glassStyles.actionButtonText}
+            style={glassStyles.actionButton}
+          />
+        </View>
+        <View style={glassStyles.actionButtonWrapperSmall}>
+          <GlassButton
+            text="Delete"
+            colors={['#EF4444', '#F87171']}
+            onPress={handleDelete}
+            height={40}
+            borderRadius={12}
+            fullWidth
+            textStyle={glassStyles.actionButtonText}
+            style={glassStyles.actionButton}
+          />
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -248,14 +285,12 @@ export default function RecruiterJobsScreen({
     <TalentPartnerLayout
       title="Job Postings"
       subtitle={`${data?.myJobPostings?.length || 0} active posting(s)`}
-      activeTab={activeTab}
-      onTabChange={onTabChange}
     >
       {/* Create Job Button */}
-      <View className="px-6 pt-4">
-        <View className="flex-row justify-between items-center mb-4">
+      <View style={glassStyles.headerContainer}>
+        <View style={glassStyles.headerRow}>
           {onBack && (
-            <TouchableOpacity onPress={handleBack} className="flex-row items-center">
+            <TouchableOpacity onPress={handleBack} style={glassStyles.backButton}>
               <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" style={{ marginRight: 6 }}>
                 <Path
                   d="M15 18L9 12L15 6"
@@ -265,46 +300,58 @@ export default function RecruiterJobsScreen({
                   strokeLinejoin="round"
                 />
               </Svg>
-              <Text className="text-primary-blue font-semibold">Back</Text>
+              <Text style={glassStyles.backButtonText}>Back</Text>
             </TouchableOpacity>
           )}
-          <View className="flex-1" />
-          <TouchableOpacity
+          <View style={{ flex: 1 }} />
+          <GlassButton
             onPress={handleCreateJob}
-            className="bg-primary-blue rounded-xl py-3 px-5 flex-row items-center shadow-md"
+            colors={['#437EF4', '#5B8AF5']}
+            height={44}
+            borderRadius={12}
+            fullWidth={false}
+            style={{ paddingHorizontal: 20, minWidth: 130 }}
           >
-            <Svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ marginRight: 6 }}>
-              <Path d="M12 5v14M5 12h14" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </Svg>
-            <Text className="text-white font-bold">New Job</Text>
-          </TouchableOpacity>
+            <View style={glassStyles.createButtonContent}>
+              <Svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ marginRight: 6 }}>
+                <Path d="M12 5v14M5 12h14" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </Svg>
+              <Text style={glassStyles.createButtonText}>New Job</Text>
+            </View>
+          </GlassButton>
         </View>
       </View>
 
       <ScrollView
-        className="flex-1"
+        style={{ flex: 1 }}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
       >
-        <View className="px-6 pt-6">
-          {/* Filter Tabs */}
+        <View style={glassStyles.contentContainer}>
+          {/* Filter Tabs - Glass Pills */}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            className="mb-6"
+            style={glassStyles.filterScrollView}
             contentContainerStyle={{ paddingRight: 24 }}
           >
             {statusOptions.map((option) => (
               <TouchableOpacity
                 key={option.label}
                 onPress={() => handleFilterChange(option.value)}
-                className={`px-4 py-2 rounded-full mr-2 ${
-                  statusFilter === option.value ? 'bg-primary-blue' : 'bg-white'
-                }`}
+                style={[
+                  glassStyles.filterPill,
+                  statusFilter === option.value
+                    ? glassStyles.filterPillActive
+                    : glassStyles.filterPillInactive
+                ]}
               >
                 <Text
-                  className={`text-sm font-medium ${
-                    statusFilter === option.value ? 'text-white' : 'text-gray-600'
-                  }`}
+                  style={[
+                    glassStyles.filterPillText,
+                    statusFilter === option.value
+                      ? glassStyles.filterPillTextActive
+                      : glassStyles.filterPillTextInactive
+                  ]}
                 >
                   {option.label}
                 </Text>
@@ -314,37 +361,39 @@ export default function RecruiterJobsScreen({
 
           {/* Loading State */}
           {isLoading && !data && (
-            <View className="items-center justify-center py-8">
+            <GlassSectionCard style={glassStyles.loadingCard}>
               <ActivityIndicator size="large" color="#437EF4" />
-              <Text className="text-gray-500 mt-4">Loading job postings...</Text>
-            </View>
+              <Text style={glassStyles.loadingText}>Loading job postings...</Text>
+            </GlassSectionCard>
           )}
 
           {/* Error State */}
           {error && (
-            <View className="bg-red-50 rounded-xl p-4 mb-4">
-              <Text className="text-red-600 text-sm">
+            <GlassSectionCard style={glassStyles.errorCard}>
+              <Text style={glassStyles.errorText}>
                 Error loading job postings. Please try again.
               </Text>
-            </View>
+            </GlassSectionCard>
           )}
 
           {/* No Jobs State */}
           {!isLoading && data?.myJobPostings?.length === 0 && (
-            <View className="bg-gray-50 rounded-xl p-6 items-center">
-              <Text className="text-gray-600 text-base font-semibold mb-2">
+            <GlassSectionCard style={glassStyles.emptyCard}>
+              <Text style={glassStyles.emptyTitle}>
                 No Job Postings Yet
               </Text>
-              <Text className="text-gray-500 text-sm text-center mb-4">
+              <Text style={glassStyles.emptySubtitle}>
                 Create your first job posting to start receiving applications
               </Text>
-              <TouchableOpacity
+              <GlassButton
+                text="Create Job Posting"
+                colors={['#437EF4', '#5B8AF5']}
                 onPress={handleCreateJob}
-                className="bg-primary-blue rounded-xl py-3 px-6"
-              >
-                <Text className="text-white font-semibold">Create Job Posting</Text>
-              </TouchableOpacity>
-            </View>
+                height={44}
+                borderRadius={12}
+                fullWidth
+              />
+            </GlassSectionCard>
           )}
 
           {/* Job Postings List */}
@@ -366,3 +415,211 @@ export default function RecruiterJobsScreen({
     </TalentPartnerLayout>
   );
 }
+
+// Glass design styles
+const glassStyles = StyleSheet.create({
+  // Header styles
+  headerContainer: {
+    paddingHorizontal: 24,
+    paddingTop: 16,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  backButtonText: {
+    color: '#437EF4',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  createButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  createButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+
+  // Content container
+  contentContainer: {
+    paddingHorizontal: 24,
+    paddingTop: 24,
+  },
+
+  // Filter pills
+  filterScrollView: {
+    marginBottom: 24,
+  },
+  filterPill: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginRight: 8,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  filterPillActive: {
+    backgroundColor: GLASS_COLORS.filterActive,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  filterPillInactive: {
+    backgroundColor: GLASS_COLORS.filterInactive,
+    borderColor: 'rgba(200, 200, 200, 0.3)',
+  },
+  filterPillText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  filterPillTextActive: {
+    color: '#FFFFFF',
+  },
+  filterPillTextInactive: {
+    color: '#4B5563',
+  },
+
+  // Job Card styles
+  jobCard: {
+    backgroundColor: GLASS_COLORS.cardBg,
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: GLASS_COLORS.cardBorder,
+    shadowColor: '#818CF8',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    elevation: 4,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  statusBadge: {
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  statusText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  dateText: {
+    color: '#9CA3AF',
+    fontSize: 12,
+  },
+  jobTitle: {
+    color: '#111827',
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  companyName: {
+    color: '#437EF4',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  statItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statText: {
+    color: '#6B7280',
+    fontSize: 14,
+  },
+  actionsContainer: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+  },
+  actionButtonWrapper: {
+    flex: 1.4,
+    shadowColor: '#437EF4',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+    borderRadius: 12,
+  },
+  actionButtonWrapperSmall: {
+    flex: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
+    borderRadius: 12,
+  },
+  actionButton: {
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  actionButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+
+  // Loading state
+  loadingCard: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 32,
+  },
+  loadingText: {
+    color: '#6B7280',
+    marginTop: 16,
+    fontSize: 14,
+  },
+
+  // Error state
+  errorCard: {
+    backgroundColor: 'rgba(254, 242, 242, 0.9)',
+    borderColor: 'rgba(239, 68, 68, 0.2)',
+  },
+  errorText: {
+    color: '#DC2626',
+    fontSize: 14,
+  },
+
+  // Empty state
+  emptyCard: {
+    alignItems: 'center',
+    paddingVertical: 24,
+  },
+  emptyTitle: {
+    color: '#4B5563',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    color: '#6B7280',
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+});

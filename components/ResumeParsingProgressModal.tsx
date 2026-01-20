@@ -1,7 +1,9 @@
 import React from 'react';
-import { View, Text, Modal, ActivityIndicator, Animated } from 'react-native';
+import { View, Text, Modal, ActivityIndicator, Animated, StyleSheet, Dimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Path } from 'react-native-svg';
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 interface ResumeParsingProgressModalProps {
   visible: boolean;
@@ -23,59 +25,6 @@ const CheckIcon = () => (
     />
   </Svg>
 );
-
-const DocumentIcon = ({ color = "#437EF4" }: { color?: string }) => (
-  <Svg width={40} height={40} viewBox="0 0 24 24" fill="none">
-    <Path
-      d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z"
-      stroke={color}
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <Path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-  </Svg>
-);
-
-const AIIcon = ({ color = "#437EF4" }: { color?: string }) => (
-  <Svg width={40} height={40} viewBox="0 0 24 24" fill="none">
-    <Circle cx="12" cy="12" r="10" stroke={color} strokeWidth={2} />
-    <Path d="M12 8v8M8 12h8" stroke={color} strokeWidth={2} strokeLinecap="round" />
-    <Circle cx="12" cy="12" r="3" fill={color} opacity={0.3} />
-  </Svg>
-);
-
-const getStageIcon = (stage: string) => {
-  switch (stage) {
-    case 'file_validation':
-    case 'text_extraction':
-      return <DocumentIcon />;
-    case 'ai_parsing':
-    case 'profile_update':
-      return <AIIcon />;
-    case 'completion':
-      return <CheckIcon />;
-    default:
-      return <DocumentIcon />;
-  }
-};
-
-const getStageColor = (stage: string): string => {
-  switch (stage) {
-    case 'file_validation':
-      return '#3B82F6';
-    case 'text_extraction':
-      return '#8B5CF6';
-    case 'ai_parsing':
-      return '#EC4899';
-    case 'profile_update':
-      return '#F59E0B';
-    case 'completion':
-      return '#10B981';
-    default:
-      return '#437EF4';
-  }
-};
 
 export default function ResumeParsingProgressModal({
   visible,
@@ -100,31 +49,29 @@ export default function ResumeParsingProgressModal({
     outputRange: ['0%', '100%'],
   });
 
-  const stageColor = getStageColor(stage);
-
   return (
     <Modal visible={visible} transparent animationType="fade">
-      <View className="flex-1 bg-black/50 items-center justify-center px-6">
-        <View className="bg-white rounded-3xl w-full max-w-md overflow-hidden">
+      <View style={styles.overlay}>
+        <View style={styles.modalContainer}>
           {/* Header with gradient */}
           <LinearGradient
-            colors={['#437EF4', '#8B5CF6']}
+            colors={['#10B981', '#34D399']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
-            className="p-6"
+            style={styles.header}
           >
-            <Text className="text-white text-xl font-bold text-center">
-              Parsing Your Resume
+            <Text style={styles.headerTitle}>
+              Uploading Your Resume
             </Text>
-            <Text className="text-white/90 text-sm text-center mt-1">
-              Please wait while we analyze your document
+            <Text style={styles.headerSubtitle}>
+              Please wait while we process your document
             </Text>
-            
+
             {/* Status Badge */}
-            <View className="flex-row justify-center mt-3">
-              <View className="bg-white/20 px-4 py-1.5 rounded-full flex-row items-center">
-                <View className="w-2 h-2 bg-white rounded-full mr-2" />
-                <Text className="text-white text-xs font-semibold uppercase">
+            <View style={styles.badgeContainer}>
+              <View style={styles.badge}>
+                <View style={styles.badgeDot} />
+                <Text style={styles.badgeText}>
                   {status === 'pending' ? 'Pending' : status === 'in_progress' ? 'Processing' : status === 'completed' ? 'Completed' : status === 'failed' ? 'Failed' : 'Processing'}
                 </Text>
               </View>
@@ -132,13 +79,10 @@ export default function ResumeParsingProgressModal({
           </LinearGradient>
 
           {/* Content */}
-          <View className="p-6">
+          <View style={styles.content}>
             {/* Stage Icon */}
-            <View className="items-center mb-6">
-              <View
-                className="rounded-full p-6 mb-4"
-                style={{ backgroundColor: `${stageColor}15` }}
-              >
+            <View style={styles.iconSection}>
+              <View style={styles.iconContainer}>
                 {stage === 'completion' ? (
                   <Svg width={48} height={48} viewBox="0 0 24 24" fill="none">
                     <Circle cx="12" cy="12" r="10" fill="#10B981" opacity={0.2} />
@@ -151,70 +95,71 @@ export default function ResumeParsingProgressModal({
                     />
                   </Svg>
                 ) : (
-                  <ActivityIndicator size="large" color={stageColor} />
+                  <ActivityIndicator size="large" color="#10B981" />
                 )}
               </View>
 
-              <Text className="text-gray-900 text-lg font-bold text-center mb-2">
+              <Text style={styles.stageLabel}>
                 {stageLabel}
               </Text>
               {message && (
-                <Text className="text-gray-600 text-sm text-center">
+                <Text style={styles.stageMessage}>
                   {message}
                 </Text>
               )}
             </View>
 
             {/* Progress Bar */}
-            <View className="mb-6">
-              <View className="flex-row justify-between mb-2">
-                <Text className="text-gray-700 font-semibold">Progress</Text>
-                <Text className="text-primary-blue font-bold">{Math.round(progress)}%</Text>
+            <View style={styles.progressSection}>
+              <View style={styles.progressHeader}>
+                <Text style={styles.progressLabel}>Progress</Text>
+                <Text style={styles.progressValue}>{Math.round(progress)}%</Text>
               </View>
-              <View className="bg-gray-200 rounded-full h-3 overflow-hidden">
+              <View style={styles.progressTrack}>
                 <Animated.View
-                  className="h-full rounded-full"
-                  style={{
-                    width: progressPercentage,
-                    backgroundColor: stageColor,
-                  }}
+                  style={[
+                    styles.progressFill,
+                    {
+                      width: progressPercentage,
+                    },
+                  ]}
                 />
               </View>
             </View>
 
             {/* Processing Steps */}
-            <View className="space-y-2">
+            <View style={styles.stepsContainer}>
               <StepItem
-                label="Validating file"
+                label="Uploading file"
                 completed={progress > 10}
                 active={stage === 'file_validation'}
               />
               <StepItem
-                label="Extracting text"
+                label="Extracting content"
                 completed={progress > 30}
                 active={stage === 'text_extraction'}
               />
               <StepItem
-                label="AI analyzing content"
+                label="AI parsing resume"
                 completed={progress > 70}
                 active={stage === 'ai_parsing'}
               />
               <StepItem
-                label="Updating profile"
+                label="Creating resume"
                 completed={progress > 90}
                 active={stage === 'profile_update'}
               />
               <StepItem
-                label="Finalizing"
+                label="Complete"
                 completed={progress === 100}
                 active={stage === 'completion'}
               />
             </View>
 
             {/* Info note */}
-            <View className="mt-6 bg-blue-50 rounded-xl p-4">
-              <Text className="text-blue-800 text-xs text-center">
-                💡 This process may take 30-60 seconds depending on resume complexity
+            <View style={styles.infoNote}>
+              <Text style={styles.infoText}>
+                This process may take 30-60 seconds depending on resume complexity
               </Text>
             </View>
           </View>
@@ -232,11 +177,12 @@ interface StepItemProps {
 
 function StepItem({ label, completed, active }: StepItemProps) {
   return (
-    <View className="flex-row items-center">
+    <View style={styles.stepItem}>
       <View
-        className={`w-5 h-5 rounded-full items-center justify-center mr-3 ${
-          completed ? 'bg-green-500' : active ? 'bg-blue-500' : 'bg-gray-300'
-        }`}
+        style={[
+          styles.stepDot,
+          completed ? styles.stepDotCompleted : active ? styles.stepDotActive : styles.stepDotPending,
+        ]}
       >
         {completed ? (
           <Svg width={12} height={12} viewBox="0 0 24 24" fill="none">
@@ -249,16 +195,187 @@ function StepItem({ label, completed, active }: StepItemProps) {
             />
           </Svg>
         ) : active ? (
-          <View className="w-2 h-2 bg-white rounded-full" />
+          <View style={styles.stepDotInner} />
         ) : null}
       </View>
       <Text
-        className={`flex-1 text-sm ${
-          completed ? 'text-green-700 font-semibold' : active ? 'text-blue-700 font-semibold' : 'text-gray-500'
-        }`}
+        style={[
+          styles.stepLabel,
+          completed ? styles.stepLabelCompleted : active ? styles.stepLabelActive : styles.stepLabelPending,
+        ]}
       >
         {label}
       </Text>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  modalContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    width: '100%',
+    maxWidth: Math.min(SCREEN_WIDTH - 48, 400),
+    maxHeight: SCREEN_HEIGHT * 0.85,
+    overflow: 'hidden',
+  },
+  header: {
+    paddingVertical: 24,
+    paddingHorizontal: 24,
+  },
+  headerTitle: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  headerSubtitle: {
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  badgeContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 12,
+  },
+  badge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  badgeDot: {
+    width: 8,
+    height: 8,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 4,
+    marginRight: 8,
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  content: {
+    padding: 24,
+  },
+  iconSection: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  iconContainer: {
+    borderRadius: 50,
+    padding: 24,
+    marginBottom: 16,
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+  },
+  stageLabel: {
+    color: '#111827',
+    fontSize: 18,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  stageMessage: {
+    color: '#6B7280',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  progressSection: {
+    marginBottom: 24,
+  },
+  progressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  progressLabel: {
+    color: '#374151',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  progressValue: {
+    color: '#10B981',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  progressTrack: {
+    backgroundColor: '#E5E7EB',
+    borderRadius: 6,
+    height: 12,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 6,
+    backgroundColor: '#10B981',
+  },
+  stepsContainer: {
+    gap: 12,
+  },
+  stepItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  stepDot: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  stepDotCompleted: {
+    backgroundColor: '#10B981',
+  },
+  stepDotActive: {
+    backgroundColor: '#10B981',
+  },
+  stepDotPending: {
+    backgroundColor: '#D1D5DB',
+  },
+  stepDotInner: {
+    width: 8,
+    height: 8,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 4,
+  },
+  stepLabel: {
+    flex: 1,
+    fontSize: 14,
+  },
+  stepLabelCompleted: {
+    color: '#059669',
+    fontWeight: '600',
+  },
+  stepLabelActive: {
+    color: '#059669',
+    fontWeight: '600',
+  },
+  stepLabelPending: {
+    color: '#6B7280',
+  },
+  infoNote: {
+    marginTop: 24,
+    backgroundColor: '#ECFDF5',
+    borderRadius: 12,
+    padding: 16,
+  },
+  infoText: {
+    color: '#065F46',
+    fontSize: 12,
+    textAlign: 'center',
+  },
+});

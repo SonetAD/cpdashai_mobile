@@ -1,25 +1,13 @@
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import CVBuilderScreen from '../../../../screens/candidate/dashboard/CVBuilderScreen';
+import { useLocalSearchParams, Redirect } from 'expo-router';
 
-export default function CVBuilderRoute() {
-  const router = useRouter();
+// Redirect to the cv-builder outside tabs (no navbar)
+export default function CVBuilderRedirect() {
   const { resumeId } = useLocalSearchParams<{ resumeId?: string }>();
 
-  return (
-    <CVBuilderScreen
-      activeTab="jobs"
-      onTabChange={(tabId) => {
-        const routes: Record<string, string> = {
-          home: '/(candidate)/(tabs)/home',
-          jobs: '/(candidate)/(tabs)/jobs',
-          aiCoach: '/(candidate)/(tabs)/ai-coach',
-          profile: '/(candidate)/(tabs)/profile',
-        };
-        // Use replace for tab changes to avoid stacking
-        router.replace(routes[tabId] as any);
-      }}
-      onBack={() => router.back()}
-      resumeId={resumeId}
-    />
-  );
+  // Build the redirect URL with query params
+  const redirectUrl = resumeId
+    ? `/(candidate)/cv-builder?resumeId=${resumeId}&source=jobs`
+    : '/(candidate)/cv-builder?source=jobs';
+
+  return <Redirect href={redirectUrl as any} />;
 }

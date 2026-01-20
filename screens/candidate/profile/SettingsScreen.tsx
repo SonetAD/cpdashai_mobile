@@ -385,7 +385,7 @@ export default function SettingsScreen({
             </TouchableOpacity>
 
             {/* Cancel Immediately Option */}
-            <TouchableOpacity
+            {/* <TouchableOpacity
               style={[cancelModalStyles.optionCard, cancelModalStyles.immediateOption]}
               activeOpacity={0.7}
               onPress={() => {
@@ -402,7 +402,7 @@ export default function SettingsScreen({
               <Text style={cancelModalStyles.optionDescription}>
                 Lose access right away. No refund will be provided.
               </Text>
-            </TouchableOpacity>
+            </TouchableOpacity> */}
           </View>
 
           {/* Keep Subscription Button */}

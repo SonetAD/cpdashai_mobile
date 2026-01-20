@@ -75,7 +75,7 @@ export default function CandidateTabsLayout() {
       home: '/(candidate)/(tabs)/home',
       jobs: '/(candidate)/(tabs)/jobs',
       aiCoach: '/(candidate)/(tabs)/ai-coach',
-      profile: '/(candidate)/(tabs)/profile',
+      profile: '/(candidate)/(tabs)/profile/full-profile', // Navigate to full profile from bottom navbar
     };
     // Use replace to avoid adding to back stack when switching tabs
     router.replace(routes[tabId] as any);
@@ -84,6 +84,16 @@ export default function CandidateTabsLayout() {
   const handleAIAssistantPress = () => {
     // Navigate to Clara assistant - use push since it's a sub-screen
     router.push('/(candidate)/(tabs)/ai-coach/clara-assistant' as any);
+  };
+
+  const handleClaraPress = () => {
+    // Navigate to Clara career coach
+    router.push('/(candidate)/(tabs)/ai-coach/clara-assistant' as any);
+  };
+
+  const handleRayPress = () => {
+    // Navigate to Ray interview coach
+    router.push('/(candidate)/(tabs)/ai-coach/ray-assistant' as any);
   };
 
   return (
@@ -105,6 +115,8 @@ export default function CandidateTabsLayout() {
         activeTab={getActiveTab()}
         onTabPress={handleTabPress}
         onAIAssistantPress={handleAIAssistantPress}
+        onClaraPress={handleClaraPress}
+        onRayPress={handleRayPress}
       />
     </View>
   );

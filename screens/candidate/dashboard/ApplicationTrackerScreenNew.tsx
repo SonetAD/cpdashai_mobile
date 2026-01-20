@@ -10,7 +10,7 @@ import {
   Modal,
   TextInput,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import CandidateLayout from '../../../components/layouts/CandidateLayout';
@@ -551,6 +551,9 @@ export default function ApplicationTrackerScreen({
   onBack,
   onSearchNavigate,
 }: ApplicationTrackerScreenProps) {
+  const insets = useSafeAreaInsets();
+  const HEADER_HEIGHT = insets.top + 100;
+
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
   const [showInterviewSlots, setShowInterviewSlots] = useState(false);
   const [selectedApplicationId, setSelectedApplicationId] = useState<string | null>(null);
@@ -618,9 +621,23 @@ export default function ApplicationTrackerScreen({
       onSearchPress={() => setShowSearchModal(true)}
     >
       <ScrollView
-        className="flex-1"
+        style={{ flex: 1 }}
         contentContainerStyle={{ paddingBottom: 120 }}
-        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
+        bounces={true}
+        alwaysBounceVertical={true}
+        overScrollMode="always"
+        refreshControl={
+          <RefreshControl
+            refreshing={isLoading}
+            onRefresh={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              refetch();
+            }}
+            colors={['#437EF4']}
+            tintColor="#437EF4"
+            progressViewOffset={HEADER_HEIGHT}
+          />
+        }
         onScrollBeginDrag={() => Haptics.selectionAsync()}
       >
         <View className="px-6 mt-6">

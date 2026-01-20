@@ -1,217 +1,166 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, TextInput, RefreshControl, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, TextInput, RefreshControl, ActivityIndicator, StyleSheet, Dimensions, Modal } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
+import * as Haptics from 'expo-haptics';
 import SearchIcon from '../../../assets/images/searchGray.svg';
-import IdeaIcon from '../../../assets/images/homepage/idea.svg';
 import CandidateLayout from '../../../components/layouts/CandidateLayout';
-import SearchModal from '../../../components/SearchModal';
-import { 
-  useGetMyJobMatchesQuery, 
+import JobMatchCard, { JobMatchCardData } from '../../../components/JobMatchCard';
+import ApplicationCard, { ApplicationCardData, InterviewSlotData, ConfirmedInterviewData } from '../../../components/ApplicationCard';
+import FeatureGate from '../../../components/FeatureGate';
+import { GoogleCalendarConnection } from '../../../components/GoogleCalendarConnection';
+import {
+  useGetMyJobMatchesQuery,
   useGetJobPostingsQuery,
-  useSaveJobMutation, 
-  useUnsaveJobMutation,
-  useApplyToJobMutation,
-  useGetMyApplicationsQuery
+  useGetMyApplicationsQuery,
+  useGetMyProfileQuery,
+  useInterviewSlotsQuery,
+  useApplicationInterviewQuery,
+  useIsGoogleCalendarConnectedQuery,
+  useSelectInterviewSlotMutation,
+  JobApplication,
+  InterviewSlot
 } from '../../../services/api';
+import { useAlert } from '../../../contexts/AlertContext';
+
+// Wrapper component that fetches interview slots and confirmed interview for applications
+const ApplicationCardWithSlots = ({
+  application,
+  isGoogleCalendarConnected,
+  isSubmittingSlot,
+  onSelectSlot,
+  onReschedule,
+  onConnectCalendar,
+  onPress,
+}: {
+  application: JobApplication;
+  isGoogleCalendarConnected: boolean;
+  isSubmittingSlot?: boolean;
+  onSelectSlot?: (slotId: string, slotData: InterviewSlotData) => void;
+  onReschedule?: () => void;
+  onConnectCalendar?: () => void;
+  onPress?: () => void;
+}) => {
+  const isInterviewScheduled = application.status === 'interview_scheduled' || application.status === 'interview';
+
+  // Fetch available slots
+  const { data: slotsData, isLoading: slotsLoading, error: slotsError } = useInterviewSlotsQuery(application.id, {
+    skip: !isInterviewScheduled,
+  });
+
+  // Fetch confirmed interview (if any)
+  const { data: interviewData, isLoading: interviewLoading } = useApplicationInterviewQuery(application.id, {
+    skip: !isInterviewScheduled,
+  });
+
+  // Debug logging
+  console.log('📅 ApplicationCardWithSlots Debug:', {
+    applicationId: application.id,
+    applicationStatus: application.status,
+    isInterviewScheduled,
+    slotsLoading,
+    slotsError: slotsError ? JSON.stringify(slotsError) : null,
+    slotsData: slotsData ? JSON.stringify(slotsData) : null,
+    interviewLoading,
+    interviewData: interviewData ? JSON.stringify(interviewData) : null,
+  });
+
+  // Transform available slots
+  const availableSlots: InterviewSlotData[] = slotsData?.interviewSlots?.map((slot: InterviewSlot): InterviewSlotData => ({
+    id: slot.id,
+    startTime: slot.startTime,
+    endTime: slot.endTime,
+    durationMinutes: slot.durationMinutes,
+    status: slot.status,
+  })) || [];
+
+  // Transform confirmed interview data
+  const confirmedInterview: ConfirmedInterviewData | undefined = interviewData?.applicationInterview ? {
+    id: interviewData.applicationInterview.id,
+    startTime: interviewData.applicationInterview.startTime!,
+    endTime: interviewData.applicationInterview.endTime!,
+    durationMinutes: interviewData.applicationInterview.durationMinutes!,
+    status: interviewData.applicationInterview.status,
+    interviewType: interviewData.applicationInterview.interviewType,
+    videoCallLink: interviewData.applicationInterview.videoCallLink,
+    location: interviewData.applicationInterview.location,
+  } : undefined;
+
+  // Transform to card data
+  const cardData: ApplicationCardData = {
+    id: application.id,
+    status: application.status,
+    appliedAt: application.appliedAt,
+    reviewedAt: application.reviewedAt,
+    rejectionReason: application.rejectionReason,
+    jobPosting: {
+      id: application.jobPosting.id,
+      title: application.jobPosting.title,
+      companyName: application.jobPosting.companyName,
+      location: application.jobPosting.location,
+      workMode: application.jobPosting.workMode,
+    },
+    jobMatch: application.jobMatch ? {
+      matchPercentage: application.jobMatch.matchPercentage,
+    } : undefined,
+    interviewSlots: availableSlots,
+    confirmedInterview,
+    interviewTimezone: 'GMT+5', // TODO: Get from backend or user preferences
+  };
+
+  return (
+    <ApplicationCard
+      application={cardData}
+      isGoogleCalendarConnected={isGoogleCalendarConnected}
+      isSubmittingSlot={isSubmittingSlot}
+      onSelectSlot={onSelectSlot}
+      onReschedule={onReschedule}
+      onConnectCalendar={onConnectCalendar}
+      onPress={onPress}
+    />
+  );
+};
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface JobsScreenProps {
-  activeTab?: string;
-  onTabChange?: (tabId: string) => void;
-  onAIAssistantPress?: () => void;
-  userName?: string;
   onJobPress?: (jobId: string) => void;
   onApplicationTrackerPress?: () => void;
-  onCVUploadPress?: () => void;
-  onSearchNavigate?: (route: string) => void;
+  onNotificationPress?: () => void;
+  onProfilePress?: () => void;
 }
 
-interface FilterButtonProps {
-  label: string;
-  isActive?: boolean;
-  onPress: () => void;
-}
-
-const FilterButton: React.FC<FilterButtonProps> = ({ label, isActive = false, onPress }) => {
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      className={`px-4 py-2 rounded-full mr-2 ${
-        isActive ? 'bg-primary-blue' : 'bg-white'
-      }`}
-      activeOpacity={0.7}
-    >
-      <Text className={`text-sm font-medium ${isActive ? 'text-white' : 'text-gray-600'}`}>
-        {label}
-      </Text>
-    </TouchableOpacity>
-  );
-};
-
-interface JobCardProps {
-  jobMatch: any;
-  onPress: (jobId: string) => void;
-  onSave: (jobId: string, isSaved: boolean) => void;
-  onApply: (jobId: string) => void;
-  applicationsData?: any;
-}
-
-const JobCard: React.FC<JobCardProps> = ({ jobMatch, onPress, onSave, onApply, applicationsData }) => {
-  const { matchPercentage, jobPosting, isSaved, recommendation, missingSkills } = jobMatch;
-  
-  // Find the application for this job from myApplications
-  const application = applicationsData?.myApplications?.find(
-    (app: any) => app.jobPosting.id === jobPosting.id
-  );
-  const applicationStatus = application?.status;
-  
-  // User can apply if no application exists or if application is withdrawn (but not rejected, shortlisted, etc)
-  const canApply = !application || applicationStatus === 'withdrawn';
-  const canWithdraw = application && ['pending', 'reviewed'].includes(applicationStatus || '');
-  
-  // Get badge color based on match percentage
-  const getBadgeColor = (percentage: number) => {
-    if (percentage >= 85) return '#437EF4'; // Blue
-    if (percentage >= 70) return '#10B981'; // Green
-    if (percentage >= 50) return '#FFCC00'; // Yellow
-    return '#EF4444'; // Red
-  };
-
-  // Format salary
-  const formatSalary = () => {
-    if (jobPosting.salaryMin && jobPosting.salaryMax) {
-      const currency = jobPosting.salaryCurrency || 'USD';
-      return `${currency} ${jobPosting.salaryMin.toLocaleString()} - ${jobPosting.salaryMax.toLocaleString()}`;
-    }
-    return 'Salary not disclosed';
-  };
-  return (
-    <TouchableOpacity
-      onPress={() => onPress(jobPosting.id)}
-      className="bg-white rounded-2xl p-5 mb-4 shadow-sm"
-      activeOpacity={0.7}
-    >
-      {/* Position Title */}
-      <Text className="text-gray-900 text-xl font-bold mb-2">{jobPosting.title}</Text>
-
-      {/* Description */}
-      <Text className="text-gray-400 text-sm leading-5 mb-4" numberOfLines={3}>
-        {jobPosting.description}
-      </Text>
-
-      {/* Company Name */}
-      <Text className="text-primary-blue text-base font-semibold mb-3">{jobPosting.companyName}</Text>
-
-      {/* Application Status Badge */}
-      {application && applicationStatus && applicationStatus !== 'pending' && applicationStatus !== 'withdrawn' && (
-        <View className="mb-3">
-          <View className="flex-row items-center justify-between bg-gray-50 rounded-xl p-3 border border-gray-200">
-            <Text className="text-gray-600 text-xs font-medium">Status:</Text>
-            <View
-              className="rounded-full px-3 py-1"
-              style={{ 
-                backgroundColor: 
-                  applicationStatus === 'pending' ? '#FFCC00' :
-                  applicationStatus === 'reviewed' ? '#437EF4' :
-                  applicationStatus === 'shortlisted' ? '#10B981' :
-                  applicationStatus === 'interview' ? '#8B5CF6' :
-                  applicationStatus === 'offered' ? '#10B981' :
-                  applicationStatus === 'rejected' ? '#EF4444' :
-                  applicationStatus === 'withdrawn' ? '#6B7280' :
-                  applicationStatus === 'accepted' ? '#10B981' : '#9CA3AF'
-              }}
-            >
-              <Text className="text-white text-xs font-bold">
-                {applicationStatus === 'pending' ? 'Submitted' : applicationStatus.charAt(0).toUpperCase() + applicationStatus.slice(1)}
-              </Text>
-            </View>
-          </View>
-          {applicationStatus === 'rejected' && application.rejectionReason && (
-            <View className="mt-2 bg-red-50 rounded-xl p-2.5 border border-red-200">
-              <Text className="text-red-600 text-xs font-semibold mb-0.5">Rejection Reason:</Text>
-              <Text className="text-gray-700 text-xs" numberOfLines={2}>{application.rejectionReason}</Text>
-            </View>
-          )}
-        </View>
-      )}
-
-      {/* Job Details */}
-      <View className="mb-4">
-        <Text className="text-gray-500 text-sm mb-1">• {jobPosting.location}</Text>
-        <Text className="text-gray-500 text-sm mb-1">• {jobPosting.workMode.charAt(0).toUpperCase() + jobPosting.workMode.slice(1)} - {jobPosting.jobType.replace('_', ' ')}</Text>
-        <Text className="text-gray-500 text-sm">• {formatSalary()}</Text>
-      </View>
-
-      {/* Skills Tags */}
-      <View className="flex-row flex-wrap mb-4">
-        {jobPosting.requiredSkills?.slice(0, 5).map((skill: string, index: number) => (
-          <View key={index} className="bg-primary-cyan/20 rounded-lg px-3 py-2 mr-2 mb-2">
-            <Text className="text-primary-cyan text-xs font-medium">{skill}</Text>
-          </View>
-        ))}
-      </View>
-
-      {/* AI Insight */}
-      {recommendation && (
-        <View className="bg-yellow-50 rounded-xl p-3 flex-row items-start mb-4">
-          <View className="mr-2 mt-0.5">
-            <IdeaIcon width={17} height={18} />
-          </View>
-          <Text className="text-gray-700 text-xs flex-1 leading-4" numberOfLines={3}>
-            AI Insight: {recommendation}
-          </Text>
-        </View>
-      )}
-
-      {/* Action Buttons */}
-      <View className="flex-row gap-3">
-        {canApply ? (
-          <TouchableOpacity 
-            onPress={() => onApply(jobPosting.id)}
-            className="bg-primary-blue rounded-xl py-3 flex-1 items-center"
-          >
-            <Text className="text-white text-sm font-semibold">
-              {applicationStatus === 'withdrawn' ? 'Reapply' : 'Apply Now'}
-            </Text>
-          </TouchableOpacity>
-        ) : (
-          <View className="bg-gray-300 rounded-xl py-3 flex-1 items-center">
-            <Text className="text-gray-600 text-sm font-semibold">
-              {applicationStatus === 'pending' ? 'Applied' : 
-               applicationStatus === 'reviewed' ? 'Under Review' :
-               applicationStatus === 'shortlisted' ? 'Shortlisted' :
-               applicationStatus === 'interview' ? 'Interview' :
-               applicationStatus === 'offered' ? 'Offer Received' :
-               applicationStatus === 'rejected' ? 'Closed' :
-               applicationStatus === 'accepted' ? 'Accepted' : 'Applied'}
-            </Text>
-          </View>
-        )}
-        <TouchableOpacity 
-          onPress={() => onSave(jobPosting.id, isSaved)}
-          className={`rounded-xl py-3 flex-1 items-center ${isSaved ? 'bg-green-500' : 'bg-primary-cyan'}`}
-        >
-          <Text className="text-white text-sm font-semibold">{isSaved ? 'Saved' : 'Save'}</Text>
-        </TouchableOpacity>
-      </View>
-    </TouchableOpacity>
-  );
-};
+type TabType = 'find_jobs' | 'track_applications';
+type FilterType = 'all' | 'remote' | 'onsite' | 'location' | 'categories';
 
 export default function JobsScreen({
-  activeTab = 'jobs',
-  onTabChange,
-  onAIAssistantPress,
-  userName = 'User',
   onJobPress,
   onApplicationTrackerPress,
-  onCVUploadPress,
-  onSearchNavigate,
+  onNotificationPress,
+  onProfilePress,
 }: JobsScreenProps) {
-  const [activeFilter, setActiveFilter] = useState<string | undefined>(undefined);
+  const insets = useSafeAreaInsets();
+  const HEADER_HEIGHT = insets.top + 100;
+
+  const [activeTab, setActiveTab] = useState<TabType>('find_jobs');
+  const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [page, setPage] = useState(1);
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [showSearchModal, setShowSearchModal] = useState(false);
+  const [page, setPage] = useState(1);
+  const [showCalendarModal, setShowCalendarModal] = useState(false);
+
+  // Alert context
+  const { showAlert } = useAlert();
+
+  // Interview slot selection mutation
+  const [selectInterviewSlot, { isLoading: isSelectingSlot }] = useSelectInterviewSlotMutation();
+
+  // Profile data for avatar
+  const { data: profileData } = useGetMyProfileQuery();
+  const profilePictureUrl = profileData?.myProfile?.profilePicture || null;
+
+  // Check Google Calendar connection status
+  const { data: isGoogleCalendarConnected, refetch: refetchCalendarStatus } = useIsGoogleCalendarConnectedQuery();
 
   // Debounce search query
   useEffect(() => {
@@ -221,48 +170,19 @@ export default function JobsScreen({
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Filter function for jobs
-  const filterJobs = (jobs: any[], query: string) => {
-    if (!query) return jobs;
-
-    return jobs.filter((item: any) => {
-      const job = item.jobPosting || item;
-      const searchLower = query.toLowerCase();
-
-      // Search in title
-      if (job.title?.toLowerCase().includes(searchLower)) return true;
-      // Search in company name
-      if (job.companyName?.toLowerCase().includes(searchLower)) return true;
-      // Search in location
-      if (job.location?.toLowerCase().includes(searchLower)) return true;
-      // Search in description
-      if (job.description?.toLowerCase().includes(searchLower)) return true;
-      // Search in skills
-      if (job.requiredSkills?.some((skill: string) =>
-        skill.toLowerCase().includes(searchLower)
-      )) return true;
-      // Search in work mode
-      if (job.workMode?.toLowerCase().includes(searchLower)) return true;
-      // Search in job type
-      if (job.jobType?.toLowerCase().replace('_', ' ').includes(searchLower)) return true;
-
-      return false;
-    });
-  };
-
   // Get work mode based on active filter
   const getWorkMode = () => {
-    if (activeFilter === 'Remote') return 'remote';
-    if (activeFilter === 'Onsite') return 'onsite';
+    if (activeFilter === 'remote') return 'remote';
+    if (activeFilter === 'onsite') return 'onsite';
     return undefined;
   };
 
   // Fetch job matches (personalized)
-  const { 
-    data: matchesData, 
-    isLoading: matchesLoading, 
-    error: matchesError, 
-    refetch: refetchMatches 
+  const {
+    data: matchesData,
+    isLoading: matchesLoading,
+    error: matchesError,
+    refetch: refetchMatches
   } = useGetMyJobMatchesQuery({
     workMode: getWorkMode(),
     page,
@@ -270,9 +190,9 @@ export default function JobsScreen({
   });
 
   // Fallback: Fetch all job postings if matches fail or return empty
-  const { 
-    data: jobsData, 
-    isLoading: jobsLoading, 
+  const {
+    data: jobsData,
+    isLoading: jobsLoading,
     error: jobsError,
     refetch: refetchJobs
   } = useGetJobPostingsQuery({
@@ -281,22 +201,42 @@ export default function JobsScreen({
     limit: 20,
     offset: (page - 1) * 20,
   }, {
-    skip: (matchesData?.myJobMatches?.matches?.length ?? 0) > 0, // Skip if we have matches
+    skip: (matchesData?.myJobMatches?.matches?.length ?? 0) > 0,
   });
 
   // Fetch applications data
-  const { data: applicationsData, refetch: refetchApplications } = useGetMyApplicationsQuery({});
-
-  // Save/unsave job mutations
-  const [saveJob, { isLoading: isSaving }] = useSaveJobMutation();
-  const [unsaveJob, { isLoading: isUnsaving }] = useUnsaveJobMutation();
-  const [applyToJob] = useApplyToJobMutation();
+  const {
+    data: applicationsData,
+    isLoading: applicationsLoading,
+    refetch: refetchApplications
+  } = useGetMyApplicationsQuery({});
 
   // Determine which data to use
   const hasMatches = (matchesData?.myJobMatches?.matches?.length ?? 0) > 0;
   const useMatchData = hasMatches || !jobsData;
   const isLoading = matchesLoading || jobsLoading;
   const error = matchesError || jobsError;
+
+  // Filter function for jobs
+  const filterJobs = (jobs: any[], query: string) => {
+    if (!query) return jobs;
+
+    return jobs.filter((item: any) => {
+      const job = item.jobPosting || item;
+      const searchLower = query.toLowerCase();
+
+      if (job.title?.toLowerCase().includes(searchLower)) return true;
+      if (job.companyName?.toLowerCase().includes(searchLower)) return true;
+      if (job.location?.toLowerCase().includes(searchLower)) return true;
+      if (job.description?.toLowerCase().includes(searchLower)) return true;
+      if (job.requiredSkills?.some((skill: string) =>
+        skill.toLowerCase().includes(searchLower)
+      )) return true;
+      if (job.workMode?.toLowerCase().includes(searchLower)) return true;
+
+      return false;
+    });
+  };
 
   // Filter matched jobs based on search
   const filteredMatches = useMemo(() => {
@@ -309,301 +249,759 @@ export default function JobsScreen({
     const jobs = jobsData?.jobPostings || [];
     return filterJobs(jobs.map((job: any) => ({ jobPosting: job })), debouncedSearch);
   }, [jobsData?.jobPostings, debouncedSearch]);
-  
-  const refetch = () => {
+
+  const refetch = useCallback(() => {
     refetchMatches();
     refetchApplications();
-    // Only refetch jobs if it's not skipped
     if ((matchesData?.myJobMatches?.matches?.length ?? 0) === 0) {
       refetchJobs();
     }
-  };
+  }, [refetchMatches, refetchApplications, refetchJobs, matchesData]);
 
-  // Refetch when jobs tab becomes active
-  useEffect(() => {
-    if (activeTab === 'jobs') {
-      console.log('Jobs tab active - refetching data');
-      refetchMatches();
-      refetchApplications();
-      // Only refetch jobs if it's not skipped
-      if ((matchesData?.myJobMatches?.matches?.length ?? 0) === 0) {
-        refetchJobs();
-      }
-    }
-  }, [activeTab, matchesData]);
+  const handleJobPress = useCallback((jobId: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onJobPress?.(jobId);
+  }, [onJobPress]);
 
-  const handleSaveJob = async (jobId: string, isSaved: boolean) => {
-    try {
-      if (isSaved) {
-        // Find the saved job to get its ID
-        const savedJob = matchesData?.myJobMatches?.matches?.find((match: any) => match.jobPosting.id === jobId);
-        if (savedJob) {
-          await unsaveJob({ savedJobId: savedJob.id }).unwrap();
-        }
-      } else {
-        await saveJob({ jobId }).unwrap();
-      }
-      refetch();
-    } catch (err) {
-      console.error('Error saving/unsaving job:', err);
-    }
-  };
+  const handleApply = useCallback((jobId: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    onJobPress?.(jobId);
+  }, [onJobPress]);
 
-  const handleApply = (jobId: string) => {
-    // Call onJobPress to navigate to job details
-    if (onJobPress) {
-      onJobPress(jobId);
-    }
-  };
+  const handleSearchPress = useCallback(() => {
+    // Focus on search input or open search modal
+  }, []);
 
-  const handleJobPress = (jobId: string) => {
-    if (onJobPress) {
-      onJobPress(jobId);
-    }
-  };
+  const handleNotificationPress = useCallback(() => {
+    onNotificationPress?.();
+  }, [onNotificationPress]);
+
+  const handleProfilePress = useCallback(() => {
+    onProfilePress?.();
+  }, [onProfilePress]);
+
+  // Transform job match data to JobMatchCardData format
+  const transformToCardData = (jobMatch: any): JobMatchCardData => ({
+    id: jobMatch.id || jobMatch.jobPosting?.id,
+    matchPercentage: parseFloat(jobMatch.matchPercentage) || 0,
+    matchedSkills: jobMatch.matchedSkills || [],
+    missingSkills: jobMatch.missingSkills || [],
+    recommendation: jobMatch.recommendation,
+    isSaved: jobMatch.isSaved,
+    isApplied: jobMatch.isApplied,
+    jobPosting: {
+      id: jobMatch.jobPosting?.id,
+      title: jobMatch.jobPosting?.title || 'Job Title',
+      companyName: jobMatch.jobPosting?.companyName || 'Company',
+      description: jobMatch.jobPosting?.description || '',
+      location: jobMatch.jobPosting?.location || 'Location',
+      workMode: jobMatch.jobPosting?.workMode || 'remote',
+      jobType: jobMatch.jobPosting?.jobType || 'full_time',
+      requiredSkills: jobMatch.jobPosting?.requiredSkills || [],
+      salaryMin: jobMatch.jobPosting?.salaryMin,
+      salaryMax: jobMatch.jobPosting?.salaryMax,
+      salaryCurrency: jobMatch.jobPosting?.salaryCurrency,
+    },
+  });
+
+  // Filter applications based on search
+  const filteredApplications = useMemo(() => {
+    const applications = applicationsData?.myApplications || [];
+    if (!debouncedSearch) return applications;
+
+    return applications.filter((app: JobApplication) => {
+      const searchLower = debouncedSearch.toLowerCase();
+      if (app.jobPosting.title?.toLowerCase().includes(searchLower)) return true;
+      if (app.jobPosting.companyName?.toLowerCase().includes(searchLower)) return true;
+      if (app.jobPosting.location?.toLowerCase().includes(searchLower)) return true;
+      if (app.status?.toLowerCase().includes(searchLower)) return true;
+      return false;
+    });
+  }, [applicationsData?.myApplications, debouncedSearch]);
+
+  // Header info based on active tab
+  const headerTitle = activeTab === 'find_jobs' ? 'Job Matches' : 'Track Applications';
+  const headerSubtitle = activeTab === 'find_jobs'
+    ? 'Sorted by your best career fit'
+    : 'Sorted by your best career fit';
+
+  // Combined loading state
+  const isLoadingContent = activeTab === 'find_jobs' ? isLoading : applicationsLoading;
 
   return (
-    <>
     <CandidateLayout
-      onSearchPress={() => setShowSearchModal(true)}
+      headerTitle={headerTitle}
+      headerSubtitle={headerSubtitle}
+      showGlassPill={true}
+      profilePictureUrl={profilePictureUrl}
+      onSearchPress={handleSearchPress}
+      onNotificationPress={handleNotificationPress}
+      onProfilePress={handleProfilePress}
     >
       <ScrollView
-        className="flex-1"
-        contentContainerStyle={{ paddingBottom: 100 }}
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: HEADER_HEIGHT }]}
+        bounces={true}
+        alwaysBounceVertical={true}
+        overScrollMode="always"
         refreshControl={
-          <RefreshControl refreshing={isLoading} onRefresh={refetch} />
+          <RefreshControl
+            refreshing={isLoadingContent}
+            onRefresh={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              if (activeTab === 'find_jobs') {
+                refetch();
+              } else {
+                refetchApplications();
+              }
+            }}
+            colors={['#437EF4']}
+            tintColor="#437EF4"
+            progressViewOffset={HEADER_HEIGHT}
+          />
         }
       >
-        <View className="px-6 mt-6">
-          {/* Job Matches Header */}
-          <View className="mb-4">
-            <Text className="text-gray-900 text-2xl font-bold mb-1">
-              {useMatchData ? 'Job Matches' : 'Available Jobs'}
-            </Text>
-            <Text className="text-gray-500 text-sm">
-              {debouncedSearch
-                ? `${filteredMatches.length + filteredJobs.length} results found`
-                : useMatchData
-                  ? `${matchesData?.myJobMatches?.totalCount || 0} jobs sorted by your best career fit`
-                  : `${jobsData?.jobPostings?.length || 0} active job postings`
-              }
-            </Text>
-          </View>
+        {/* Search Bar */}
+        <View style={styles.searchContainer}>
+          <SearchIcon width={20} height={20} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search something...."
+            placeholderTextColor="#9CA3AF"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
+              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+                <Path d="M18 6L6 18M6 6L18 18" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" />
+              </Svg>
+            </TouchableOpacity>
+          )}
+        </View>
 
-          {/* Search Bar */}
-          <View className="bg-white rounded-xl px-4 py-3 flex-row items-center mb-4 shadow-sm">
-            <SearchIcon width={20} height={20} />
-            <TextInput
-              placeholder="Search jobs, companies, skills..."
-              placeholderTextColor="#9CA3AF"
-              className="flex-1 ml-2 text-gray-900 text-sm"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')} className="ml-2">
-                <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-                  <Path d="M18 6L6 18M6 6L18 18" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" />
-                </Svg>
-              </TouchableOpacity>
-            )}
-          </View>
+        {/* Tabs */}
+        <View style={styles.tabsContainer}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'find_jobs' && styles.tabActive]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setActiveTab('find_jobs');
+            }}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.tabText, activeTab === 'find_jobs' && styles.tabTextActive]}>
+              Find Jobs
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'track_applications' && styles.tabActive]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setActiveTab('track_applications');
+            }}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.tabText, activeTab === 'track_applications' && styles.tabTextActive]}>
+              Track Applications
+            </Text>
+          </TouchableOpacity>
+        </View>
 
-          {/* Filter Buttons */}
+        {/* Filter Chips - Only show for Find Jobs tab */}
+        {activeTab === 'find_jobs' && (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            className="mb-4"
-            contentContainerStyle={{ paddingRight: 24 }}
+            style={styles.filtersScroll}
+            contentContainerStyle={styles.filtersContent}
           >
-            <FilterButton
-              label="All"
-              isActive={activeFilter === undefined}
-              onPress={() => setActiveFilter(undefined)}
-            />
-            <FilterButton
-              label="Remote"
-              isActive={activeFilter === 'Remote'}
-              onPress={() => setActiveFilter('Remote')}
-            />
-            <FilterButton
-              label="Onsite"
-              isActive={activeFilter === 'Onsite'}
-              onPress={() => setActiveFilter('Onsite')}
-            />
+            <TouchableOpacity
+              style={[styles.filterChip, activeFilter === 'all' && styles.filterChipActive]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setActiveFilter('all');
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.filterChipText, activeFilter === 'all' && styles.filterChipTextActive]}>
+                All
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.filterChip, activeFilter === 'remote' && styles.filterChipActive]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setActiveFilter('remote');
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.filterChipText, activeFilter === 'remote' && styles.filterChipTextActive]}>
+                Remote
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.filterChip, activeFilter === 'onsite' && styles.filterChipActive]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setActiveFilter('onsite');
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.filterChipText, activeFilter === 'onsite' && styles.filterChipTextActive]}>
+                Onsite
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.filterChip, activeFilter === 'location' && styles.filterChipActive]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setActiveFilter('location');
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.filterChipText, activeFilter === 'location' && styles.filterChipTextActive]}>
+                Location
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.filterChip, activeFilter === 'categories' && styles.filterChipActive]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setActiveFilter('categories');
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.filterChipText, activeFilter === 'categories' && styles.filterChipTextActive]}>
+                Categories
+              </Text>
+            </TouchableOpacity>
           </ScrollView>
+        )}
 
-          {/* Application Tracker Link */}
+        {/* Loading State */}
+        {isLoadingContent && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#437EF4" />
+            <Text style={styles.loadingText}>
+              {activeTab === 'find_jobs' ? 'Loading jobs...' : 'Loading applications...'}
+            </Text>
+          </View>
+        )}
+
+        {/* Error State */}
+        {error && !isLoadingContent && activeTab === 'find_jobs' && (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorTitle}>Error loading jobs</Text>
+            <Text style={styles.errorText}>Please try again</Text>
+            <TouchableOpacity style={styles.retryButton} onPress={refetch}>
+              <Text style={styles.retryText}>Try Again</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* No Search Results State - Find Jobs */}
+        {!isLoadingContent && !error && debouncedSearch && activeTab === 'find_jobs' &&
+         filteredMatches.length === 0 && filteredJobs.length === 0 && (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyTitle}>No results for "{searchQuery}"</Text>
+            <Text style={styles.emptyText}>Try different keywords or clear your search</Text>
+            <TouchableOpacity style={styles.clearSearchButton} onPress={() => setSearchQuery('')}>
+              <Text style={styles.clearSearchText}>Clear Search</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+
+        {/* No Jobs State */}
+        {!isLoadingContent && !error && !debouncedSearch && activeTab === 'find_jobs' &&
+         filteredMatches.length === 0 && filteredJobs.length === 0 && (
+          <View style={styles.emptyContainer}>
+            <View style={styles.emptyIconContainer}>
+              <Svg width={64} height={64} viewBox="0 0 24 24" fill="none">
+                <Path
+                  d="M20 6H16L14 4H10L8 6H4C2.9 6 2 6.9 2 8V18C2 19.1 2.9 20 4 20H20C21.1 20 22 19.1 22 18V8C22 6.9 21.1 6 20 6ZM20 18H4V8H20V18ZM12 9C9.24 9 7 11.24 7 14C7 16.76 9.24 19 12 19C14.76 19 17 16.76 17 14C17 11.24 14.76 9 12 9ZM12 17C10.35 17 9 15.65 9 14C9 12.35 10.35 11 12 11C13.65 11 15 12.35 15 14C15 15.65 13.65 17 12 17Z"
+                  fill="#9CA3AF"
+                />
+              </Svg>
+            </View>
+            <Text style={styles.emptyTitle}>No Jobs Available</Text>
+            <Text style={styles.emptyText}>
+              Complete your profile to get personalized job recommendations
+            </Text>
+            <TouchableOpacity style={styles.refreshButton} onPress={refetch}>
+              <Text style={styles.refreshText}>Refresh</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+
+        {/* Job Listings */}
+        {!isLoadingContent && !error && activeTab === 'find_jobs' && (filteredMatches.length > 0 || filteredJobs.length > 0) && (
+          <View style={styles.jobsList}>
+            {/* Show matched jobs */}
+            {useMatchData && filteredMatches.map((jobMatch: any) => (
+              <View key={jobMatch.id || jobMatch.jobPosting?.id} style={styles.cardWrapper}>
+                <JobMatchCard
+                  data={transformToCardData(jobMatch)}
+                  width={SCREEN_WIDTH - 40}
+                  onViewDetails={() => handleJobPress(jobMatch.jobPosting?.id)}
+                  onApply={() => handleApply(jobMatch.jobPosting?.id)}
+                />
+              </View>
+            ))}
+
+            {/* Fallback: Show general job postings */}
+            {!useMatchData && filteredJobs.map((item: any) => {
+              const job = item.jobPosting;
+              const jobMatch = {
+                id: job.id,
+                matchPercentage: 0,
+                matchedSkills: [],
+                missingSkills: [],
+                jobPosting: job,
+                isSaved: false,
+                isApplied: false,
+              };
+              return (
+                <View key={job.id} style={styles.cardWrapper}>
+                  <JobMatchCard
+                    data={transformToCardData(jobMatch)}
+                    width={SCREEN_WIDTH - 40}
+                    onViewDetails={() => handleJobPress(job.id)}
+                    onApply={() => handleApply(job.id)}
+                  />
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+        {/* Track Applications Tab - Entire section gated by application_tracker feature */}
+        {!isLoadingContent && activeTab === 'track_applications' && (
+          <FeatureGate
+            featureId="application_tracker"
+            featureName="Application Tracker"
+            showLockedState={true}
+          >
+            {/* No Search Results State */}
+            {debouncedSearch && filteredApplications.length === 0 && (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyTitle}>No results for "{searchQuery}"</Text>
+                <Text style={styles.emptyText}>Try different keywords or clear your search</Text>
+                <TouchableOpacity style={styles.clearSearchButton} onPress={() => setSearchQuery('')}>
+                  <Text style={styles.clearSearchText}>Clear Search</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* No Applications State */}
+            {!debouncedSearch && filteredApplications.length === 0 && (
+              <View style={styles.emptyContainer}>
+                <View style={styles.emptyIconContainer}>
+                  <Svg width={64} height={64} viewBox="0 0 24 24" fill="none">
+                    <Path
+                      d="M19 3H5C3.9 3 3 3.9 3 5V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19V5C21 3.9 20.1 3 19 3ZM19 19H5V5H19V19ZM17 12H7V14H17V12ZM17 8H7V10H17V8ZM13 16H7V18H13V16Z"
+                      fill="#9CA3AF"
+                    />
+                  </Svg>
+                </View>
+                <Text style={styles.emptyTitle}>No Applications Yet</Text>
+                <Text style={styles.emptyText}>
+                  Start applying to jobs to track your application status here
+                </Text>
+                <TouchableOpacity
+                  style={styles.refreshButton}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setActiveTab('find_jobs');
+                  }}
+                >
+                  <Text style={styles.refreshText}>Find Jobs</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Applications List */}
+            {filteredApplications.length > 0 && (
+              <View style={styles.applicationsList}>
+                {filteredApplications.map((application: JobApplication) => (
+                  <ApplicationCardWithSlots
+                    key={application.id}
+                    application={application}
+                    isGoogleCalendarConnected={isGoogleCalendarConnected || false}
+                    isSubmittingSlot={isSelectingSlot}
+                    onSelectSlot={async (slotId, slotData) => {
+                      console.log('Selected slot:', slotId, 'for application:', application.id);
+                      try {
+                        const result = await selectInterviewSlot({ slotId }).unwrap();
+                        console.log('Select interview slot result:', result);
+
+                        if (result.selectInterviewSlot.__typename === 'InterviewSuccessType') {
+                          showAlert({
+                            type: 'success',
+                            title: 'Interview Scheduled!',
+                            message: 'Your interview has been confirmed and added to your Google Calendar.',
+                            buttons: [{ text: 'OK', style: 'default' }],
+                          });
+                          // Refetch applications to get updated interview data
+                          refetchApplications();
+                        } else {
+                          throw new Error(result.selectInterviewSlot.message || 'Failed to schedule interview');
+                        }
+                      } catch (error: any) {
+                        console.error('Failed to select interview slot:', error);
+                        showAlert({
+                          type: 'error',
+                          title: 'Scheduling Failed',
+                          message: error.message || 'Failed to schedule the interview. Please try again.',
+                          buttons: [{ text: 'OK', style: 'default' }],
+                        });
+                      }
+                    }}
+                    onReschedule={() => {
+                      console.log('Reschedule requested for application:', application.id);
+                      showAlert({
+                        type: 'info',
+                        title: 'Reschedule Interview',
+                        message: 'Please contact the recruiter to reschedule your interview.',
+                        buttons: [{ text: 'OK', style: 'default' }],
+                      });
+                    }}
+                    onConnectCalendar={() => {
+                      setShowCalendarModal(true);
+                    }}
+                    onPress={() => handleJobPress(application.jobPosting.id)}
+                  />
+                ))}
+              </View>
+            )}
+          </FeatureGate>
+        )}
+
+        {/* Pagination */}
+        {useMatchData && matchesData?.myJobMatches?.hasNext && !isLoadingContent && activeTab === 'find_jobs' && (
           <TouchableOpacity
-            onPress={onApplicationTrackerPress}
-            className="bg-white rounded-xl px-4 py-3 mb-3 shadow-sm flex-row items-center justify-between"
+            style={styles.loadMoreButton}
+            onPress={() => setPage(page + 1)}
             activeOpacity={0.7}
           >
-            <Text className="text-gray-900 text-base font-semibold">Application Tracker</Text>
-            <Svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-              <Path
-                d="M7.5 15L12.5 10L7.5 5"
-                stroke="#437EF4"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </Svg>
+            <Text style={styles.loadMoreText}>Load More</Text>
           </TouchableOpacity>
-
-          {/* CV Upload Link */}
-          <TouchableOpacity
-            onPress={onCVUploadPress}
-            className="bg-white rounded-xl px-4 py-3 mb-6 shadow-sm flex-row items-center justify-between"
-            activeOpacity={0.7}
-          >
-            <Text className="text-gray-900 text-base font-semibold">CV Upload</Text>
-            <Svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-              <Path
-                d="M7.5 15L12.5 10L7.5 5"
-                stroke="#437EF4"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </Svg>
-          </TouchableOpacity>
-
-          {/* Loading State */}
-          {isLoading && (
-            <View className="items-center justify-center py-8">
-              <ActivityIndicator size="large" color="#437EF4" />
-              <Text className="text-gray-500 mt-4">Loading jobs...</Text>
-            </View>
-          )}
-
-          {/* Error State */}
-          {error && !isLoading && (
-            <View className="bg-red-50 rounded-xl p-4 mb-4">
-              <Text className="text-red-600 text-sm font-semibold mb-1">Error loading jobs</Text>
-              <Text className="text-red-600 text-xs">
-                {JSON.stringify(error)}
-              </Text>
-              <TouchableOpacity 
-                onPress={refetch} 
-                className="bg-red-600 rounded-lg py-2 px-4 mt-3"
-              >
-                <Text className="text-white text-sm font-semibold text-center">Try Again</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* No Search Results State */}
-          {!isLoading && !error && debouncedSearch &&
-           filteredMatches.length === 0 && filteredJobs.length === 0 && (
-            <View className="bg-gray-50 rounded-xl p-6 items-center">
-              <Text className="text-gray-600 text-base font-semibold mb-2">
-                No results for "{searchQuery}"
-              </Text>
-              <Text className="text-gray-500 text-sm text-center mb-3">
-                Try different keywords or clear your search
-              </Text>
-              <TouchableOpacity
-                onPress={() => setSearchQuery('')}
-                className="bg-primary-blue rounded-lg py-2 px-4"
-              >
-                <Text className="text-white text-sm font-semibold">Clear Search</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* No Jobs State */}
-          {!isLoading && !error && !debouncedSearch &&
-           (matchesData?.myJobMatches?.matches?.length === 0) &&
-           (jobsData?.jobPostings?.length === 0 || !jobsData) && (
-            <View className="bg-gray-50 rounded-xl p-6 items-center">
-              <Text className="text-gray-600 text-base font-semibold mb-2">No Jobs Available</Text>
-              <Text className="text-gray-500 text-sm text-center mb-3">
-                {useMatchData
-                  ? 'Complete your profile to get personalized job recommendations'
-                  : 'Check back later for new opportunities'
-                }
-              </Text>
-              <TouchableOpacity
-                onPress={refetch}
-                className="bg-primary-blue rounded-lg py-2 px-4"
-              >
-                <Text className="text-white text-sm font-semibold">Refresh</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* Job Listings - Show filtered matches if available */}
-          {!isLoading && useMatchData && filteredMatches.map((jobMatch: any) => (
-            <JobCard
-              key={jobMatch.id}
-              jobMatch={jobMatch}
-              onPress={handleJobPress}
-              onSave={handleSaveJob}
-              onApply={handleApply}
-              applicationsData={applicationsData}
-            />
-          ))}
-
-          {/* Fallback: Show filtered general job postings without match data */}
-          {!isLoading && !useMatchData && filteredJobs.map((item: any) => {
-            const job = item.jobPosting;
-            // Transform job posting to match expected format
-            const jobMatch = {
-              id: job.id,
-              matchPercentage: 0,
-              jobPosting: job,
-              isSaved: false,
-              isApplied: false,
-              recommendation: '',
-              missingSkills: [],
-            };
-            return (
-              <JobCard
-                key={job.id}
-                jobMatch={jobMatch}
-                onPress={handleJobPress}
-                onSave={handleSaveJob}
-                onApply={handleApply}
-                applicationsData={applicationsData}
-              />
-            );
-          })}
-
-          {/* Pagination */}
-          {useMatchData && matchesData?.myJobMatches && 
-           (matchesData.myJobMatches.hasNext || matchesData.myJobMatches.hasPrevious) && (
-            <View className="flex-row justify-between items-center mb-6">
-              {matchesData.myJobMatches.hasPrevious && (
-                <TouchableOpacity
-                  onPress={() => setPage(page - 1)}
-                  className="bg-primary-blue rounded-xl py-3 px-6"
-                >
-                  <Text className="text-white text-sm font-semibold">Previous</Text>
-                </TouchableOpacity>
-              )}
-              <View className="flex-1" />
-              {matchesData.myJobMatches.hasNext && (
-                <TouchableOpacity
-                  onPress={() => setPage(page + 1)}
-                  className="bg-primary-blue rounded-xl py-3 px-6"
-                >
-                  <Text className="text-white text-sm font-semibold">Next</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          )}
-        </View>
+        )}
       </ScrollView>
+
+      {/* Google Calendar Connection Modal */}
+      <Modal
+        visible={showCalendarModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCalendarModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowCalendarModal(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={(e) => e.stopPropagation()}
+            style={styles.calendarModalContent}
+          >
+            {/* Header */}
+            <View style={styles.calendarModalHeader}>
+              <Text style={styles.calendarModalTitle}>Connect Calendar</Text>
+              <Text style={styles.calendarModalSubtitle}>Required to select interview time slots</Text>
+            </View>
+
+            {/* Calendar Connection Component */}
+            <View style={styles.calendarConnectionWrapper}>
+              <GoogleCalendarConnection
+                onConnectionChange={(connected) => {
+                  if (connected) {
+                    setShowCalendarModal(false);
+                    refetchCalendarStatus();
+                  }
+                }}
+              />
+            </View>
+
+            {/* Footer */}
+            <View style={styles.calendarModalFooter}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setShowCalendarModal(false);
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </CandidateLayout>
-    <SearchModal
-      visible={showSearchModal}
-      onClose={() => setShowSearchModal(false)}
-      onNavigate={(route) => {
-        setShowSearchModal(false);
-        onSearchNavigate?.(route);
-      }}
-    />
-    </>
   );
 }
+
+const styles = StyleSheet.create({
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 160,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginTop: 8,
+    marginBottom: 12,
+    // Shadow
+    shadowColor: '#818CF8',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  searchInput: {
+    flex: 1,
+    marginLeft: 12,
+    fontSize: 15,
+    color: '#1F2937',
+  },
+  clearButton: {
+    marginLeft: 8,
+    padding: 4,
+  },
+  tabsContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#E5E7EB',
+    borderRadius: 10,
+    padding: 3,
+    marginBottom: 12,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  tabActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  tabTextActive: {
+    color: '#437EF4',
+  },
+  filtersScroll: {
+    marginBottom: 20,
+  },
+  filtersContent: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  filterChip: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: '#E5E7EB',
+  },
+  filterChipActive: {
+    backgroundColor: '#437EF4',
+  },
+  filterChipText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6B7280',
+  },
+  filterChipTextActive: {
+    color: '#FFFFFF',
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 15,
+    color: '#6B7280',
+  },
+  errorContainer: {
+    backgroundColor: '#FEE2E2',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+  },
+  errorTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#DC2626',
+    marginBottom: 8,
+  },
+  errorText: {
+    fontSize: 14,
+    color: '#DC2626',
+    marginBottom: 16,
+  },
+  retryButton: {
+    backgroundColor: '#DC2626',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  retryText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  emptyContainer: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 16,
+    padding: 32,
+    alignItems: 'center',
+  },
+  emptyIconContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#E5E7EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  clearSearchButton: {
+    backgroundColor: '#437EF4',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  clearSearchText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  refreshButton: {
+    backgroundColor: '#437EF4',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  refreshText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  jobsList: {
+    gap: 16,
+  },
+  applicationsList: {
+    gap: 0,
+  },
+  cardWrapper: {
+    marginBottom: 0,
+  },
+  loadMoreButton: {
+    backgroundColor: '#437EF4',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  loadMoreText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  // Calendar Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  calendarModalContent: {
+    width: '90%',
+    maxWidth: 380,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 30,
+    elevation: 20,
+  },
+  calendarModalHeader: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  calendarModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  calendarModalSubtitle: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginTop: 4,
+  },
+  calendarConnectionWrapper: {
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 16,
+  },
+  calendarModalFooter: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  cancelButton: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#374151',
+  },
+});

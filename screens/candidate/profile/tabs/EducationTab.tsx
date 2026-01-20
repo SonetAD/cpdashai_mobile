@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, TextInput, Platform } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import { View, Text, TouchableOpacity, TextInput, StyleSheet, Dimensions } from 'react-native';
+import { Canvas, RoundedRect, LinearGradient as SkiaLinearGradient, vec, Shadow } from '@shopify/react-native-skia';
+import { GlassDatePicker, DatePickerTrigger } from '../../../../components/ui/GlassDatePicker';
+import { GlassButton } from '../../../../components/ui/GlassButton';
 import { EditIcon, DeleteIcon } from '../../../../components/profile/Icons';
 import {
   useAddEducationMutation,
@@ -8,6 +10,8 @@ import {
   useDeleteEducationMutation,
 } from '../../../../services/api';
 import { useAlert } from '../../../../contexts/AlertContext';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface EducationEntry {
   id: string;
@@ -36,10 +40,16 @@ export const EducationTab: React.FC<EducationTabProps> = ({ educationList, setEd
     grade: '',
   });
 
-  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
-  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
-  const [startDate, setStartDate] = useState(new Date());
-  const [endDate, setEndDate] = useState(new Date());
+  // Date picker modal states
+  const [datePickerConfig, setDatePickerConfig] = useState<{
+    visible: boolean;
+    field: 'startDate' | 'endDate';
+    minDate?: Date;
+    selectedDate?: Date;
+  }>({
+    visible: false,
+    field: 'startDate',
+  });
 
   const [addEducation, { isLoading: isAdding }] = useAddEducationMutation();
   const [updateEducation, { isLoading: isUpdating }] = useUpdateEducationMutation();
@@ -153,8 +163,6 @@ export const EducationTab: React.FC<EducationTabProps> = ({ educationList, setEd
       endDate: edu.endDate,
       grade: edu.grade,
     });
-    setStartDate(new Date(edu.startDate));
-    setEndDate(new Date(edu.endDate));
     setShowAddEducation(true);
   };
 
@@ -215,94 +223,120 @@ export const EducationTab: React.FC<EducationTabProps> = ({ educationList, setEd
     setShowAddEducation(false);
   };
 
-  const handleStartDateChange = (_event: any, selectedDate?: Date) => {
-    setShowStartDatePicker(Platform.OS === 'ios');
-    if (selectedDate) {
-      setStartDate(selectedDate);
-      setNewEducation({
-        ...newEducation,
-        startDate: selectedDate.toLocaleDateString('en-US'),
-      });
+  // Helper to parse date string (MM/DD/YYYY format)
+  const parseDateString = (dateStr?: string): Date | undefined => {
+    if (!dateStr) return undefined;
+    const parts = dateStr.split('/');
+    if (parts.length === 3) {
+      const month = parseInt(parts[0], 10) - 1;
+      const day = parseInt(parts[1], 10);
+      const year = parseInt(parts[2], 10);
+      if (!isNaN(month) && !isNaN(day) && !isNaN(year)) {
+        return new Date(year, month, day);
+      }
     }
+    return undefined;
   };
 
-  const handleEndDateChange = (_event: any, selectedDate?: Date) => {
-    setShowEndDatePicker(Platform.OS === 'ios');
-    if (selectedDate) {
-      if (newEducation.startDate) {
-        const start = new Date(newEducation.startDate);
-        if (selectedDate <= start) {
-          showAlert({
-            type: 'error',
-            title: 'Invalid Date',
-            message: 'End date must be after start date.',
-            buttons: [{ text: 'OK', style: 'default' }],
-          });
-          return;
-        }
+  // Open date picker modal
+  const openDatePicker = (field: 'startDate' | 'endDate') => {
+    let minDate: Date | undefined;
+    let selectedDate: Date | undefined;
+
+    // For end date, set minDate to start date + 1 day
+    if (field === 'endDate' && newEducation.startDate) {
+      const startDate = parseDateString(newEducation.startDate);
+      if (startDate) {
+        minDate = new Date(startDate.getTime() + 24 * 60 * 60 * 1000);
       }
-      setEndDate(selectedDate);
-      setNewEducation({
-        ...newEducation,
-        endDate: selectedDate.toLocaleDateString('en-US'),
-      });
     }
+    selectedDate = parseDateString(newEducation[field]);
+
+    setDatePickerConfig({
+      visible: true,
+      field,
+      minDate,
+      selectedDate,
+    });
+  };
+
+  // Handle date selection
+  const handleDateSelect = (date: Date) => {
+    const { field } = datePickerConfig;
+    const formattedDate = date.toLocaleDateString('en-US');
+    setNewEducation({ ...newEducation, [field]: formattedDate });
+  };
+
+  // Close date picker
+  const closeDatePicker = () => {
+    setDatePickerConfig(prev => ({ ...prev, visible: false }));
   };
 
   return (
+    <>
     <View>
       {/* Existing Education List */}
       {educationList.map((edu) => (
-        <View
-          key={edu.id}
-          className="bg-white rounded-xl p-4 mb-4 border border-gray-100"
-        >
-          <View className="flex-row justify-between items-start mb-3">
-            <View className="flex-1">
-              <Text className="text-gray-900 font-semibold text-base mb-1">
-                {edu.degree}
-              </Text>
-              <Text className="text-gray-600 text-sm mb-1">
-                {edu.institution}
-              </Text>
-              <Text className="text-gray-500 text-xs">
+        <View key={edu.id} style={styles.glassCardWrapper}>
+          {/* Skia Glass Background */}
+          <Canvas style={styles.glassCanvas}>
+            <RoundedRect x={0} y={0} width={SCREEN_WIDTH - 48} height={100} r={16}>
+              <SkiaLinearGradient
+                start={vec(0, 0)}
+                end={vec(SCREEN_WIDTH - 48, 100)}
+                colors={['rgba(255, 255, 255, 0.95)', 'rgba(241, 245, 249, 0.9)', 'rgba(255, 255, 255, 0.85)']}
+              />
+              <Shadow dx={0} dy={4} blur={12} color="rgba(37, 99, 235, 0.15)" />
+            </RoundedRect>
+            {/* Top highlight for liquid glass effect */}
+            <RoundedRect x={1} y={1} width={SCREEN_WIDTH - 50} height={40} r={15}>
+              <SkiaLinearGradient
+                start={vec(0, 0)}
+                end={vec(0, 40)}
+                colors={['rgba(255, 255, 255, 0.5)', 'rgba(255, 255, 255, 0)']}
+              />
+            </RoundedRect>
+          </Canvas>
+          {/* Content overlay */}
+          <View style={styles.glassCardContent}>
+            <View style={styles.summaryContent}>
+              <Text style={styles.summaryTitle}>{edu.degree || 'Degree'}</Text>
+              <Text style={styles.summarySubtitle}>{edu.institution || 'Institution'}</Text>
+              <Text style={styles.summaryMeta}>
+                {edu.fieldOfStudy && `${edu.fieldOfStudy} • `}
                 {edu.startDate} - {edu.endDate}
+                {edu.grade && ` • Grade: ${edu.grade}`}
               </Text>
             </View>
-            <View className="flex-row gap-3">
+            <View style={styles.summaryActions}>
               <TouchableOpacity
+                style={styles.summaryActionButton}
                 onPress={() => handleEditEducation(edu)}
-                activeOpacity={0.7}
               >
-                <EditIcon />
+                <Text style={styles.summaryActionEdit}>Edit</Text>
               </TouchableOpacity>
               <TouchableOpacity
+                style={styles.summaryActionButton}
                 onPress={() => handleDeleteEducation(edu.id)}
-                activeOpacity={0.7}
               >
-                <DeleteIcon />
+                <Text style={styles.summaryActionDelete}>Delete</Text>
               </TouchableOpacity>
             </View>
           </View>
-          <Text className="text-gray-500 text-sm">
-            {edu.fieldOfStudy} • Grade: {edu.grade}
-          </Text>
         </View>
       ))}
 
       {/* Add Education Form */}
       {showAddEducation && (
-        <View className="bg-white rounded-xl p-4 mb-4 border border-gray-100">
-          <Text className="text-gray-900 font-bold text-lg mb-4">
-            Education
+        <View style={styles.formCard}>
+          <Text style={styles.formTitle}>
+            {editingEducationId ? 'Edit Education' : 'Add Education'}
           </Text>
 
-          <View className="mb-4">
-            <Text className="text-gray-600 text-sm mb-2">
-              Degree / Qualification
-            </Text>
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Degree / Qualification</Text>
             <TextInput
-              className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-700"
+              style={styles.input}
               placeholder="Bachelor of Science in Computer Science"
               placeholderTextColor="#9CA3AF"
               value={newEducation.degree}
@@ -312,12 +346,10 @@ export const EducationTab: React.FC<EducationTabProps> = ({ educationList, setEd
             />
           </View>
 
-          <View className="mb-4">
-            <Text className="text-gray-600 text-sm mb-2">
-              Institution Name
-            </Text>
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Institution Name</Text>
             <TextInput
-              className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-700"
+              style={styles.input}
               placeholder="Enter institution name"
               placeholderTextColor="#9CA3AF"
               value={newEducation.institution}
@@ -327,12 +359,10 @@ export const EducationTab: React.FC<EducationTabProps> = ({ educationList, setEd
             />
           </View>
 
-          <View className="mb-4">
-            <Text className="text-gray-600 text-sm mb-2">
-              Field of Study / Major
-            </Text>
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Field of Study / Major</Text>
             <TextInput
-              className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-700"
+              style={styles.input}
               placeholder="UI/UX Design"
               placeholderTextColor="#9CA3AF"
               value={newEducation.fieldOfStudy}
@@ -342,97 +372,196 @@ export const EducationTab: React.FC<EducationTabProps> = ({ educationList, setEd
             />
           </View>
 
-          <View className="mb-4">
-            <Text className="text-gray-600 text-sm mb-2">Start Date</Text>
-            <TouchableOpacity
-              onPress={() => setShowStartDatePicker(true)}
-              className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3"
-            >
-              <Text className={newEducation.startDate ? "text-gray-700" : "text-gray-400"}>
-                {newEducation.startDate || 'MM/DD/YYYY'}
-              </Text>
-            </TouchableOpacity>
-            {showStartDatePicker && (
-              <DateTimePicker
-                value={startDate}
-                mode="date"
-                display="default"
-                onChange={handleStartDateChange}
+          <View style={styles.inputRow}>
+            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+              <Text style={styles.inputLabel}>Start Date</Text>
+              <DatePickerTrigger
+                value={newEducation.startDate}
+                placeholder="Select start date"
+                onPress={() => openDatePicker('startDate')}
               />
-            )}
+            </View>
+            <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+              <Text style={styles.inputLabel}>End Date</Text>
+              <DatePickerTrigger
+                value={newEducation.endDate}
+                placeholder="Select end date"
+                onPress={() => openDatePicker('endDate')}
+              />
+            </View>
           </View>
 
-          <View className="mb-4">
-            <Text className="text-gray-600 text-sm mb-2">End Date</Text>
-            <TouchableOpacity
-              onPress={() => setShowEndDatePicker(true)}
-              className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3"
-            >
-              <Text className={newEducation.endDate ? "text-gray-700" : "text-gray-400"}>
-                {newEducation.endDate || 'MM/DD/YYYY'}
-              </Text>
-            </TouchableOpacity>
-            {showEndDatePicker && (
-              <DateTimePicker
-                value={endDate}
-                mode="date"
-                display="default"
-                onChange={handleEndDateChange}
-              />
-            )}
-          </View>
-
-          <View className="mb-4">
-            <Text className="text-gray-600 text-sm mb-2">Grade / GPA</Text>
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Grade / GPA (Optional)</Text>
             <TextInput
-              className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-700"
+              style={styles.input}
               placeholder="3.7 / 4.0"
               placeholderTextColor="#9CA3AF"
               value={newEducation.grade}
               onChangeText={(text) =>
                 setNewEducation({ ...newEducation, grade: text })
               }
-              keyboardType="numeric"
             />
           </View>
 
-          <TouchableOpacity
-            className="bg-primary-blue rounded-xl py-3 mb-3 items-center"
-            activeOpacity={0.8}
-            onPress={handleSaveEducation}
-            disabled={isAdding || isUpdating}
-          >
-            <Text className="text-white text-sm font-semibold">
-              {isAdding || isUpdating ? 'Saving...' : 'Update'}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            className="bg-gray-100 rounded-xl py-3 items-center"
-            activeOpacity={0.8}
-            onPress={resetForm}
-          >
-            <Text className="text-gray-700 text-sm font-semibold">
-              Cancel
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.buttonRow}>
+            <GlassButton
+              text={isAdding || isUpdating ? 'Saving...' : editingEducationId ? 'Update' : 'Save'}
+              width={(SCREEN_WIDTH - 72) / 2}
+              height={48}
+              onPress={handleSaveEducation}
+              disabled={isAdding || isUpdating}
+            />
+            <TouchableOpacity
+              style={styles.cancelButton}
+              activeOpacity={0.8}
+              onPress={resetForm}
+            >
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
       {/* Add Education Button */}
       {!showAddEducation && (
-        <TouchableOpacity
-          className="bg-primary-blue rounded-xl py-3 items-center"
-          activeOpacity={0.8}
+        <GlassButton
+          text={educationList.length > 0 ? 'Add More Education' : '+ Add Education'}
+          width={SCREEN_WIDTH - 48}
+          height={52}
           onPress={() => setShowAddEducation(true)}
-        >
-          <Text className="text-white text-sm font-semibold">
-            {educationList.length > 0
-              ? 'Add More Education'
-              : '+ Add Education'}
-          </Text>
-        </TouchableOpacity>
+        />
       )}
     </View>
+
+    {/* Glass Date Picker Modal */}
+    <GlassDatePicker
+      visible={datePickerConfig.visible}
+      onClose={closeDatePicker}
+      onSelect={handleDateSelect}
+      selectedDate={datePickerConfig.selectedDate}
+      minDate={datePickerConfig.minDate}
+      title={datePickerConfig.field === 'startDate' ? 'Start Date' : 'End Date'}
+    />
+    </>
   );
 };
+
+const styles = StyleSheet.create({
+  glassCardWrapper: {
+    marginBottom: 12,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  glassCanvas: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 100,
+  },
+  glassCardContent: {
+    padding: 16,
+    minHeight: 100,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  summaryContent: {
+    flex: 1,
+    marginRight: 12,
+  },
+  summaryTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 2,
+  },
+  summarySubtitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#475569',
+    marginBottom: 4,
+  },
+  summaryMeta: {
+    fontSize: 12,
+    color: '#64748B',
+    lineHeight: 18,
+  },
+  summaryActions: {
+    flexDirection: 'column',
+    gap: 8,
+    alignItems: 'flex-end',
+  },
+  summaryActionButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  summaryActionEdit: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#2563EB',
+  },
+  summaryActionDelete: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#EF4444',
+  },
+  formCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  formTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 20,
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 15,
+    color: '#1F2937',
+  },
+  inputRow: {
+    flexDirection: 'row',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  cancelButton: {
+    flex: 1,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+});

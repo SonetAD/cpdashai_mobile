@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -20,6 +21,8 @@ import {
 } from '../../../services/api';
 import TalentPartnerLayout from '../../../components/layouts/TalentPartnerLayout';
 import { useAlert } from '../../../contexts/AlertContext';
+import { GlassButton } from '../../../components/ui/GlassButton';
+import { GlassSectionCard } from '../../../components/ui/GlassSectionCard';
 
 interface CreateEditJobPostingScreenProps {
   jobId?: string;
@@ -240,9 +243,9 @@ export default function CreateEditJobPostingScreen({
 
   if (loadingJob && isEditMode) {
     return (
-      <View className="flex-1 bg-gray-50 items-center justify-center">
+      <View style={formStyles.loadingContainer}>
         <ActivityIndicator size="large" color="#437EF4" />
-        <Text className="text-gray-500 mt-4">Loading job data...</Text>
+        <Text style={formStyles.loadingText}>Loading job data...</Text>
       </View>
     );
   }
@@ -251,16 +254,14 @@ export default function CreateEditJobPostingScreen({
     <TalentPartnerLayout
       title={isEditMode ? 'Edit Job Posting' : 'Create Job Posting'}
       subtitle={isEditMode ? 'Update your job details' : 'Post a new opportunity'}
-      activeTab={activeTab}
-      onTabChange={onTabChange}
     >
       {/* Back Button */}
       {onBack && (
-        <View className="px-6 pt-4">
+        <View style={formStyles.backButtonContainer}>
           <TouchableOpacity onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             onBack();
-          }} className="flex-row items-center mb-4">
+          }} style={formStyles.backButton}>
             <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" style={{ marginRight: 6 }}>
               <Path
                 d="M15 18L9 12L15 6"
@@ -270,366 +271,504 @@ export default function CreateEditJobPostingScreen({
                 strokeLinejoin="round"
               />
             </Svg>
-            <Text className="text-primary-blue font-semibold">Back</Text>
+            <Text style={formStyles.backButtonText}>Back</Text>
           </TouchableOpacity>
         </View>
       )}
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        className="flex-1"
+        style={{ flex: 1 }}
         keyboardVerticalOffset={100}
       >
         <ScrollView
-          className="flex-1"
+          style={{ flex: 1 }}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <View className="px-6 py-6">
+          <View style={formStyles.formContainer}>
             {/* Basic Information */}
-            <View className="bg-white rounded-2xl p-5 mb-4 shadow-sm">
-              <Text className="text-gray-900 text-lg font-bold mb-4">Basic Information</Text>
+            <GlassSectionCard>
+              <Text style={formStyles.sectionTitle}>Basic Information</Text>
 
-            <Text className="text-gray-700 text-sm mb-2">Job Title *</Text>
-            <TextInput
-              className="bg-gray-50 rounded-xl p-4 mb-4 text-gray-900"
-              placeholder="e.g. Senior Full Stack Developer"
-              placeholderTextColor="#9CA3AF"
-              value={formData.title}
-              onChangeText={(text) => setFormData({ ...formData, title: text })}
-            />
+              <Text style={formStyles.fieldLabel}>Job Title *</Text>
+              <TextInput
+                style={formStyles.textInput}
+                placeholder="e.g. Senior Full Stack Developer"
+                placeholderTextColor="#9CA3AF"
+                value={formData.title}
+                onChangeText={(text) => setFormData({ ...formData, title: text })}
+              />
 
-            <Text className="text-gray-700 text-sm mb-2">Company Name *</Text>
-            <TextInput
-              className="bg-gray-50 rounded-xl p-4 mb-4 text-gray-900"
-              placeholder="e.g. Tech Innovations Inc"
-              placeholderTextColor="#9CA3AF"
-              value={formData.companyName}
-              onChangeText={(text) => setFormData({ ...formData, companyName: text })}
-            />
+              <Text style={formStyles.fieldLabel}>Company Name *</Text>
+              <TextInput
+                style={formStyles.textInput}
+                placeholder="e.g. Tech Innovations Inc"
+                placeholderTextColor="#9CA3AF"
+                value={formData.companyName}
+                onChangeText={(text) => setFormData({ ...formData, companyName: text })}
+              />
 
-            <Text className="text-gray-700 text-sm mb-2">Department</Text>
-            <TextInput
-              className="bg-gray-50 rounded-xl p-4 mb-4 text-gray-900"
-              placeholder="e.g. Engineering"
-              placeholderTextColor="#9CA3AF"
-              value={formData.department}
-              onChangeText={(text) => setFormData({ ...formData, department: text })}
-            />
+              <Text style={formStyles.fieldLabel}>Department</Text>
+              <TextInput
+                style={formStyles.textInput}
+                placeholder="e.g. Engineering"
+                placeholderTextColor="#9CA3AF"
+                value={formData.department}
+                onChangeText={(text) => setFormData({ ...formData, department: text })}
+              />
 
-            <Text className="text-gray-700 text-sm mb-2">Location *</Text>
-            <TextInput
-              className="bg-gray-50 rounded-xl p-4 mb-4 text-gray-900"
-              placeholder="e.g. San Francisco, CA"
-              placeholderTextColor="#9CA3AF"
-              value={formData.location}
-              onChangeText={(text) => setFormData({ ...formData, location: text })}
-            />
-          </View>
+              <Text style={formStyles.fieldLabel}>Location *</Text>
+              <TextInput
+                style={[formStyles.textInput, { marginBottom: 0 }]}
+                placeholder="e.g. San Francisco, CA"
+                placeholderTextColor="#9CA3AF"
+                value={formData.location}
+                onChangeText={(text) => setFormData({ ...formData, location: text })}
+              />
+            </GlassSectionCard>
 
-          {/* Job Details */}
-          <View className="bg-white rounded-2xl p-5 mb-4 shadow-sm">
-            <Text className="text-gray-900 text-lg font-bold mb-4">Job Details</Text>
+            {/* Job Details */}
+            <GlassSectionCard>
+              <Text style={formStyles.sectionTitle}>Job Details</Text>
 
-            <Text className="text-gray-700 text-sm mb-2">Description *</Text>
-            <TextInput
-              className="bg-gray-50 rounded-xl p-4 mb-4 text-gray-900"
-              placeholder="Describe the role..."
-              placeholderTextColor="#9CA3AF"
-              multiline
-              numberOfLines={6}
-              textAlignVertical="top"
-              value={formData.description}
-              onChangeText={(text) => setFormData({ ...formData, description: text })}
-            />
+              <Text style={formStyles.fieldLabel}>Description *</Text>
+              <TextInput
+                style={[formStyles.textInput, formStyles.multilineInput]}
+                placeholder="Describe the role..."
+                placeholderTextColor="#9CA3AF"
+                multiline
+                numberOfLines={6}
+                textAlignVertical="top"
+                value={formData.description}
+                onChangeText={(text) => setFormData({ ...formData, description: text })}
+              />
 
-            <Text className="text-gray-700 text-sm mb-2">Responsibilities (one per line)</Text>
-            <TextInput
-              className="bg-gray-50 rounded-xl p-4 mb-4 text-gray-900"
-              placeholder="Design and develop..."
-              placeholderTextColor="#9CA3AF"
-              multiline
-              numberOfLines={5}
-              textAlignVertical="top"
-              value={formData.responsibilities}
-              onChangeText={(text) => setFormData({ ...formData, responsibilities: text })}
-            />
-          </View>
+              <Text style={formStyles.fieldLabel}>Responsibilities (one per line)</Text>
+              <TextInput
+                style={[formStyles.textInput, formStyles.multilineInput, { marginBottom: 0 }]}
+                placeholder="Design and develop..."
+                placeholderTextColor="#9CA3AF"
+                multiline
+                numberOfLines={5}
+                textAlignVertical="top"
+                value={formData.responsibilities}
+                onChangeText={(text) => setFormData({ ...formData, responsibilities: text })}
+              />
+            </GlassSectionCard>
 
-          {/* Employment Type */}
-          <View className="bg-white rounded-2xl p-5 mb-4 shadow-sm">
-            <Text className="text-gray-900 text-lg font-bold mb-4">Employment Type</Text>
+            {/* Employment Type */}
+            <GlassSectionCard>
+              <Text style={formStyles.sectionTitle}>Employment Type</Text>
 
-            <Text className="text-gray-700 text-sm mb-2">Job Type</Text>
-            <View className="flex-row flex-wrap mb-4">
-              {[
-                { label: 'Full Time', value: 'full_time' },
-                { label: 'Part Time', value: 'part_time' },
-                { label: 'Contract', value: 'contract' },
-                { label: 'Internship', value: 'internship' },
-                { label: 'Freelance', value: 'freelance' },
-              ].map((option) => (
-                <TouchableOpacity
-                  key={option.value}
-                  onPress={() => {
-                    Haptics.selectionAsync();
-                    setFormData({ ...formData, jobType: option.value });
-                  }}
-                  className={`px-4 py-2 rounded-full mr-2 mb-2 ${
-                    formData.jobType === option.value ? 'bg-primary-blue' : 'bg-gray-200'
-                  }`}
-                >
-                  <Text
-                    className={`text-sm ${
-                      formData.jobType === option.value ? 'text-white' : 'text-gray-700'
-                    }`}
+              <Text style={formStyles.fieldLabel}>Job Type</Text>
+              <View style={formStyles.toggleContainer}>
+                {[
+                  { label: 'Full Time', value: 'full_time' },
+                  { label: 'Part Time', value: 'part_time' },
+                  { label: 'Contract', value: 'contract' },
+                  { label: 'Internship', value: 'internship' },
+                  { label: 'Freelance', value: 'freelance' },
+                ].map((option) => (
+                  <TouchableOpacity
+                    key={option.value}
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      setFormData({ ...formData, jobType: option.value });
+                    }}
+                    style={[
+                      formStyles.togglePill,
+                      formData.jobType === option.value
+                        ? formStyles.togglePillActive
+                        : formStyles.togglePillInactive
+                    ]}
                   >
-                    {option.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+                    <Text
+                      style={[
+                        formStyles.togglePillText,
+                        formData.jobType === option.value
+                          ? formStyles.togglePillTextActive
+                          : formStyles.togglePillTextInactive
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
 
-            <Text className="text-gray-700 text-sm mb-2">Work Mode</Text>
-            <View className="flex-row flex-wrap mb-4">
-              {[
-                { label: 'Remote', value: 'remote' },
-                { label: 'Onsite', value: 'onsite' },
-                { label: 'Hybrid', value: 'hybrid' },
-              ].map((option) => (
-                <TouchableOpacity
-                  key={option.value}
-                  onPress={() => {
-                    Haptics.selectionAsync();
-                    setFormData({ ...formData, workMode: option.value });
-                  }}
-                  className={`px-4 py-2 rounded-full mr-2 mb-2 ${
-                    formData.workMode === option.value ? 'bg-primary-blue' : 'bg-gray-200'
-                  }`}
-                >
-                  <Text
-                    className={`text-sm ${
-                      formData.workMode === option.value ? 'text-white' : 'text-gray-700'
-                    }`}
+              <Text style={formStyles.fieldLabel}>Work Mode</Text>
+              <View style={formStyles.toggleContainer}>
+                {[
+                  { label: 'Remote', value: 'remote' },
+                  { label: 'Onsite', value: 'onsite' },
+                  { label: 'Hybrid', value: 'hybrid' },
+                ].map((option) => (
+                  <TouchableOpacity
+                    key={option.value}
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      setFormData({ ...formData, workMode: option.value });
+                    }}
+                    style={[
+                      formStyles.togglePill,
+                      formData.workMode === option.value
+                        ? formStyles.togglePillActive
+                        : formStyles.togglePillInactive
+                    ]}
                   >
-                    {option.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+                    <Text
+                      style={[
+                        formStyles.togglePillText,
+                        formData.workMode === option.value
+                          ? formStyles.togglePillTextActive
+                          : formStyles.togglePillTextInactive
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
 
-            <Text className="text-gray-700 text-sm mb-2">Experience Level</Text>
-            <View className="flex-row flex-wrap mb-4">
-              {[
-                { label: 'Entry', value: 'entry' },
-                { label: 'Junior', value: 'junior' },
-                { label: 'Mid', value: 'mid' },
-                { label: 'Senior', value: 'senior' },
-                { label: 'Lead', value: 'lead' },
-                { label: 'Principal', value: 'principal' },
-              ].map((option) => (
-                <TouchableOpacity
-                  key={option.value}
-                  onPress={() => {
-                    Haptics.selectionAsync();
-                    setFormData({ ...formData, experienceLevel: option.value });
-                  }}
-                  className={`px-4 py-2 rounded-full mr-2 mb-2 ${
-                    formData.experienceLevel === option.value ? 'bg-primary-blue' : 'bg-gray-200'
-                  }`}
-                >
-                  <Text
-                    className={`text-sm ${
-                      formData.experienceLevel === option.value ? 'text-white' : 'text-gray-700'
-                    }`}
+              <Text style={formStyles.fieldLabel}>Experience Level</Text>
+              <View style={formStyles.toggleContainer}>
+                {[
+                  { label: 'Entry', value: 'entry' },
+                  { label: 'Junior', value: 'junior' },
+                  { label: 'Mid', value: 'mid' },
+                  { label: 'Senior', value: 'senior' },
+                  { label: 'Lead', value: 'lead' },
+                  { label: 'Principal', value: 'principal' },
+                ].map((option) => (
+                  <TouchableOpacity
+                    key={option.value}
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      setFormData({ ...formData, experienceLevel: option.value });
+                    }}
+                    style={[
+                      formStyles.togglePill,
+                      formData.experienceLevel === option.value
+                        ? formStyles.togglePillActive
+                        : formStyles.togglePillInactive
+                    ]}
                   >
-                    {option.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <View className="flex-row gap-3">
-              <View className="flex-1">
-                <Text className="text-gray-700 text-sm mb-2">Min Years</Text>
-                <TextInput
-                  className="bg-gray-50 rounded-xl p-4 text-gray-900"
-                  placeholder="0"
-                  placeholderTextColor="#9CA3AF"
-                  keyboardType="numeric"
-                  value={formData.yearsOfExperienceMin}
-                  onChangeText={(text) =>
-                    setFormData({ ...formData, yearsOfExperienceMin: text })
-                  }
-                />
+                    <Text
+                      style={[
+                        formStyles.togglePillText,
+                        formData.experienceLevel === option.value
+                          ? formStyles.togglePillTextActive
+                          : formStyles.togglePillTextInactive
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
               </View>
-              <View className="flex-1">
-                <Text className="text-gray-700 text-sm mb-2">Max Years</Text>
-                <TextInput
-                  className="bg-gray-50 rounded-xl p-4 text-gray-900"
-                  placeholder="10"
-                  placeholderTextColor="#9CA3AF"
-                  keyboardType="numeric"
-                  value={formData.yearsOfExperienceMax}
-                  onChangeText={(text) =>
-                    setFormData({ ...formData, yearsOfExperienceMax: text })
-                  }
-                />
+
+              <View style={formStyles.rowContainer}>
+                <View style={{ flex: 1 }}>
+                  <Text style={formStyles.fieldLabel}>Min Years</Text>
+                  <TextInput
+                    style={[formStyles.textInput, { marginBottom: 0 }]}
+                    placeholder="0"
+                    placeholderTextColor="#9CA3AF"
+                    keyboardType="numeric"
+                    value={formData.yearsOfExperienceMin}
+                    onChangeText={(text) =>
+                      setFormData({ ...formData, yearsOfExperienceMin: text })
+                    }
+                  />
+                </View>
+                <View style={{ width: 12 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={formStyles.fieldLabel}>Max Years</Text>
+                  <TextInput
+                    style={[formStyles.textInput, { marginBottom: 0 }]}
+                    placeholder="10"
+                    placeholderTextColor="#9CA3AF"
+                    keyboardType="numeric"
+                    value={formData.yearsOfExperienceMax}
+                    onChangeText={(text) =>
+                      setFormData({ ...formData, yearsOfExperienceMax: text })
+                    }
+                  />
+                </View>
               </View>
-            </View>
-          </View>
+            </GlassSectionCard>
 
-          {/* Skills & Requirements */}
-          <View className="bg-white rounded-2xl p-5 mb-4 shadow-sm">
-            <Text className="text-gray-900 text-lg font-bold mb-4">Skills & Requirements</Text>
+            {/* Skills & Requirements */}
+            <GlassSectionCard>
+              <Text style={formStyles.sectionTitle}>Skills & Requirements</Text>
 
-            <Text className="text-gray-700 text-sm mb-2">Required Skills * (comma-separated)</Text>
-            <TextInput
-              className="bg-gray-50 rounded-xl p-4 mb-4 text-gray-900"
-              placeholder="JavaScript, React, Node.js, Python"
-              placeholderTextColor="#9CA3AF"
-              value={formData.requiredSkills}
-              onChangeText={(text) => setFormData({ ...formData, requiredSkills: text })}
-            />
+              <Text style={formStyles.fieldLabel}>Required Skills * (comma-separated)</Text>
+              <TextInput
+                style={formStyles.textInput}
+                placeholder="JavaScript, React, Node.js, Python"
+                placeholderTextColor="#9CA3AF"
+                value={formData.requiredSkills}
+                onChangeText={(text) => setFormData({ ...formData, requiredSkills: text })}
+              />
 
-            <Text className="text-gray-700 text-sm mb-2">Preferred Skills (comma-separated)</Text>
-            <TextInput
-              className="bg-gray-50 rounded-xl p-4 mb-4 text-gray-900"
-              placeholder="TypeScript, GraphQL, Docker"
-              placeholderTextColor="#9CA3AF"
-              value={formData.preferredSkills}
-              onChangeText={(text) => setFormData({ ...formData, preferredSkills: text })}
-            />
+              <Text style={formStyles.fieldLabel}>Preferred Skills (comma-separated)</Text>
+              <TextInput
+                style={formStyles.textInput}
+                placeholder="TypeScript, GraphQL, Docker"
+                placeholderTextColor="#9CA3AF"
+                value={formData.preferredSkills}
+                onChangeText={(text) => setFormData({ ...formData, preferredSkills: text })}
+              />
 
-            <Text className="text-gray-700 text-sm mb-2">
-              Required Qualifications * (one per line)
-            </Text>
-            <TextInput
-              className="bg-gray-50 rounded-xl p-4 mb-4 text-gray-900"
-              placeholder="Bachelor's degree in Computer Science"
-              placeholderTextColor="#9CA3AF"
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-              value={formData.requiredQualifications}
-              onChangeText={(text) => setFormData({ ...formData, requiredQualifications: text })}
-            />
+              <Text style={formStyles.fieldLabel}>Required Qualifications * (one per line)</Text>
+              <TextInput
+                style={[formStyles.textInput, formStyles.multilineInput]}
+                placeholder="Bachelor's degree in Computer Science"
+                placeholderTextColor="#9CA3AF"
+                multiline
+                numberOfLines={4}
+                textAlignVertical="top"
+                value={formData.requiredQualifications}
+                onChangeText={(text) => setFormData({ ...formData, requiredQualifications: text })}
+              />
 
-            <Text className="text-gray-700 text-sm mb-2">Certifications (comma-separated)</Text>
-            <TextInput
-              className="bg-gray-50 rounded-xl p-4 mb-4 text-gray-900"
-              placeholder="AWS Certified, PMP"
-              placeholderTextColor="#9CA3AF"
-              value={formData.certifications}
-              onChangeText={(text) => setFormData({ ...formData, certifications: text })}
-            />
-          </View>
+              <Text style={formStyles.fieldLabel}>Certifications (comma-separated)</Text>
+              <TextInput
+                style={[formStyles.textInput, { marginBottom: 0 }]}
+                placeholder="AWS Certified, PMP"
+                placeholderTextColor="#9CA3AF"
+                value={formData.certifications}
+                onChangeText={(text) => setFormData({ ...formData, certifications: text })}
+              />
+            </GlassSectionCard>
 
-          {/* Compensation */}
-          <View className="bg-white rounded-2xl p-5 mb-4 shadow-sm">
-            <Text className="text-gray-900 text-lg font-bold mb-4">Compensation</Text>
+            {/* Compensation */}
+            <GlassSectionCard>
+              <Text style={formStyles.sectionTitle}>Compensation</Text>
 
-            <View className="flex-row gap-3 mb-4">
-              <View className="flex-1">
-                <Text className="text-gray-700 text-sm mb-2">Min Salary</Text>
-                <TextInput
-                  className="bg-gray-50 rounded-xl p-4 text-gray-900"
-                  placeholder="120000"
-                  placeholderTextColor="#9CA3AF"
-                  keyboardType="numeric"
-                  value={formData.salaryMin}
-                  onChangeText={(text) => setFormData({ ...formData, salaryMin: text })}
-                />
+              <View style={[formStyles.rowContainer, { marginBottom: 16 }]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={formStyles.fieldLabel}>Min Salary</Text>
+                  <TextInput
+                    style={[formStyles.textInput, { marginBottom: 0 }]}
+                    placeholder="120000"
+                    placeholderTextColor="#9CA3AF"
+                    keyboardType="numeric"
+                    value={formData.salaryMin}
+                    onChangeText={(text) => setFormData({ ...formData, salaryMin: text })}
+                  />
+                </View>
+                <View style={{ width: 12 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={formStyles.fieldLabel}>Max Salary</Text>
+                  <TextInput
+                    style={[formStyles.textInput, { marginBottom: 0 }]}
+                    placeholder="180000"
+                    placeholderTextColor="#9CA3AF"
+                    keyboardType="numeric"
+                    value={formData.salaryMax}
+                    onChangeText={(text) => setFormData({ ...formData, salaryMax: text })}
+                  />
+                </View>
               </View>
-              <View className="flex-1">
-                <Text className="text-gray-700 text-sm mb-2">Max Salary</Text>
-                <TextInput
-                  className="bg-gray-50 rounded-xl p-4 text-gray-900"
-                  placeholder="180000"
-                  placeholderTextColor="#9CA3AF"
-                  keyboardType="numeric"
-                  value={formData.salaryMax}
-                  onChangeText={(text) => setFormData({ ...formData, salaryMax: text })}
-                />
-              </View>
-            </View>
 
-            <Text className="text-gray-700 text-sm mb-2">Benefits (one per line)</Text>
-            <TextInput
-              className="bg-gray-50 rounded-xl p-4 mb-4 text-gray-900"
-              placeholder="Health insurance&#10;401k matching&#10;Remote work"
-              placeholderTextColor="#9CA3AF"
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-              value={formData.benefits}
-              onChangeText={(text) => setFormData({ ...formData, benefits: text })}
-            />
-          </View>
+              <Text style={formStyles.fieldLabel}>Benefits (one per line)</Text>
+              <TextInput
+                style={[formStyles.textInput, formStyles.multilineInput, { marginBottom: 0 }]}
+                placeholder="Health insurance&#10;401k matching&#10;Remote work"
+                placeholderTextColor="#9CA3AF"
+                multiline
+                numberOfLines={4}
+                textAlignVertical="top"
+                value={formData.benefits}
+                onChangeText={(text) => setFormData({ ...formData, benefits: text })}
+              />
+            </GlassSectionCard>
 
-          {/* Status */}
-          <View className="bg-white rounded-2xl p-5 mb-6 shadow-sm">
-            <Text className="text-gray-900 text-lg font-bold mb-4">Status</Text>
+            {/* Status */}
+            <GlassSectionCard style={{ marginBottom: 24 }}>
+              <Text style={formStyles.sectionTitle}>Status</Text>
 
-            <View className="flex-row flex-wrap">
-              {[
-                { label: 'Active', value: 'active' },
-                { label: 'Draft', value: 'draft' },
-                ...(isEditMode
-                  ? [
-                      { label: 'Paused', value: 'paused' },
-                      { label: 'Closed', value: 'closed' },
-                      { label: 'Filled', value: 'filled' },
-                    ]
-                  : []),
-              ].map((option) => (
-                <TouchableOpacity
-                  key={option.value}
-                  onPress={() => {
-                    Haptics.selectionAsync();
-                    setFormData({ ...formData, status: option.value });
-                  }}
-                  className={`px-4 py-2 rounded-full mr-2 mb-2 ${
-                    formData.status === option.value ? 'bg-primary-blue' : 'bg-gray-200'
-                  }`}
-                >
-                  <Text
-                    className={`text-sm ${
-                      formData.status === option.value ? 'text-white' : 'text-gray-700'
-                    }`}
+              <View style={formStyles.toggleContainer}>
+                {[
+                  { label: 'Active', value: 'active' },
+                  { label: 'Draft', value: 'draft' },
+                  ...(isEditMode
+                    ? [
+                        { label: 'Paused', value: 'paused' },
+                        { label: 'Closed', value: 'closed' },
+                        { label: 'Filled', value: 'filled' },
+                      ]
+                    : []),
+                ].map((option) => (
+                  <TouchableOpacity
+                    key={option.value}
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      setFormData({ ...formData, status: option.value });
+                    }}
+                    style={[
+                      formStyles.togglePill,
+                      formData.status === option.value
+                        ? formStyles.togglePillActive
+                        : formStyles.togglePillInactive
+                    ]}
                   >
-                    {option.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
+                    <Text
+                      style={[
+                        formStyles.togglePillText,
+                        formData.status === option.value
+                          ? formStyles.togglePillTextActive
+                          : formStyles.togglePillTextInactive
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </GlassSectionCard>
 
-          {/* Submit Button */}
-          <TouchableOpacity
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              handleSubmit();
-            }}
-            disabled={isCreating || isUpdating}
-            className="bg-primary-blue rounded-xl py-4 items-center mb-6"
-          >
-            <Text className="text-white text-base font-semibold">
-              {isCreating || isUpdating
+            {/* Submit Button */}
+            <GlassButton
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                handleSubmit();
+              }}
+              disabled={isCreating || isUpdating}
+              loading={isCreating || isUpdating}
+              text={isCreating || isUpdating
                 ? isEditMode
                   ? 'Updating...'
                   : 'Creating...'
                 : isEditMode
                 ? 'Update Job Posting'
                 : 'Create Job Posting'}
-            </Text>
-          </TouchableOpacity>
+              colors={['#437EF4', '#5B8AF5']}
+              height={52}
+              borderRadius={12}
+              fullWidth
+              style={{ marginBottom: 24 }}
+            />
 
-          {/* Bottom padding for navbar */}
-          <View style={{ height: 100 }} />
-        </View>
-      </ScrollView>
+            {/* Bottom padding for navbar */}
+            <View style={{ height: 100 }} />
+          </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </TalentPartnerLayout>
   );
 }
+
+// Glass design styles
+const formStyles = StyleSheet.create({
+  // Loading state
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: '#F9FAFB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    color: '#6B7280',
+    marginTop: 16,
+    fontSize: 14,
+  },
+
+  // Back button
+  backButtonContainer: {
+    paddingHorizontal: 24,
+    paddingTop: 16,
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  backButtonText: {
+    color: '#437EF4',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+
+  // Form container
+  formContainer: {
+    paddingHorizontal: 24,
+    paddingVertical: 24,
+  },
+
+  // Section title
+  sectionTitle: {
+    color: '#111827',
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 16,
+  },
+
+  // Field label
+  fieldLabel: {
+    color: '#4B5563',
+    fontSize: 14,
+    marginBottom: 8,
+    fontWeight: '500',
+  },
+
+  // Text input
+  textInput: {
+    backgroundColor: 'rgba(255, 255, 255, 0.6)',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    color: '#111827',
+    fontSize: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(229, 231, 235, 0.8)',
+  },
+
+  // Multiline input
+  multilineInput: {
+    minHeight: 100,
+    textAlignVertical: 'top',
+  },
+
+  // Toggle container
+  toggleContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 16,
+  },
+
+  // Toggle pill
+  togglePill: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginRight: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+  },
+  togglePillActive: {
+    backgroundColor: 'rgba(67, 126, 244, 0.95)',
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  togglePillInactive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    borderColor: 'rgba(200, 200, 200, 0.5)',
+  },
+  togglePillText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  togglePillTextActive: {
+    color: '#FFFFFF',
+  },
+  togglePillTextInactive: {
+    color: '#4B5563',
+  },
+
+  // Row container
+  rowContainer: {
+    flexDirection: 'row',
+  },
+});

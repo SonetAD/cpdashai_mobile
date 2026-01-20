@@ -1,13 +1,18 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, TextInput, Platform, Modal, TouchableWithoutFeedback, ScrollView } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { EditIcon, DeleteIcon, ChevronDownIcon } from '../../../../components/profile/Icons';
+import { View, Text, TouchableOpacity, TextInput, Modal, TouchableWithoutFeedback, ScrollView, StyleSheet, Dimensions } from 'react-native';
+import { Canvas, RoundedRect, LinearGradient as SkiaLinearGradient, vec, Shadow, BackdropBlur, Fill, Group } from '@shopify/react-native-skia';
+import { BlurView } from '@react-native-community/blur';
+import { GlassDatePicker, DatePickerTrigger } from '../../../../components/ui/GlassDatePicker';
+import { GlassButton } from '../../../../components/ui/GlassButton';
+import { ChevronDownIcon } from '../../../../components/profile/Icons';
 import {
   useAddExperienceMutation,
   useUpdateExperienceMutation,
   useDeleteExperienceMutation,
 } from '../../../../services/api';
 import { useAlert } from '../../../../contexts/AlertContext';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface ExperienceEntry {
   id: string;
@@ -61,10 +66,16 @@ export const ExperienceTab: React.FC<ExperienceTabProps> = ({ experienceList, se
     current: false,
   });
 
-  const [showExpStartDatePicker, setShowExpStartDatePicker] = useState(false);
-  const [showExpEndDatePicker, setShowExpEndDatePicker] = useState(false);
-  const [expStartDate, setExpStartDate] = useState(new Date());
-  const [expEndDate, setExpEndDate] = useState(new Date());
+  // Date picker modal states
+  const [datePickerConfig, setDatePickerConfig] = useState<{
+    visible: boolean;
+    field: 'startDate' | 'endDate';
+    minDate?: Date;
+    selectedDate?: Date;
+  }>({
+    visible: false,
+    field: 'startDate',
+  });
 
   const [addExperience, { isLoading: isAddingExperience }] = useAddExperienceMutation();
   const [updateExperience, { isLoading: isUpdatingExperience }] = useUpdateExperienceMutation();
@@ -188,12 +199,6 @@ export const ExperienceTab: React.FC<ExperienceTabProps> = ({ experienceList, se
       description: exp.description,
       current: exp.current,
     });
-    if (exp.startDate) {
-      setExpStartDate(new Date(exp.startDate));
-    }
-    if (exp.endDate) {
-      setExpEndDate(new Date(exp.endDate));
-    }
     setShowAddExperience(true);
   };
 
@@ -258,38 +263,53 @@ export const ExperienceTab: React.FC<ExperienceTabProps> = ({ experienceList, se
     setShowAddExperience(false);
   };
 
-  const handleExpStartDateChange = (_event: any, selectedDate?: Date) => {
-    setShowExpStartDatePicker(Platform.OS === 'ios');
-    if (selectedDate) {
-      setExpStartDate(selectedDate);
-      setNewExperience({
-        ...newExperience,
-        startDate: selectedDate.toLocaleDateString('en-US'),
-      });
+  // Helper to parse date string (MM/DD/YYYY format)
+  const parseDateString = (dateStr?: string): Date | undefined => {
+    if (!dateStr) return undefined;
+    const parts = dateStr.split('/');
+    if (parts.length === 3) {
+      const month = parseInt(parts[0], 10) - 1;
+      const day = parseInt(parts[1], 10);
+      const year = parseInt(parts[2], 10);
+      if (!isNaN(month) && !isNaN(day) && !isNaN(year)) {
+        return new Date(year, month, day);
+      }
     }
+    return undefined;
   };
 
-  const handleExpEndDateChange = (_event: any, selectedDate?: Date) => {
-    setShowExpEndDatePicker(Platform.OS === 'ios');
-    if (selectedDate) {
-      if (newExperience.startDate) {
-        const start = new Date(newExperience.startDate);
-        if (selectedDate <= start) {
-          showAlert({
-            type: 'error',
-            title: 'Invalid Date',
-            message: 'End date must be after start date.',
-            buttons: [{ text: 'OK', style: 'default' }],
-          });
-          return;
-        }
+  // Open date picker modal
+  const openDatePicker = (field: 'startDate' | 'endDate') => {
+    let minDate: Date | undefined;
+    let selectedDate: Date | undefined;
+
+    // For end date, set minDate to start date + 1 day
+    if (field === 'endDate' && newExperience.startDate) {
+      const startDate = parseDateString(newExperience.startDate);
+      if (startDate) {
+        minDate = new Date(startDate.getTime() + 24 * 60 * 60 * 1000);
       }
-      setExpEndDate(selectedDate);
-      setNewExperience({
-        ...newExperience,
-        endDate: selectedDate.toLocaleDateString('en-US'),
-      });
     }
+    selectedDate = parseDateString(newExperience[field]);
+
+    setDatePickerConfig({
+      visible: true,
+      field,
+      minDate,
+      selectedDate,
+    });
+  };
+
+  // Handle date selection
+  const handleDateSelect = (date: Date) => {
+    const { field } = datePickerConfig;
+    const formattedDate = date.toLocaleDateString('en-US');
+    setNewExperience({ ...newExperience, [field]: formattedDate });
+  };
+
+  // Close date picker
+  const closeDatePicker = () => {
+    setDatePickerConfig(prev => ({ ...prev, visible: false }));
   };
 
   return (
@@ -297,66 +317,77 @@ export const ExperienceTab: React.FC<ExperienceTabProps> = ({ experienceList, se
       <View>
         {/* Existing Experience List */}
         {experienceList.map((exp) => (
-          <View
-            key={exp.id}
-            className="bg-white rounded-xl p-4 mb-4 border border-gray-100"
-          >
-            <View className="flex-row justify-between items-start mb-3">
-              <View className="flex-1">
-                <Text className="text-gray-900 font-semibold text-base mb-1">
-                  {exp.position}
-                </Text>
-                <Text className="text-gray-600 text-sm mb-1">
-                  {exp.company}
-                </Text>
-                <Text className="text-gray-500 text-xs mb-1">
-                  {exp.location}
-                </Text>
-                <Text className="text-gray-500 text-xs">
+          <View key={exp.id} style={styles.glassCardWrapper}>
+            {/* Skia Glass Background */}
+            <Canvas style={styles.glassCanvasLarge}>
+              <RoundedRect x={0} y={0} width={SCREEN_WIDTH - 48} height={120} r={16}>
+                <SkiaLinearGradient
+                  start={vec(0, 0)}
+                  end={vec(SCREEN_WIDTH - 48, 120)}
+                  colors={['rgba(255, 255, 255, 0.95)', 'rgba(241, 245, 249, 0.9)', 'rgba(255, 255, 255, 0.85)']}
+                />
+                <Shadow dx={0} dy={4} blur={12} color="rgba(37, 99, 235, 0.15)" />
+              </RoundedRect>
+              {/* Top highlight for liquid glass effect */}
+              <RoundedRect x={1} y={1} width={SCREEN_WIDTH - 50} height={45} r={15}>
+                <SkiaLinearGradient
+                  start={vec(0, 0)}
+                  end={vec(0, 45)}
+                  colors={['rgba(255, 255, 255, 0.5)', 'rgba(255, 255, 255, 0)']}
+                />
+              </RoundedRect>
+            </Canvas>
+            {/* Content overlay */}
+            <View style={styles.glassCardContentLarge}>
+              <View style={styles.summaryContent}>
+                <Text style={styles.summaryTitle}>{exp.position || 'Position'}</Text>
+                <Text style={styles.summarySubtitle}>{exp.company || 'Company'}</Text>
+                <Text style={styles.summaryMeta}>
+                  {exp.location && `${exp.location} • `}
                   {exp.startDate} - {exp.current ? 'Present' : exp.endDate}
                 </Text>
+                {exp.employmentType && (
+                  <Text style={styles.summaryMeta}>
+                    {EMPLOYMENT_TYPE_LABELS[exp.employmentType] || exp.employmentType}
+                  </Text>
+                )}
+                {exp.description && (
+                  <Text style={styles.summaryDescription} numberOfLines={1}>
+                    {exp.description}
+                  </Text>
+                )}
               </View>
-              <View className="flex-row gap-3">
+              <View style={styles.summaryActions}>
                 <TouchableOpacity
+                  style={styles.summaryActionButton}
                   onPress={() => handleEditExperience(exp)}
-                  activeOpacity={0.7}
                   disabled={isDeletingExperience}
                 >
-                  <EditIcon />
+                  <Text style={styles.summaryActionEdit}>Edit</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
+                  style={styles.summaryActionButton}
                   onPress={() => handleDeleteExperience(exp.index)}
-                  activeOpacity={0.7}
                   disabled={isDeletingExperience}
                 >
-                  <DeleteIcon />
+                  <Text style={styles.summaryActionDelete}>Delete</Text>
                 </TouchableOpacity>
               </View>
             </View>
-            {exp.employmentType && (
-              <Text className="text-gray-500 text-sm mb-2">
-                {EMPLOYMENT_TYPE_LABELS[exp.employmentType] || exp.employmentType}
-              </Text>
-            )}
-            <Text className="text-gray-600 text-sm">
-              {exp.description}
-            </Text>
           </View>
         ))}
 
         {/* Add/Edit Experience Form */}
         {showAddExperience && (
-          <View className="bg-white rounded-xl p-4 mb-4 border border-gray-100">
-            <Text className="text-gray-900 font-bold text-lg mb-4">
+          <View style={styles.formCard}>
+            <Text style={styles.formTitle}>
               {editingExperienceIndex !== null ? 'Edit Experience' : 'Add Experience'}
             </Text>
 
-            <View className="mb-4">
-              <Text className="text-gray-600 text-sm mb-2">
-                Job Title / Role
-              </Text>
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Job Title / Role</Text>
               <TextInput
-                className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-700"
+                style={styles.input}
                 placeholder="UX/UI Designer"
                 placeholderTextColor="#9CA3AF"
                 value={newExperience.position}
@@ -366,12 +397,10 @@ export const ExperienceTab: React.FC<ExperienceTabProps> = ({ experienceList, se
               />
             </View>
 
-            <View className="mb-4">
-              <Text className="text-gray-600 text-sm mb-2">
-                Company Name
-              </Text>
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Company Name</Text>
               <TextInput
-                className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-700"
+                style={styles.input}
                 placeholder="Chawla Solutions"
                 placeholderTextColor="#9CA3AF"
                 value={newExperience.company}
@@ -381,10 +410,10 @@ export const ExperienceTab: React.FC<ExperienceTabProps> = ({ experienceList, se
               />
             </View>
 
-            <View className="mb-4">
-              <Text className="text-gray-600 text-sm mb-2">Location</Text>
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Location</Text>
               <TextInput
-                className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-700"
+                style={styles.input}
                 placeholder="Toronto, Canada"
                 placeholderTextColor="#9CA3AF"
                 value={newExperience.location}
@@ -394,86 +423,50 @@ export const ExperienceTab: React.FC<ExperienceTabProps> = ({ experienceList, se
               />
             </View>
 
-            <View className="mb-4">
-              <Text className="text-gray-600 text-sm mb-2">Start Date</Text>
-              <TouchableOpacity
-                onPress={() => setShowExpStartDatePicker(true)}
-                className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3"
-              >
-                <Text className={newExperience.startDate ? "text-gray-700" : "text-gray-400"}>
-                  {newExperience.startDate || 'MM/DD/YYYY'}
-                </Text>
-              </TouchableOpacity>
-              {showExpStartDatePicker && (
-                <DateTimePicker
-                  value={expStartDate}
-                  mode="date"
-                  display="default"
-                  onChange={handleExpStartDateChange}
-                />
-              )}
-            </View>
-
-            <View className="mb-4">
-              <TouchableOpacity
-                onPress={() =>
-                  setNewExperience({
-                    ...newExperience,
-                    current: !newExperience.current,
-                    endDate: !newExperience.current ? '' : newExperience.endDate,
-                  })
-                }
-                className="flex-row items-center"
-                activeOpacity={0.7}
-              >
-                <View
-                  className={`w-5 h-5 rounded border-2 mr-3 items-center justify-center ${
-                    newExperience.current
-                      ? 'bg-primary-blue border-primary-blue'
-                      : 'border-gray-300'
-                  }`}
-                >
-                  {newExperience.current && (
-                    <Text className="text-white text-xs">✓</Text>
-                  )}
-                </View>
-                <Text className="text-gray-600 text-sm">
-                  I currently work here
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {!newExperience.current && (
-              <View className="mb-4">
-                <Text className="text-gray-600 text-sm mb-2">End Date</Text>
-                <TouchableOpacity
-                  onPress={() => setShowExpEndDatePicker(true)}
-                  className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3"
-                >
-                  <Text className={newExperience.endDate ? "text-gray-700" : "text-gray-400"}>
-                    {newExperience.endDate || 'MM/DD/YYYY'}
-                  </Text>
-                </TouchableOpacity>
-                {showExpEndDatePicker && (
-                  <DateTimePicker
-                    value={expEndDate}
-                    mode="date"
-                    display="default"
-                    onChange={handleExpEndDateChange}
-                  />
-                )}
+            {/* Current Job Checkbox */}
+            <TouchableOpacity
+              style={styles.checkboxRow}
+              onPress={() =>
+                setNewExperience({
+                  ...newExperience,
+                  current: !newExperience.current,
+                  endDate: !newExperience.current ? '' : newExperience.endDate,
+                })
+              }
+            >
+              <View style={[styles.checkbox, newExperience.current && styles.checkboxChecked]}>
+                {newExperience.current && <Text style={styles.checkmark}>✓</Text>}
               </View>
-            )}
+              <Text style={styles.checkboxLabel}>I currently work here</Text>
+            </TouchableOpacity>
 
-            <View className="mb-4">
-              <Text className="text-gray-600 text-sm mb-2">
-                Employment Type
-              </Text>
+            <View style={styles.inputRow}>
+              <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+                <Text style={styles.inputLabel}>Start Date</Text>
+                <DatePickerTrigger
+                  value={newExperience.startDate}
+                  placeholder="Select start date"
+                  onPress={() => openDatePicker('startDate')}
+                />
+              </View>
+              <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+                <Text style={styles.inputLabel}>End Date</Text>
+                <DatePickerTrigger
+                  value={newExperience.current ? 'Present' : newExperience.endDate}
+                  placeholder="Select end date"
+                  onPress={() => openDatePicker('endDate')}
+                  disabled={newExperience.current}
+                />
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Employment Type</Text>
               <TouchableOpacity
                 onPress={() => setShowEmploymentTypeModal(true)}
-                className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 flex-row items-center justify-between"
+                style={styles.selectButton}
               >
-                <Text className={newExperience.employmentType ? "text-gray-700" : "text-gray-400"}>
+                <Text style={newExperience.employmentType ? styles.selectText : styles.selectPlaceholder}>
                   {newExperience.employmentType ?
                     EMPLOYMENT_TYPE_LABELS[newExperience.employmentType] || newExperience.employmentType :
                     'Select employment type'}
@@ -482,12 +475,10 @@ export const ExperienceTab: React.FC<ExperienceTabProps> = ({ experienceList, se
               </TouchableOpacity>
             </View>
 
-            <View className="mb-4">
-              <Text className="text-gray-600 text-sm mb-2">
-                Description / Responsibilities
-              </Text>
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Description / Responsibilities</Text>
               <TextInput
-                className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-700"
+                style={[styles.input, styles.multilineInput]}
                 placeholder="Write here..."
                 placeholderTextColor="#9CA3AF"
                 value={newExperience.description}
@@ -500,38 +491,35 @@ export const ExperienceTab: React.FC<ExperienceTabProps> = ({ experienceList, se
               />
             </View>
 
-            <TouchableOpacity
-              className="bg-primary-blue rounded-xl py-3 mb-3 items-center"
-              activeOpacity={0.8}
-              onPress={handleSaveExperience}
-              disabled={isAddingExperience || isUpdatingExperience}
-            >
-              <Text className="text-white text-sm font-semibold">
-                {isAddingExperience || isUpdatingExperience
+            <View style={styles.buttonRow}>
+              <GlassButton
+                text={isAddingExperience || isUpdatingExperience
                   ? 'Saving...'
                   : editingExperienceIndex !== null
-                  ? 'Update Experience'
-                  : 'Add Experience'}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              className="bg-gray-100 rounded-xl py-3 items-center"
-              activeOpacity={0.8}
-              onPress={resetForm}
-            >
-              <Text className="text-gray-700 text-sm font-semibold">
-                Cancel
-              </Text>
-            </TouchableOpacity>
+                  ? 'Update'
+                  : 'Save'}
+                width={(SCREEN_WIDTH - 72) / 2}
+                height={48}
+                onPress={handleSaveExperience}
+                disabled={isAddingExperience || isUpdatingExperience}
+              />
+              <TouchableOpacity
+                style={styles.cancelButton}
+                activeOpacity={0.8}
+                onPress={resetForm}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
         {/* Add Experience Button */}
         {!showAddExperience && (
-          <TouchableOpacity
-            className="bg-primary-blue rounded-xl py-3 items-center"
-            activeOpacity={0.8}
+          <GlassButton
+            text={experienceList.length > 0 ? 'Add More Experience' : '+ Add Experience'}
+            width={SCREEN_WIDTH - 48}
+            height={52}
             onPress={() => {
               setNewExperience({
                 index: experienceList.length,
@@ -546,63 +534,123 @@ export const ExperienceTab: React.FC<ExperienceTabProps> = ({ experienceList, se
               });
               setShowAddExperience(true);
             }}
-          >
-            <Text className="text-white text-sm font-semibold">
-              {experienceList.length > 0
-                ? 'Add More Experience'
-                : '+ Add Experience'}
-            </Text>
-          </TouchableOpacity>
+          />
         )}
       </View>
 
-      {/* Employment Type Modal */}
+      {/* Glass Date Picker Modal */}
+      <GlassDatePicker
+        visible={datePickerConfig.visible}
+        onClose={closeDatePicker}
+        onSelect={handleDateSelect}
+        selectedDate={datePickerConfig.selectedDate}
+        minDate={datePickerConfig.minDate}
+        title={datePickerConfig.field === 'startDate' ? 'Start Date' : 'End Date'}
+      />
+
+      {/* Employment Type Modal - True Glassmorphism */}
       <Modal
         visible={showEmploymentTypeModal}
         transparent
-        animationType="slide"
+        animationType="fade"
         onRequestClose={() => setShowEmploymentTypeModal(false)}
       >
         <TouchableWithoutFeedback onPress={() => setShowEmploymentTypeModal(false)}>
-          <View className="flex-1 justify-end bg-black/50">
+          <View style={styles.glassModalOverlay}>
             <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
-              <View className="bg-white rounded-t-3xl p-6">
-                <View className="flex-row justify-between items-center mb-4">
-                  <Text className="text-gray-900 text-lg font-bold">
-                    Select Employment Type
-                  </Text>
-                  <TouchableOpacity
-                    onPress={() => setShowEmploymentTypeModal(false)}
-                    activeOpacity={0.7}
-                  >
-                    <Text className="text-gray-500 text-2xl">×</Text>
-                  </TouchableOpacity>
-                </View>
-                <ScrollView className="max-h-96">
-                  {EMPLOYMENT_TYPES.map((type) => (
+              <View style={styles.glassModalContainer}>
+                {/* BlurView - Real frosted glass blur */}
+                <BlurView
+                  style={styles.glassModalBlur}
+                  blurType="light"
+                  blurAmount={20}
+                  reducedTransparencyFallbackColor="rgba(255, 255, 255, 0.95)"
+                />
+
+                {/* Skia Glass Polish Layer */}
+                <Canvas style={styles.glassModalCanvas}>
+                  {/* Semi-transparent glass gradient */}
+                  <RoundedRect x={0} y={0} width={SCREEN_WIDTH - 48} height={420} r={24}>
+                    <SkiaLinearGradient
+                      start={vec(0, 0)}
+                      end={vec(0, 420)}
+                      colors={[
+                        'rgba(255, 255, 255, 0.75)',
+                        'rgba(248, 250, 252, 0.65)',
+                        'rgba(255, 255, 255, 0.70)',
+                      ]}
+                    />
+                  </RoundedRect>
+
+                  {/* Top highlight - liquid glass reflection */}
+                  <RoundedRect x={1} y={1} width={SCREEN_WIDTH - 50} height={50} r={23}>
+                    <SkiaLinearGradient
+                      start={vec(0, 0)}
+                      end={vec(0, 50)}
+                      colors={['rgba(255, 255, 255, 0.6)', 'rgba(255, 255, 255, 0)']}
+                    />
+                  </RoundedRect>
+
+                  {/* Subtle border for glass edge */}
+                  <RoundedRect
+                    x={0.5}
+                    y={0.5}
+                    width={SCREEN_WIDTH - 49}
+                    height={419}
+                    r={23.5}
+                    style="stroke"
+                    strokeWidth={1}
+                    color="rgba(255, 255, 255, 0.5)"
+                  />
+                </Canvas>
+
+                {/* Content */}
+                <View style={styles.glassModalContent}>
+                  <View style={styles.glassModalHeader}>
+                    <Text style={styles.glassModalTitle}>Employment Type</Text>
                     <TouchableOpacity
-                      key={type}
-                      onPress={() => {
-                        setNewExperience({ ...newExperience, employmentType: type });
-                        setShowEmploymentTypeModal(false);
-                      }}
-                      className={`py-4 px-4 border-b border-gray-100 ${
-                        newExperience.employmentType === type ? 'bg-blue-50' : ''
-                      }`}
+                      onPress={() => setShowEmploymentTypeModal(false)}
+                      style={styles.glassModalCloseButton}
                       activeOpacity={0.7}
                     >
-                      <Text
-                        className={`text-base ${
-                          newExperience.employmentType === type
-                            ? 'text-primary-blue font-semibold'
-                            : 'text-gray-700'
-                        }`}
-                      >
-                        {EMPLOYMENT_TYPE_LABELS[type]}
-                      </Text>
+                      <Text style={styles.glassModalCloseText}>×</Text>
                     </TouchableOpacity>
-                  ))}
-                </ScrollView>
+                  </View>
+
+                  <View style={styles.glassModalOptions}>
+                    {EMPLOYMENT_TYPES.map((type, index) => {
+                      const isSelected = newExperience.employmentType === type;
+                      return (
+                        <TouchableOpacity
+                          key={type}
+                          onPress={() => {
+                            setNewExperience({ ...newExperience, employmentType: type });
+                            setShowEmploymentTypeModal(false);
+                          }}
+                          style={[
+                            styles.glassModalOption,
+                            isSelected && styles.glassModalOptionSelected,
+                            index === EMPLOYMENT_TYPES.length - 1 && styles.glassModalOptionLast,
+                          ]}
+                          activeOpacity={0.7}
+                        >
+                          <View style={[
+                            styles.glassModalRadio,
+                            isSelected && styles.glassModalRadioSelected,
+                          ]}>
+                            {isSelected && <View style={styles.glassModalRadioDot} />}
+                          </View>
+                          <Text style={[
+                            styles.glassModalOptionText,
+                            isSelected && styles.glassModalOptionTextSelected,
+                          ]}>
+                            {EMPLOYMENT_TYPE_LABELS[type]}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
               </View>
             </TouchableWithoutFeedback>
           </View>
@@ -611,3 +659,293 @@ export const ExperienceTab: React.FC<ExperienceTabProps> = ({ experienceList, se
     </>
   );
 };
+
+const styles = StyleSheet.create({
+  glassCardWrapper: {
+    marginBottom: 12,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  glassCanvasLarge: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 120,
+  },
+  glassCardContentLarge: {
+    padding: 16,
+    minHeight: 120,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  summaryContent: {
+    flex: 1,
+    marginRight: 12,
+  },
+  summaryTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 2,
+  },
+  summarySubtitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#475569',
+    marginBottom: 4,
+  },
+  summaryMeta: {
+    fontSize: 12,
+    color: '#64748B',
+    lineHeight: 18,
+  },
+  summaryDescription: {
+    fontSize: 13,
+    color: '#64748B',
+    marginTop: 6,
+    lineHeight: 18,
+  },
+  summaryActions: {
+    flexDirection: 'column',
+    gap: 8,
+    alignItems: 'flex-end',
+  },
+  summaryActionButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  summaryActionEdit: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#2563EB',
+  },
+  summaryActionDelete: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#EF4444',
+  },
+  formCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  formTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 20,
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 15,
+    color: '#1F2937',
+  },
+  multilineInput: {
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  inputRow: {
+    flexDirection: 'row',
+  },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#D1D5DB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  checkboxChecked: {
+    backgroundColor: '#2563EB',
+    borderColor: '#2563EB',
+  },
+  checkmark: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  checkboxLabel: {
+    marginLeft: 10,
+    fontSize: 14,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  selectButton: {
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  selectText: {
+    fontSize: 15,
+    color: '#1F2937',
+  },
+  selectPlaceholder: {
+    fontSize: 15,
+    color: '#9CA3AF',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  cancelButton: {
+    flex: 1,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  // Glass Modal styles
+  glassModalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.5)',
+  },
+  glassModalContainer: {
+    width: SCREEN_WIDTH - 48,
+    height: 420,
+    borderRadius: 24,
+    overflow: 'hidden',
+    shadowColor: 'rgba(37, 99, 235, 1)',
+    shadowOffset: { width: 0, height: 15 },
+    shadowOpacity: 0.25,
+    shadowRadius: 30,
+    elevation: 15,
+  },
+  glassModalBlur: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 24,
+  },
+  glassModalCanvas: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 24,
+  },
+  glassModalContent: {
+    flex: 1,
+    padding: 24,
+  },
+  glassModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(148, 163, 184, 0.15)',
+  },
+  glassModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  glassModalCloseButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(241, 245, 249, 0.9)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  glassModalCloseText: {
+    fontSize: 20,
+    color: '#64748B',
+    fontWeight: '500',
+    marginTop: -2,
+  },
+  glassModalOptions: {
+    flex: 1,
+  },
+  glassModalOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(148, 163, 184, 0.1)',
+  },
+  glassModalOptionSelected: {
+    backgroundColor: 'rgba(37, 99, 235, 0.08)',
+    marginHorizontal: -4,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    borderBottomColor: 'transparent',
+  },
+  glassModalOptionLast: {
+    borderBottomWidth: 0,
+  },
+  glassModalRadio: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: '#CBD5E1',
+    marginRight: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  glassModalRadioSelected: {
+    borderColor: '#2563EB',
+    borderWidth: 2,
+  },
+  glassModalRadioDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#2563EB',
+  },
+  glassModalOptionText: {
+    fontSize: 16,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  glassModalOptionTextSelected: {
+    color: '#2563EB',
+    fontWeight: '600',
+  },
+});

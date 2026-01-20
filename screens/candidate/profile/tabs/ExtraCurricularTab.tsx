@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,11 +6,10 @@ import {
   ScrollView,
   StyleSheet,
   TextInput,
-  Modal,
-  ActivityIndicator,
-  Platform,
-  Alert,
+  useWindowDimensions,
 } from 'react-native';
+import * as Haptics from 'expo-haptics';
+import { useSelector } from 'react-redux';
 import {
   useAddExtraCurricularMutation,
   useDeleteExtraCurricularMutation,
@@ -20,6 +19,9 @@ import {
   UpdateExtraCurricularInput
 } from '../../../../services/api';
 import { useAlert } from '../../../../contexts/AlertContext';
+import { GlassDatePicker, DatePickerTrigger } from '../../../../components/ui/GlassDatePicker';
+import { KeyboardAwareFormModal, FormInputGroup } from '../../../../components/ui/KeyboardAwareFormModal';
+import { GlassButton } from '../../../../components/ui/GlassButton';
 import Svg, { Path } from 'react-native-svg';
 
 interface ExtraCurricularActivity {
@@ -94,8 +96,8 @@ export default function ExtraCurricularTab() {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentlyActive, setCurrentlyActive] = useState(false);
-  const [showMonthPicker, setShowMonthPicker] = useState<'start' | 'end' | null>(null);
-  const [showYearPicker, setShowYearPicker] = useState<'start' | 'end' | null>(null);
+  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
+  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
 
   const { data: profileData, refetch: refetchProfile } = useGetCandidateProfileQuery();
   const [addExtraCurricular] = useAddExtraCurricularMutation();
@@ -103,14 +105,64 @@ export default function ExtraCurricularTab() {
   const [updateExtraCurricular] = useUpdateExtraCurricularMutation();
   const { showAlert } = useAlert();
 
+  // Auth check
+  const authToken = useSelector((state: any) => state.auth?.token);
+
+  // Responsive dimensions
+  const { width: screenWidth } = useWindowDimensions();
+  const isSmallScreen = screenWidth < 360;
+  const isMediumScreen = screenWidth < 400;
+
+  // Responsive card styles
+  const responsiveCardStyles = useMemo(() => ({
+    iconBadgeOuter: {
+      width: isSmallScreen ? 40 : isMediumScreen ? 46 : 52,
+      height: isSmallScreen ? 40 : isMediumScreen ? 46 : 52,
+      borderRadius: isSmallScreen ? 12 : 16,
+      marginRight: isSmallScreen ? 8 : 12,
+    },
+    iconBadge: {
+      width: isSmallScreen ? 36 : isMediumScreen ? 42 : 48,
+      height: isSmallScreen ? 36 : isMediumScreen ? 42 : 48,
+      borderRadius: isSmallScreen ? 10 : 14,
+    },
+    activityName: {
+      fontSize: isSmallScreen ? 14 : isMediumScreen ? 15 : 17,
+      lineHeight: isSmallScreen ? 18 : isMediumScreen ? 20 : 22,
+    },
+    activityRole: {
+      fontSize: isSmallScreen ? 12 : isMediumScreen ? 13 : 14,
+    },
+    actionButton: {
+      width: isSmallScreen ? 30 : isMediumScreen ? 33 : 36,
+      height: isSmallScreen ? 30 : isMediumScreen ? 33 : 36,
+      borderRadius: isSmallScreen ? 8 : 10,
+    },
+    cardPadding: {
+      padding: isSmallScreen ? 12 : 16,
+    },
+    metaBadge: {
+      paddingHorizontal: isSmallScreen ? 8 : 12,
+      paddingVertical: isSmallScreen ? 6 : 8,
+    },
+    metaText: {
+      fontSize: isSmallScreen ? 10 : 12,
+    },
+    description: {
+      fontSize: isSmallScreen ? 12 : 14,
+      padding: isSmallScreen ? 8 : 10,
+    },
+    organizationText: {
+      fontSize: isSmallScreen ? 11 : 13,
+    },
+  }), [isSmallScreen, isMediumScreen]);
+
   // Form fields
   const [activityName, setActivityName] = useState('');
   const [role, setRole] = useState('');
   const [organization, setOrganization] = useState('');
-  const [startMonth, setStartMonth] = useState('');
-  const [startYear, setStartYear] = useState('');
-  const [endMonth, setEndMonth] = useState('');
-  const [endYear, setEndYear] = useState('');
+  const [startDate, setStartDate] = useState<Date | null>(null);
+  const [endDate, setEndDate] = useState<Date | null>(null);
   const [description, setDescription] = useState('');
 
   // Get activities from profile and map snake_case to camelCase
@@ -132,10 +184,8 @@ export default function ExtraCurricularTab() {
     setActivityName('');
     setRole('');
     setOrganization('');
-    setStartMonth('');
-    setStartYear('');
-    setEndMonth('');
-    setEndYear('');
+    setStartDate(null);
+    setEndDate(null);
     setDescription('');
     setCurrentlyActive(false);
     setEditingIndex(null);
@@ -150,17 +200,16 @@ export default function ExtraCurricularTab() {
 
     // Parse dates
     if (item.startDate) {
-      const startDate = new Date(item.startDate);
-      setStartMonth(months[startDate.getMonth()]);
-      setStartYear(startDate.getFullYear().toString());
+      setStartDate(new Date(item.startDate));
+    } else {
+      setStartDate(null);
     }
 
     if (item.endDate) {
-      const endDate = new Date(item.endDate);
-      setEndMonth(months[endDate.getMonth()]);
-      setEndYear(endDate.getFullYear().toString());
+      setEndDate(new Date(item.endDate));
       setCurrentlyActive(false);
     } else {
+      setEndDate(null);
       setCurrentlyActive(true);
     }
 
@@ -168,10 +217,11 @@ export default function ExtraCurricularTab() {
   };
 
   const handleDelete = async (index: number) => {
-    Alert.alert(
-      'Delete Extra-curricular Activity',
-      'Are you sure you want to delete this activity?',
-      [
+    showAlert({
+      type: 'warning',
+      title: 'Delete Activity',
+      message: 'Are you sure you want to delete this extra-curricular activity? This action cannot be undone.',
+      buttons: [
         {
           text: 'Cancel',
           style: 'cancel',
@@ -205,10 +255,21 @@ export default function ExtraCurricularTab() {
           },
         },
       ],
-    );
+    });
   };
 
   const handleAddActivity = async () => {
+    // Auth check before API call
+    if (!authToken) {
+      showAlert({
+        type: 'error',
+        title: 'Session Expired',
+        message: 'Please log in again to continue.',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
+      return;
+    }
+
     if (!activityName.trim()) {
       showAlert({
         type: 'error',
@@ -222,18 +283,16 @@ export default function ExtraCurricularTab() {
     setIsSubmitting(true);
 
     try {
-      // Create date strings from month and year
+      // Create date strings from Date objects
       let startDateStr: string | undefined;
       let endDateStr: string | undefined;
 
-      if (startMonth && startYear) {
-        const monthIndex = months.indexOf(startMonth) + 1;
-        startDateStr = `${startYear}-${monthIndex.toString().padStart(2, '0')}-01`;
+      if (startDate) {
+        startDateStr = startDate.toISOString().split('T')[0];
       }
 
-      if (endMonth && endYear && !currentlyActive) {
-        const monthIndex = months.indexOf(endMonth) + 1;
-        endDateStr = `${endYear}-${monthIndex.toString().padStart(2, '0')}-01`;
+      if (endDate && !currentlyActive) {
+        endDateStr = endDate.toISOString().split('T')[0];
       }
 
       const input: AddExtraCurricularInput = {
@@ -286,6 +345,17 @@ export default function ExtraCurricularTab() {
   };
 
   const handleUpdateActivity = async () => {
+    // Auth check before API call
+    if (!authToken) {
+      showAlert({
+        type: 'error',
+        title: 'Session Expired',
+        message: 'Please log in again to continue.',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
+      return;
+    }
+
     if (editingIndex === null) return;
 
     if (!activityName.trim()) {
@@ -301,18 +371,16 @@ export default function ExtraCurricularTab() {
     setIsSubmitting(true);
 
     try {
-      // Create date strings from month and year
+      // Create date strings from Date objects
       let startDateStr: string | undefined;
       let endDateStr: string | undefined;
 
-      if (startMonth && startYear) {
-        const monthIndex = months.indexOf(startMonth) + 1;
-        startDateStr = `${startYear}-${monthIndex.toString().padStart(2, '0')}-01`;
+      if (startDate) {
+        startDateStr = startDate.toISOString().split('T')[0];
       }
 
-      if (endMonth && endYear && !currentlyActive) {
-        const monthIndex = months.indexOf(endMonth) + 1;
-        endDateStr = `${endYear}-${monthIndex.toString().padStart(2, '0')}-01`;
+      if (endDate && !currentlyActive) {
+        endDateStr = endDate.toISOString().split('T')[0];
       }
 
       const input: UpdateExtraCurricularInput = {
@@ -356,553 +424,382 @@ export default function ExtraCurricularTab() {
     }
   };
 
+  const formatDisplayDate = (dateStr?: string) => {
+    if (!dateStr) return null;
+    const date = new Date(dateStr);
+    return `${months[date.getMonth()]} ${date.getFullYear()}`;
+  };
+
   return (
     <>
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Extra-curricular Activities</Text>
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => setShowAddModal(true)}
-            activeOpacity={0.7}
-          >
+      <ScrollView style={glassStyles.container} showsVerticalScrollIndicator={false}>
+        {/* Add Button at Top */}
+        <TouchableOpacity
+          style={cardStyles.addButton}
+          activeOpacity={0.8}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setShowAddModal(true);
+          }}
+        >
+          <View style={cardStyles.addButtonContent}>
             <PlusIcon size={20} color="#FFFFFF" />
-            <Text style={styles.addButtonText}>Add Activity</Text>
-          </TouchableOpacity>
-        </View>
+            <Text style={cardStyles.addButtonText}>Add Activity</Text>
+          </View>
+        </TouchableOpacity>
 
         {activities.length === 0 ? (
-          <View style={styles.emptyState}>
+          <View style={glassStyles.emptyState}>
             <ActivityIcon size={48} color="#D1D5DB" />
-            <Text style={styles.emptyStateText}>
+            <Text style={glassStyles.emptyStateText}>
               No extra-curricular activities added yet
             </Text>
-            <Text style={styles.emptyStateSubtext}>
+            <Text style={glassStyles.emptyStateSubtext}>
               Add your clubs, sports, volunteering, and other activities
             </Text>
           </View>
         ) : (
-          <View style={styles.activitiesList}>
-            {activities.map((activity, index) => {
-              // Parse dates to show month and year
-              const formatDate = (dateStr?: string) => {
-                if (!dateStr) return null;
-                const date = new Date(dateStr);
-                return `${months[date.getMonth()]} ${date.getFullYear()}`;
-              };
+          <View style={{ marginBottom: 16 }}>
+            {activities.map((activity, index) => (
+              <View key={activity.id || index} style={cardStyles.cardWrapper}>
+                {/* Shadow layer */}
+                <View style={cardStyles.cardShadow} />
 
-              return (
-                <View key={activity.id || index} style={styles.activityCard}>
-                  <View style={styles.activityHeader}>
-                    <Text style={styles.activityName}>{activity.activity}</Text>
-                    <View style={styles.activityActions}>
-                      <TouchableOpacity
-                        style={styles.actionButton}
-                        onPress={() => handleEdit(activity, index)}
-                      >
-                        <EditIcon size={16} />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.actionButton}
-                        onPress={() => handleDelete(index)}
-                      >
-                        <DeleteIcon size={16} />
-                      </TouchableOpacity>
+                {/* Glass card with gradient border */}
+                <View style={cardStyles.cardOuter}>
+                  <View style={[cardStyles.cardInner, responsiveCardStyles.cardPadding]}>
+                    {/* Header Row */}
+                    <View style={cardStyles.headerRow}>
+                      {/* Activity Icon Badge with glow */}
+                      <View style={[cardStyles.iconBadgeOuter, responsiveCardStyles.iconBadgeOuter]}>
+                        <View style={[cardStyles.iconBadge, responsiveCardStyles.iconBadge]}>
+                          <ActivityIcon size={isSmallScreen ? 18 : 24} color="#3B82F6" />
+                        </View>
+                      </View>
+
+                      <View style={cardStyles.titleContainer}>
+                        <Text style={[cardStyles.activityName, responsiveCardStyles.activityName]} numberOfLines={2}>{activity.activity}</Text>
+                        {activity.role && (
+                          <Text style={[cardStyles.activityRole, responsiveCardStyles.activityRole]} numberOfLines={1}>{activity.role}</Text>
+                        )}
+                      </View>
+
+                      <View style={cardStyles.actionButtons}>
+                        <TouchableOpacity
+                          onPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            handleEdit(activity, index);
+                          }}
+                          style={[cardStyles.actionButton, responsiveCardStyles.actionButton]}
+                        >
+                          <EditIcon size={isSmallScreen ? 14 : 16} color="#64748B" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            handleDelete(index);
+                          }}
+                          style={[cardStyles.actionButton, responsiveCardStyles.actionButton]}
+                        >
+                          <DeleteIcon size={isSmallScreen ? 14 : 16} color="#DC2626" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+
+                    {activity.organization && (
+                      <View style={[cardStyles.organizationBadge, responsiveCardStyles.metaBadge]}>
+                        <Text style={[cardStyles.organizationText, responsiveCardStyles.organizationText]} numberOfLines={1}>{activity.organization}</Text>
+                      </View>
+                    )}
+
+                    {activity.description && (
+                      <Text style={[cardStyles.description, responsiveCardStyles.description]} numberOfLines={2}>{activity.description}</Text>
+                    )}
+
+                    {/* Divider */}
+                    <View style={cardStyles.divider} />
+
+                    <View style={cardStyles.metaRow}>
+                      <View style={[cardStyles.metaBadge, responsiveCardStyles.metaBadge]}>
+                        <Text style={[cardStyles.metaText, responsiveCardStyles.metaText]}>
+                          {formatDisplayDate(activity.startDate) || 'Start'} - {activity.endDate ? formatDisplayDate(activity.endDate) : 'Present'}
+                        </Text>
+                      </View>
                     </View>
                   </View>
-
-                  {activity.role && (
-                    <Text style={styles.activityRole}>{activity.role}</Text>
-                  )}
-
-                  {activity.organization && (
-                    <Text style={styles.activityOrganization}>{activity.organization}</Text>
-                  )}
-
-                  <View style={styles.activityPeriod}>
-                    <Text style={styles.periodText}>
-                      {formatDate(activity.startDate) || 'Start date'} - {' '}
-                      {activity.endDate ? formatDate(activity.endDate) : 'Present'}
-                    </Text>
-                  </View>
-
-                  {activity.description && (
-                    <Text style={styles.activityDescription}>{activity.description}</Text>
-                  )}
                 </View>
-              );
-            })}
+              </View>
+            ))}
           </View>
         )}
       </ScrollView>
 
-      {/* Add Modal */}
-      <Modal
+      {/* Add Modal - Using KeyboardAwareFormModal */}
+      <KeyboardAwareFormModal
         visible={showAddModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowAddModal(false)}
+        onClose={() => {
+          setShowAddModal(false);
+          resetForm();
+        }}
+        title="Add Extra-curricular Activity"
+        isLoading={isSubmitting}
+        footerContent={
+          <GlassButton
+            text={isSubmitting ? '' : 'Add Activity'}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              handleAddActivity();
+            }}
+            disabled={isSubmitting}
+            loading={isSubmitting}
+            colors={['#3B82F6', '#2563EB']}
+            shadowColor="rgba(37, 99, 235, 0.4)"
+            height={52}
+            borderRadius={14}
+          />
+        }
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add Extra-curricular Activity</Text>
-              <TouchableOpacity
-                onPress={() => {
-                  setShowAddModal(false);
-                  resetForm();
-                }}
-                style={styles.closeButton}
-              >
-                <Text style={styles.closeButtonText}>×</Text>
-              </TouchableOpacity>
-            </View>
+        {/* Activity Name */}
+        <FormInputGroup label="Activity Name" required>
+          <TextInput
+            style={glassStyles.input}
+            value={activityName}
+            onChangeText={setActivityName}
+            placeholder="e.g., Debate Club, Basketball Team"
+            placeholderTextColor="#9CA3AF"
+            editable={!isSubmitting}
+          />
+        </FormInputGroup>
 
-            <ScrollView
-              style={styles.modalScrollView}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.scrollContent}
-              keyboardShouldPersistTaps="handled"
-            >
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Activity Name *</Text>
-                <TextInput
-                  style={styles.input}
-                  value={activityName}
-                  onChangeText={setActivityName}
-                  placeholder="e.g., Debate Club, Basketball Team"
-                  placeholderTextColor="#9CA3AF"
-                />
+        {/* Role/Position */}
+        <FormInputGroup label="Role/Position">
+          <TextInput
+            style={glassStyles.input}
+            value={role}
+            onChangeText={setRole}
+            placeholder="e.g., President, Captain, Member"
+            placeholderTextColor="#9CA3AF"
+            editable={!isSubmitting}
+          />
+        </FormInputGroup>
+
+        {/* Organization */}
+        <FormInputGroup label="Organization">
+          <TextInput
+            style={glassStyles.input}
+            value={organization}
+            onChangeText={setOrganization}
+            placeholder="e.g., School, University, Community Center"
+            placeholderTextColor="#9CA3AF"
+            editable={!isSubmitting}
+          />
+        </FormInputGroup>
+
+        {/* Start Date */}
+        <FormInputGroup label="Start Date">
+          <DatePickerTrigger
+            value={startDate?.toLocaleDateString() || ''}
+            placeholder="Select start date"
+            onPress={() => setShowStartDatePicker(true)}
+          />
+        </FormInputGroup>
+
+        {/* Currently Active Checkbox */}
+        <View style={glassStyles.checkboxRow}>
+          <TouchableOpacity
+            style={glassStyles.checkbox}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setCurrentlyActive(!currentlyActive);
+            }}
+          >
+            {currentlyActive && (
+              <View style={glassStyles.checkboxChecked}>
+                <Text style={glassStyles.checkmark}>✓</Text>
               </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Role/Position</Text>
-                <TextInput
-                  style={styles.input}
-                  value={role}
-                  onChangeText={setRole}
-                  placeholder="e.g., President, Captain, Member"
-                  placeholderTextColor="#9CA3AF"
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Organization</Text>
-                <TextInput
-                  style={styles.input}
-                  value={organization}
-                  onChangeText={setOrganization}
-                  placeholder="e.g., School, University, Community Center"
-                  placeholderTextColor="#9CA3AF"
-                />
-              </View>
-
-              <View style={styles.formRow}>
-                <View style={[styles.formGroup, styles.halfWidth]}>
-                  <Text style={styles.label}>Start Month</Text>
-                  <TouchableOpacity
-                    style={styles.selectInput}
-                    onPress={() => setShowMonthPicker('start')}
-                  >
-                    <Text style={startMonth ? styles.selectText : styles.selectPlaceholder}>
-                      {startMonth || 'Select month'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                <View style={[styles.formGroup, styles.halfWidth]}>
-                  <Text style={styles.label}>Start Year</Text>
-                  <TouchableOpacity
-                    style={styles.selectInput}
-                    onPress={() => setShowYearPicker('start')}
-                  >
-                    <Text style={startYear ? styles.selectText : styles.selectPlaceholder}>
-                      {startYear || 'Select year'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              <View style={styles.checkboxRow}>
-                <TouchableOpacity
-                  style={styles.checkbox}
-                  onPress={() => setCurrentlyActive(!currentlyActive)}
-                >
-                  {currentlyActive && (
-                    <View style={styles.checkboxChecked}>
-                      <Text style={styles.checkmark}>✓</Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-                <Text style={styles.checkboxLabel}>Currently Active</Text>
-              </View>
-
-              {!currentlyActive && (
-                <View style={styles.formRow}>
-                  <View style={[styles.formGroup, styles.halfWidth]}>
-                    <Text style={styles.label}>End Month</Text>
-                    <TouchableOpacity
-                      style={styles.selectInput}
-                      onPress={() => setShowMonthPicker('end')}
-                    >
-                      <Text style={endMonth ? styles.selectText : styles.selectPlaceholder}>
-                        {endMonth || 'Select month'}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  <View style={[styles.formGroup, styles.halfWidth]}>
-                    <Text style={styles.label}>End Year</Text>
-                    <TouchableOpacity
-                      style={styles.selectInput}
-                      onPress={() => setShowYearPicker('end')}
-                    >
-                      <Text style={endYear ? styles.selectText : styles.selectPlaceholder}>
-                        {endYear || 'Select year'}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Description</Text>
-                <TextInput
-                  style={[styles.input, styles.textArea]}
-                  value={description}
-                  onChangeText={setDescription}
-                  placeholder="Describe your role, achievements, and activities..."
-                  placeholderTextColor="#9CA3AF"
-                  multiline
-                  numberOfLines={4}
-                />
-              </View>
-            </ScrollView>
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => {
-                  setShowAddModal(false);
-                  resetForm();
-                }}
-                disabled={isSubmitting}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
-                onPress={handleAddActivity}
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.submitButtonText}>Add Activity</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
+            )}
+          </TouchableOpacity>
+          <Text style={glassStyles.checkboxLabel}>Currently Active</Text>
         </View>
-      </Modal>
 
-      {/* Edit Modal */}
-      <Modal
+        {/* End Date */}
+        {!currentlyActive && (
+          <FormInputGroup label="End Date">
+            <DatePickerTrigger
+              value={endDate?.toLocaleDateString() || ''}
+              placeholder="Select end date"
+              onPress={() => setShowEndDatePicker(true)}
+            />
+          </FormInputGroup>
+        )}
+
+        {/* Description */}
+        <FormInputGroup label="Description">
+          <TextInput
+            style={[glassStyles.input, glassStyles.textArea]}
+            value={description}
+            onChangeText={setDescription}
+            placeholder="Describe your role, achievements, and activities..."
+            placeholderTextColor="#9CA3AF"
+            multiline
+            numberOfLines={4}
+            textAlignVertical="top"
+            editable={!isSubmitting}
+          />
+        </FormInputGroup>
+      </KeyboardAwareFormModal>
+
+      {/* Edit Modal - Using KeyboardAwareFormModal */}
+      <KeyboardAwareFormModal
         visible={showEditModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowEditModal(false)}
+        onClose={() => {
+          setShowEditModal(false);
+          resetForm();
+        }}
+        title="Edit Activity"
+        isLoading={isSubmitting}
+        footerContent={
+          <GlassButton
+            text={isSubmitting ? '' : 'Update Activity'}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              handleUpdateActivity();
+            }}
+            disabled={isSubmitting}
+            loading={isSubmitting}
+            colors={['#3B82F6', '#2563EB']}
+            shadowColor="rgba(37, 99, 235, 0.4)"
+            height={52}
+            borderRadius={14}
+          />
+        }
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Edit Extra-curricular Activity</Text>
-              <TouchableOpacity
-                onPress={() => {
-                  setShowEditModal(false);
-                  resetForm();
-                }}
-                style={styles.closeButton}
-              >
-                <Text style={styles.closeButtonText}>×</Text>
-              </TouchableOpacity>
-            </View>
+        {/* Activity Name */}
+        <FormInputGroup label="Activity Name" required>
+          <TextInput
+            style={glassStyles.input}
+            value={activityName}
+            onChangeText={setActivityName}
+            placeholder="e.g., Debate Club, Basketball Team"
+            placeholderTextColor="#9CA3AF"
+            editable={!isSubmitting}
+          />
+        </FormInputGroup>
 
-            <ScrollView
-              style={styles.modalScrollView}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.scrollContent}
-              keyboardShouldPersistTaps="handled"
-            >
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Activity Name *</Text>
-                <TextInput
-                  style={styles.input}
-                  value={activityName}
-                  onChangeText={setActivityName}
-                  placeholder="e.g., Debate Club, Basketball Team"
-                  placeholderTextColor="#9CA3AF"
-                />
+        {/* Role/Position */}
+        <FormInputGroup label="Role/Position">
+          <TextInput
+            style={glassStyles.input}
+            value={role}
+            onChangeText={setRole}
+            placeholder="e.g., President, Captain, Member"
+            placeholderTextColor="#9CA3AF"
+            editable={!isSubmitting}
+          />
+        </FormInputGroup>
+
+        {/* Organization */}
+        <FormInputGroup label="Organization">
+          <TextInput
+            style={glassStyles.input}
+            value={organization}
+            onChangeText={setOrganization}
+            placeholder="e.g., School, University, Community Center"
+            placeholderTextColor="#9CA3AF"
+            editable={!isSubmitting}
+          />
+        </FormInputGroup>
+
+        {/* Start Date */}
+        <FormInputGroup label="Start Date">
+          <DatePickerTrigger
+            value={startDate?.toLocaleDateString() || ''}
+            placeholder="Select start date"
+            onPress={() => setShowStartDatePicker(true)}
+          />
+        </FormInputGroup>
+
+        {/* Currently Active Checkbox */}
+        <View style={glassStyles.checkboxRow}>
+          <TouchableOpacity
+            style={glassStyles.checkbox}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setCurrentlyActive(!currentlyActive);
+            }}
+          >
+            {currentlyActive && (
+              <View style={glassStyles.checkboxChecked}>
+                <Text style={glassStyles.checkmark}>✓</Text>
               </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Role/Position</Text>
-                <TextInput
-                  style={styles.input}
-                  value={role}
-                  onChangeText={setRole}
-                  placeholder="e.g., President, Captain, Member"
-                  placeholderTextColor="#9CA3AF"
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Organization</Text>
-                <TextInput
-                  style={styles.input}
-                  value={organization}
-                  onChangeText={setOrganization}
-                  placeholder="e.g., School, University, Community Center"
-                  placeholderTextColor="#9CA3AF"
-                />
-              </View>
-
-              <View style={styles.formRow}>
-                <View style={[styles.formGroup, styles.halfWidth]}>
-                  <Text style={styles.label}>Start Month</Text>
-                  <TouchableOpacity
-                    style={styles.selectInput}
-                    onPress={() => setShowMonthPicker('start')}
-                  >
-                    <Text style={startMonth ? styles.selectText : styles.selectPlaceholder}>
-                      {startMonth || 'Select month'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                <View style={[styles.formGroup, styles.halfWidth]}>
-                  <Text style={styles.label}>Start Year</Text>
-                  <TouchableOpacity
-                    style={styles.selectInput}
-                    onPress={() => setShowYearPicker('start')}
-                  >
-                    <Text style={startYear ? styles.selectText : styles.selectPlaceholder}>
-                      {startYear || 'Select year'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              <View style={styles.checkboxRow}>
-                <TouchableOpacity
-                  style={styles.checkbox}
-                  onPress={() => setCurrentlyActive(!currentlyActive)}
-                >
-                  {currentlyActive && (
-                    <View style={styles.checkboxChecked}>
-                      <Text style={styles.checkmark}>✓</Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-                <Text style={styles.checkboxLabel}>Currently Active</Text>
-              </View>
-
-              {!currentlyActive && (
-                <View style={styles.formRow}>
-                  <View style={[styles.formGroup, styles.halfWidth]}>
-                    <Text style={styles.label}>End Month</Text>
-                    <TouchableOpacity
-                      style={styles.selectInput}
-                      onPress={() => setShowMonthPicker('end')}
-                    >
-                      <Text style={endMonth ? styles.selectText : styles.selectPlaceholder}>
-                        {endMonth || 'Select month'}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  <View style={[styles.formGroup, styles.halfWidth]}>
-                    <Text style={styles.label}>End Year</Text>
-                    <TouchableOpacity
-                      style={styles.selectInput}
-                      onPress={() => setShowYearPicker('end')}
-                    >
-                      <Text style={endYear ? styles.selectText : styles.selectPlaceholder}>
-                        {endYear || 'Select year'}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Description</Text>
-                <TextInput
-                  style={[styles.input, styles.textArea]}
-                  value={description}
-                  onChangeText={setDescription}
-                  placeholder="Describe your role, achievements, and activities..."
-                  placeholderTextColor="#9CA3AF"
-                  multiline
-                  numberOfLines={4}
-                />
-              </View>
-            </ScrollView>
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => {
-                  setShowEditModal(false);
-                  resetForm();
-                }}
-                disabled={isSubmitting}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
-                onPress={handleUpdateActivity}
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.submitButtonText}>Update Activity</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
+            )}
+          </TouchableOpacity>
+          <Text style={glassStyles.checkboxLabel}>Currently Active</Text>
         </View>
-      </Modal>
 
-      {/* Month Picker Modal */}
-      {showMonthPicker && (
-        <Modal
-          visible={true}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={() => setShowMonthPicker(null)}
-        >
-          <TouchableOpacity
-            style={styles.pickerOverlay}
-            activeOpacity={1}
-            onPress={() => setShowMonthPicker(null)}
-          >
-            <View style={styles.pickerContent}>
-              <View style={styles.pickerHeader}>
-                <Text style={styles.pickerTitle}>Select Month</Text>
-                <TouchableOpacity onPress={() => setShowMonthPicker(null)}>
-                  <Text style={styles.pickerClose}>✕</Text>
-                </TouchableOpacity>
-              </View>
-              <ScrollView style={styles.pickerScroll}>
-                {months.map((month) => (
-                  <TouchableOpacity
-                    key={month}
-                    style={styles.pickerItem}
-                    onPress={() => {
-                      if (showMonthPicker === 'start') {
-                        setStartMonth(month);
-                      } else {
-                        setEndMonth(month);
-                      }
-                      setShowMonthPicker(null);
-                    }}
-                  >
-                    <Text style={styles.pickerItemText}>{month}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          </TouchableOpacity>
-        </Modal>
-      )}
+        {/* End Date */}
+        {!currentlyActive && (
+          <FormInputGroup label="End Date">
+            <DatePickerTrigger
+              value={endDate?.toLocaleDateString() || ''}
+              placeholder="Select end date"
+              onPress={() => setShowEndDatePicker(true)}
+            />
+          </FormInputGroup>
+        )}
 
-      {/* Year Picker Modal */}
-      {showYearPicker && (
-        <Modal
-          visible={true}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={() => setShowYearPicker(null)}
-        >
-          <TouchableOpacity
-            style={styles.pickerOverlay}
-            activeOpacity={1}
-            onPress={() => setShowYearPicker(null)}
-          >
-            <View style={styles.pickerContent}>
-              <View style={styles.pickerHeader}>
-                <Text style={styles.pickerTitle}>Select Year</Text>
-                <TouchableOpacity onPress={() => setShowYearPicker(null)}>
-                  <Text style={styles.pickerClose}>✕</Text>
-                </TouchableOpacity>
-              </View>
-              <ScrollView style={styles.pickerScroll}>
-                {years.map((year) => (
-                  <TouchableOpacity
-                    key={year}
-                    style={styles.pickerItem}
-                    onPress={() => {
-                      if (showYearPicker === 'start') {
-                        setStartYear(year.toString());
-                      } else {
-                        setEndYear(year.toString());
-                      }
-                      setShowYearPicker(null);
-                    }}
-                  >
-                    <Text style={styles.pickerItemText}>{year}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          </TouchableOpacity>
-        </Modal>
-      )}
+        {/* Description */}
+        <FormInputGroup label="Description">
+          <TextInput
+            style={[glassStyles.input, glassStyles.textArea]}
+            value={description}
+            onChangeText={setDescription}
+            placeholder="Describe your role, achievements, and activities..."
+            placeholderTextColor="#9CA3AF"
+            multiline
+            numberOfLines={4}
+            textAlignVertical="top"
+            editable={!isSubmitting}
+          />
+        </FormInputGroup>
+      </KeyboardAwareFormModal>
+
+      {/* Glass Date Pickers */}
+      <GlassDatePicker
+        visible={showStartDatePicker}
+        onClose={() => setShowStartDatePicker(false)}
+        onSelect={(date) => {
+          setStartDate(date);
+          setShowStartDatePicker(false);
+        }}
+        selectedDate={startDate || undefined}
+        maxDate={new Date()}
+        title="Select Start Date"
+      />
+
+      <GlassDatePicker
+        visible={showEndDatePicker}
+        onClose={() => setShowEndDatePicker(false)}
+        onSelect={(date) => {
+          setEndDate(date);
+          setShowEndDatePicker(false);
+        }}
+        selectedDate={endDate || undefined}
+        minDate={startDate || undefined}
+        maxDate={new Date()}
+        title="Select End Date"
+      />
     </>
   );
 }
 
-const styles = StyleSheet.create({
+// Glassmorphism Styles
+const glassStyles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 24,
     paddingTop: 20,
-    paddingBottom: 10,
-    flexWrap: 'wrap',
-    rowGap: 10,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#111827',
-    flex: 1,
-    minWidth: 150,
-  },
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#437EF4',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    flexShrink: 0,
-  },
-  addButtonText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '600',
-    marginLeft: 4,
   },
   emptyState: {
     alignItems: 'center',
@@ -920,153 +817,19 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     textAlign: 'center',
   },
-  activitiesList: {
-    padding: 20,
-  },
-  activityCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  activityHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 8,
-  },
-  activityName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
-    flex: 1,
-    marginRight: 8,
-  },
-  activityActions: {
-    flexDirection: 'row',
-    marginLeft: 8,
-  },
-  actionButton: {
-    padding: 4,
-    marginLeft: 8,
-  },
-  activityRole: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#437EF4',
-    marginBottom: 4,
-  },
-  activityOrganization: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 8,
-  },
-  activityPeriod: {
-    marginBottom: 8,
-  },
-  periodText: {
-    fontSize: 13,
-    color: '#9CA3AF',
-  },
-  activityDescription: {
-    fontSize: 14,
-    color: '#4B5563',
-    lineHeight: 20,
-    marginTop: 8,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContainer: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    height: '90%',
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  modalScrollView: {
-    flex: 1,
-    paddingHorizontal: 20,
-  },
-  scrollContent: {
-    paddingTop: 20,
-    paddingBottom: 20,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: 20,
-    paddingBottom: 15,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#111827',
-  },
-  closeButton: {
-    padding: 4,
-  },
-  closeButtonText: {
-    fontSize: 24,
-    color: '#6B7280',
-  },
-  formGroup: {
-    marginBottom: 16,
-  },
-  formRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  halfWidth: {
-    width: '48%',
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#374151',
-    marginBottom: 6,
-  },
   input: {
+    backgroundColor: 'rgba(241, 245, 249, 0.8)',
     borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: '#111827',
+    borderColor: 'rgba(148, 163, 184, 0.3)',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: '#1E293B',
   },
   textArea: {
-    minHeight: 100,
-    textAlignVertical: 'top',
-  },
-  selectInput: {
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  selectText: {
-    fontSize: 14,
-    color: '#111827',
-  },
-  selectPlaceholder: {
-    fontSize: 14,
-    color: '#9CA3AF',
+    minHeight: 80,
+    paddingTop: 14,
   },
   checkboxRow: {
     flexDirection: 'row',
@@ -1074,116 +837,198 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   checkbox: {
-    width: 20,
-    height: 20,
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 4,
-    marginRight: 8,
+    width: 24,
+    height: 24,
+    borderWidth: 2,
+    borderColor: 'rgba(148, 163, 184, 0.4)',
+    borderRadius: 6,
+    marginRight: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(241, 245, 249, 0.8)',
   },
   checkboxChecked: {
-    backgroundColor: '#437EF4',
+    backgroundColor: '#3B82F6',
     width: '100%',
     height: '100%',
-    borderRadius: 3,
+    borderRadius: 4,
     alignItems: 'center',
     justifyContent: 'center',
   },
   checkmark: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: 'bold',
   },
   checkboxLabel: {
-    fontSize: 14,
-    color: '#374151',
+    fontSize: 15,
+    color: '#475569',
+    fontWeight: '500',
   },
-  modalActions: {
+});
+
+// Card Styles for Activity Display
+const cardStyles = StyleSheet.create({
+  addButton: {
+    backgroundColor: '#3B82F6',
+    borderRadius: 16,
+    paddingVertical: 14,
+    marginBottom: 20,
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  addButtonContent: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 15,
-    paddingBottom: Platform.OS === 'ios' ? 30 : 15,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    backgroundColor: '#FFFFFF',
-  },
-  cancelButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    marginRight: 8,
     alignItems: 'center',
-  },
-  cancelButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6B7280',
-  },
-  submitButton: {
-    flex: 1,
-    backgroundColor: '#437EF4',
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginLeft: 8,
-    alignItems: 'center',
-  },
-  submitButtonDisabled: {
-    opacity: 0.5,
-  },
-  submitButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  // Picker Modal Styles
-  pickerOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
-    alignItems: 'center',
   },
-  pickerContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    width: '80%',
-    maxHeight: '60%',
-    overflow: 'hidden',
-  },
-  pickerHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  pickerTitle: {
+  addButtonText: {
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
-    color: '#111827',
+    marginLeft: 8,
   },
-  pickerClose: {
-    fontSize: 20,
-    color: '#6B7280',
+  // New glass card styles
+  cardWrapper: {
+    marginBottom: 16,
+    borderRadius: 20,
+  },
+  cardShadow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'white',
+    borderRadius: 20,
+    shadowColor: 'rgba(59, 130, 246, 1)',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  cardOuter: {
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: 'rgba(59, 130, 246, 0.2)',
+    backgroundColor: 'rgba(219, 234, 254, 0.4)',
+    overflow: 'hidden',
+  },
+  cardInner: {
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    padding: 16,
+    borderRadius: 18,
+    margin: 1,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  iconBadgeOuter: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: 'rgba(59, 130, 246, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    shadowColor: 'rgba(59, 130, 246, 1)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  iconBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.15)',
+  },
+  titleContainer: {
+    flex: 1,
+    paddingTop: 4,
+  },
+  activityName: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#1E40AF',
+    marginBottom: 4,
+    lineHeight: 22,
+  },
+  activityRole: {
+    fontSize: 14,
+    color: '#3B82F6',
     fontWeight: '600',
   },
-  pickerScroll: {
-    maxHeight: 300,
+  actionButtons: {
+    flexDirection: 'row',
+    gap: 8,
   },
-  pickerItem: {
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+  actionButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: 'rgba(241, 245, 249, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.2)',
   },
-  pickerItemText: {
-    fontSize: 15,
-    color: '#374151',
+  organizationBadge: {
+    backgroundColor: 'rgba(219, 234, 254, 0.8)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.15)',
+  },
+  organizationText: {
+    fontSize: 13,
+    color: '#2563EB',
+    fontWeight: '500',
+  },
+  description: {
+    fontSize: 14,
+    color: '#475569',
+    lineHeight: 20,
+    marginBottom: 12,
+    backgroundColor: 'rgba(241, 245, 249, 0.5)',
+    padding: 10,
+    borderRadius: 10,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    marginBottom: 12,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  metaBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(241, 245, 249, 0.9)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.15)',
+  },
+  metaText: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '500',
   },
 });

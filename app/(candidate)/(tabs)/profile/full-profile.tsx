@@ -12,13 +12,16 @@ export default function FullProfileRoute() {
           home: '/(candidate)/(tabs)/home',
           jobs: '/(candidate)/(tabs)/jobs',
           aiCoach: '/(candidate)/(tabs)/ai-coach',
-          profile: '/(candidate)/(tabs)/profile',
+          profile: '/(candidate)/(tabs)/profile/full-profile',
         };
         // Use replace for tab changes to avoid stacking
         router.replace(routes[tabId] as any);
       }}
       onBack={() => router.back()}
       onSearchNavigate={(route) => router.push(route as any)}
+      showBackButton={false}
+      onNotificationPress={() => router.push('/(candidate)/notifications' as any)}
+      onProfilePress={() => router.push('/(candidate)/(tabs)/profile' as any)}
     />
   );
 }

@@ -1,6 +1,9 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+import { getAccessToken, getRefreshToken } from '../utils/authUtils';
 
-export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2:8000';
+// Remove trailing slash from API URL to prevent double-slash issues in URL construction
+const rawApiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2:8000';
+export const API_URL = rawApiUrl.replace(/\/+$/, '');
 
 console.log('API_URL:', API_URL);
 console.log('Environment:', process.env.EXPO_PUBLIC_API_URL);
@@ -48,6 +51,40 @@ export interface RegisterRecruiterResponse {
   createRecruiter: LoginSuccessType | ErrorType;
 }
 
+// Complete Recruiter Profile (for Google OAuth users)
+export interface CompleteRecruiterProfileInput {
+  organizationName: string;
+  organizationType: 'employer' | 'university' | 'agency';
+  subRole: string;
+  position?: string;
+  linkedinUrl?: string;
+}
+
+export interface CompleteRecruiterProfileSuccessType {
+  __typename: 'CompleteRecruiterProfileSuccessType';
+  success: boolean;
+  message: string;
+  recruiter: {
+    id: string;
+    organizationName: string;
+    organizationType: string;
+    subRole: string;
+    position?: string;
+    linkedinUrl?: string;
+    profileSetupComplete: boolean;
+    user: {
+      id: string;
+      email: string;
+      firstName: string;
+      lastName: string;
+    };
+  };
+}
+
+export interface CompleteRecruiterProfileResponse {
+  completeRecruiterProfile: CompleteRecruiterProfileSuccessType | ErrorType;
+}
+
 export interface LoginInput {
   email?: string;
   phoneNumber?: string;
@@ -72,6 +109,7 @@ export interface LoginSuccessType {
   role: string;
   success: boolean;
   user: User;
+  profileSetupRequired?: boolean;
 }
 
 export interface LoginResponse {
@@ -278,13 +316,15 @@ export interface DeleteAccountResponse {
 // Candidate profile types
 export interface CandidateExperience {
   company: string;
-  position: string;
+  position?: string;  // Frontend field name
+  title?: string;     // Backend sends 'title' instead of 'position'
   location: string;
   start_date: string;
   end_date: string;
   description: string;
   current: boolean;
   employment_type?: string;
+  responsibilities?: string[];  // Backend also sends responsibilities array
 }
 
 export interface CandidateEducation {
@@ -316,8 +356,7 @@ export interface CandidateProfile {
   linkedinUrl?: string;
   portfolioUrl?: string;
   resumeUrl?: string;
-  preferredLocations?: string[];
-  preferredLocationsList?: string[];
+  preferredLocations?: PreferredLocation[];
   lookingForJob?: boolean;
   yearsOfExperience?: number;
   isActive?: boolean;
@@ -340,6 +379,7 @@ export interface GetCandidateProfileSuccessType {
     updatedAt?: string;
   };
   title?: string;
+  workplace?: string;
   experienceLevel?: string;
   expectedSalary?: string;
   skills?: string[];
@@ -348,8 +388,7 @@ export interface GetCandidateProfileSuccessType {
   linkedinUrl?: string;
   portfolioUrl?: string;
   resumeUrl?: string;
-  preferredLocations?: string[];
-  preferredLocationsList?: string[];
+  preferredLocations?: PreferredLocation[];
   lookingForJob?: boolean;
   yearsOfExperience?: number;
   isActive?: boolean;
@@ -443,9 +482,44 @@ export interface UpdateHobbiesResponse {
   updateHobbies: SuccessType | ErrorType;
 }
 
+// Update Candidate Profile types (for URLs, salary, etc.)
+export interface UpdateCandidateProfileInput {
+  experienceLevel?: string;
+  yearsOfExperience?: number;
+  expectedSalary?: number;
+  linkedinUrl?: string;
+  githubUrl?: string;
+  portfolioUrl?: string;
+  lookingForJob?: boolean;
+  isActive?: boolean;
+}
+
+export interface UpdateCandidateProfileResponse {
+  updateCandidateProfile: SuccessType | ErrorType;
+}
+
 // Preferred Locations management types
+export type WorkType = 'REMOTE' | 'HYBRID' | 'ONSITE';
+export type EmploymentType = 'FULL_TIME' | 'PART_TIME' | 'CONTRACT' | 'INTERNSHIP' | 'FREELANCE';
+
+// Response type for preferred locations from GraphQL
+export interface PreferredLocation {
+  city: string;
+  country: string;
+  workTypes: WorkType[];
+  employmentType: EmploymentType;
+}
+
+// Input type for adding/updating preferred locations
+export interface PreferredLocationInput {
+  city: string;
+  country: string;
+  workTypes: WorkType[];
+  employmentType: EmploymentType;
+}
+
 export interface AddPreferredLocationsInput {
-  locations: string[];
+  locations: PreferredLocationInput[];
 }
 
 export interface AddPreferredLocationsResponse {
@@ -453,7 +527,7 @@ export interface AddPreferredLocationsResponse {
 }
 
 export interface UpdatePreferredLocationsInput {
-  locations: string[];
+  locations: PreferredLocationInput[];
 }
 
 export interface UpdatePreferredLocationsResponse {
@@ -461,7 +535,7 @@ export interface UpdatePreferredLocationsResponse {
 }
 
 export interface DeletePreferredLocationsInput {
-  locations: string[];
+  locationIds: string[];
 }
 
 export interface DeletePreferredLocationsResponse {
@@ -914,6 +988,11 @@ export interface ExportResumePdfResponse {
   exportResumePdf: SuccessType | ErrorType;
 }
 
+export interface MyResumesInput {
+  limit?: number;
+  offset?: number;
+}
+
 export interface MyResumesResponse {
   myResumes: Resume[];
 }
@@ -1188,6 +1267,53 @@ export interface SetupIntentResponse {
   };
 }
 
+// Paypal Payment Types
+export interface CreatePaypalSubscriptionInput {
+  planKey: string;
+  returnUrl: string;
+  cancelUrl: string;
+}
+
+export interface CreatePaypalSubscriptionResponse {
+  createPaypalSubscription: {
+    success: boolean;
+    message?: string;
+    subscriptionId?: string;
+    approvalUrl?: string;
+  };
+}
+
+export interface CapturePaypalSubscriptionInput {
+  subscriptionId: string;
+  token?: string;
+}
+
+export interface CapturePaypalSubscriptionResponse {
+  capturePaypalSubscription: {
+    success: boolean;
+    message: string;
+    subscription?: {
+      id: string;
+      status: string;
+      plan: string;
+      currentPeriodEnd: string;
+    };
+  };
+}
+
+export interface CancelPaypalSubscriptionInput {
+  reason?: string;
+}
+
+export interface CancelPaypalSubscriptionResponse {
+  cancelPaypalSubscription: {
+    success: boolean;
+    message: string;
+    canceledAt?: string;
+    accessEndsAt?: string;
+  };
+}
+
 // Google OAuth Types
 export interface GetGoogleOAuthUrlResponse {
   getGoogleOauthUrl: SuccessType & {
@@ -1246,6 +1372,28 @@ export interface UnlinkGoogleAccountResponse {
   };
 }
 
+// LinkedIn OAuth Types
+export interface LinkedInOAuthLoginInput {
+  code: string;
+  redirectUri: string;
+  role?: 'candidate' | 'recruiter';
+}
+
+export interface LinkedInOAuthLoginResponse {
+  linkedinOauthLogin: LoginSuccessType & {
+    user: User & {
+      authProvider?: string;
+      linkedinId?: string;
+    };
+    profileSetupRequired?: boolean;
+  } | ErrorType & {
+    errors?: Array<{
+      field: string;
+      message: string;
+    }>;
+  };
+}
+
 // Google Calendar Types
 export interface GoogleCalendarAuthType {
   authorizationUrl?: string;
@@ -1286,20 +1434,28 @@ export interface InterviewSlot {
 
 export interface Interview {
   id: string;
-  startTime: string;
-  endTime: string;
-  durationMinutes: number;
-  interviewType: 'in_person' | 'phone' | 'video_call';
+  startTime?: string;
+  endTime?: string;
+  durationMinutes?: number;
+  interviewType?: 'in_person' | 'phone' | 'video_call';
   location?: string;
   videoCallLink?: string;
   additionalNotes?: string;
   status: 'scheduled' | 'completed' | 'cancelled' | 'no_show';
+  confirmedAt?: string;
   recruiterCalendarEventId?: string;
   candidateCalendarEventId?: string;
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
   application?: {
     id: string;
+    status: string;
+  };
+  selectedSlot?: {
+    id: string;
+    startTime: string;
+    endTime: string;
+    durationMinutes: number;
     status: string;
   };
 }
@@ -1332,9 +1488,17 @@ export interface SelectInterviewSlotInput {
 
 export interface SelectInterviewSlotResponse {
   selectInterviewSlot: {
+    __typename: 'InterviewSuccessType' | 'ErrorType';
     success: boolean;
     message: string;
-    interview?: Interview;
+    interview?: {
+      id: string;
+      status: string;
+      startTime: string;
+      endTime: string;
+      durationMinutes: number;
+      videoCallLink?: string;
+    };
   };
 }
 
@@ -1494,7 +1658,7 @@ export interface JobMatch {
 // Job Application Types
 export interface JobApplication {
   id: string;
-  status: 'pending' | 'reviewed' | 'shortlisted' | 'interview' | 'offered' | 'rejected' | 'withdrawn' | 'accepted';
+  status: 'pending' | 'reviewed' | 'shortlisted' | 'interview' | 'interview_scheduled' | 'offered' | 'rejected' | 'withdrawn' | 'accepted';
   coverLetter?: string;
   resumeFile?: string;
   additionalDocuments?: string[];
@@ -1827,12 +1991,14 @@ export interface VoiceOption {
 
 // Interview Coach Input Types
 export interface StartInterviewSessionInput {
-  interviewType: string;
-  jobRole: string;
-  industry: string;
-  difficulty?: string;
-  numQuestions?: number;
-  mode?: string;
+  interviewType?: string;  // behavioral, technical, situational, hr_cultural, mixed
+  jobRole?: string;        // e.g., "Software Engineer"
+  industry?: string;       // e.g., "Technology"
+  mode?: string;           // text, voice, mixed
+  numQuestions?: number;   // 3-20
+  difficulty?: string;     // easy, medium, hard
+  resumeId?: string;       // Optional - for personalized questions
+  voiceId?: string;        // Optional - ElevenLabs voice ID
 }
 
 export interface SubmitTextResponseInput {
@@ -1856,7 +2022,44 @@ export interface SpeechToSpeechInput {
   style?: number;
 }
 
+export interface SpeechToSpeechWithAnalysisInput {
+  audioBase64: string;
+  targetVoiceId?: string;
+  removeBackgroundNoise?: boolean;
+  stability?: number;
+  similarityBoost?: number;
+  style?: number;
+  sessionId?: string;
+  questionId?: string;
+}
+
+export interface ConvertVoiceWithAnalysisResponse {
+  convertVoiceWithAnalysis: {
+    __typename: 'SpeechToSpeechWithAnalysisType' | 'ErrorType';
+    success?: boolean;
+    message?: string;
+    originalAudioSize?: number;
+    convertedAudioSize?: number;
+    convertedAudioBase64?: string;
+    targetVoiceId?: string;
+    targetVoiceName?: string;
+    transcribedText?: string;
+    voiceMetrics?: InterviewCoachVoiceMetrics;
+  };
+}
+
 // Interview Coach Response Types
+export interface ResponseAnalysisType {
+  id: string;
+  overallScore: number;
+  contentScore: number;
+  communicationScore: number;
+  strengths: string[];
+  improvements: string[];
+  detailedFeedback: string;
+  suggestedResponse?: string;
+}
+
 export interface StartInterviewSessionResponse {
   startInterviewSession: {
     __typename: 'InterviewCoachSessionSuccessType' | 'ErrorType';
@@ -1866,10 +2069,11 @@ export interface StartInterviewSessionResponse {
       id: string;
       questionText: string;
       questionType: string;
-      questionCategory: string;
-      difficulty: string;
+      questionCategory?: string;
+      difficulty?: string;
       orderIndex: number;
       idealResponsePoints?: string[];
+      audioUrl?: string;  // For voice mode
     }>;
     session?: {
       id: string;
@@ -1880,29 +2084,37 @@ export interface StartInterviewSessionResponse {
       mode: string;
       status: string;
       totalQuestions: number;
-      completedQuestions: number;
-      overallScore: number | null;
-      startedAt: string;
-      completedAt: string | null;
-      createdAt: string;
-      updatedAt: string;
+      completedQuestions?: number;
+      overallScore?: number | null;
+      startedAt?: string;
+      completedAt?: string | null;
+      createdAt?: string;
+      updatedAt?: string;
     };
   } | null;
 }
 
 export interface SubmitTextResponseResponse {
   submitTextResponse: {
-    __typename: string;
+    __typename: 'SubmitResponseSuccessType' | 'ErrorType';
     success: boolean;
     message: string;
+    responseId?: string;
+    analysisPending?: boolean;
+    analysisStatus?: string;  // "pending", "processing", "completed", "failed"
+    analysis?: ResponseAnalysisType;
   };
 }
 
 export interface SubmitVoiceResponseResponse {
   submitVoiceResponse: {
-    __typename: string;
+    __typename: 'SubmitResponseSuccessType' | 'ErrorType';
     success?: boolean;
     message?: string;
+    responseId?: string;
+    analysisPending?: boolean;
+    analysisStatus?: string;  // "pending", "processing", "completed", "failed"
+    analysis?: ResponseAnalysisType;
     voiceMetrics?: InterviewCoachVoiceMetrics;
   };
 }
@@ -1985,44 +2197,920 @@ export interface AvailableVoicesResponse {
   availableVoices: VoiceOption[];
 }
 
+// Onboarding Status Types
+export interface OnboardingStatus {
+  subscriptionComplete: boolean;
+  profileSetupComplete: boolean;
+  cvUploadComplete: boolean;
+  currentStep: 'subscription' | 'profile' | 'cv' | 'complete';
+}
+
+export interface OnboardingStatusResponse {
+  onboardingStatus: OnboardingStatus;
+}
+
+export interface UpdateOnboardingStepInput {
+  step: 'subscription' | 'profile' | 'cv';
+  completed: boolean;
+}
+
+export interface UpdateOnboardingStepResponse {
+  updateOnboardingStep: {
+    success: boolean;
+    message: string;
+    currentStep: string;
+  };
+}
+
+// Profile Progress Types
+export interface ProfileSection {
+  name: string;
+  displayName: string;
+  points: number;
+  completed: boolean;
+  required: boolean;
+}
+
+export interface ProfileProgress {
+  totalPoints: number;
+  maxPoints: number;
+  completionPercentage: number;
+  sections: ProfileSection[];
+}
+
+export interface ProfileProgressResponse {
+  profileProgress: ProfileProgress;
+}
+
+export interface AwardProfilePointsInput {
+  section: string;
+}
+
+export interface AwardProfilePointsResponse {
+  awardProfilePoints: {
+    success: boolean;
+    message: string;
+    pointsAwarded: number;
+    totalPoints: number;
+    badge: string | null;
+  };
+}
+
+export interface UpdatePersonalInfoInput {
+  fullName?: string;
+  phoneNumber?: string;
+  jobTitle?: string;
+  workplace?: string;
+}
+
+export interface UpdatePersonalInfoResponse {
+  updatePersonalInfo: SuccessType | ErrorType;
+}
+
+// CRS (Career Readiness Score) types
+export interface Badge {
+  badgeId: string;
+  badgeName: string;
+  badgeIcon: string;
+}
+
+export interface CRSData {
+  id: string;
+  totalScore: number;
+  level: string;
+  levelDisplay: string;
+  cvQualityScore: number;
+  skillsEvidenceScore: number;
+  interviewReadinessScore: number;
+  marketAlignmentScore: number;
+  engagementConsistencyScore: number;
+  wellbeingStabilityScore: number;
+  pointsToNextLevel: number;
+  nextLevel: string | null;
+  statusMessage: string;
+  lastCalculatedAt: string;
+}
+
+export interface MyCRSResponse {
+  myCrs: CRSData | null;
+}
+
+export interface CRSDashboard {
+  crs: {
+    totalScore: number;
+    level: string;
+    levelDisplay: string;
+  } | null;
+  trend: string;
+  trendDescription: string;
+  primaryRecommendation: string;
+  secondaryRecommendations: string[];
+  daysOnPlatform: number;
+  totalImprovements: number;
+}
+
+export interface CRSDashboardResponse {
+  crsDashboard: CRSDashboard;
+}
+
+// Career Dashboard Full types
+export interface CareerDashboardWellbeing {
+  consistencyDescription: string;
+  consistencyDisplay: string;
+  consistencyLevel: 'LOW' | 'MEDIUM' | 'HIGH';
+  moodDescription: string;
+  moodDisplay: string;
+  moodLevel: 'LOW' | 'MEDIUM' | 'HIGH';
+  overallScore: number;
+  productivityDescription: string;
+  productivityDisplay: string;
+  productivityLevel: 'LOW' | 'MEDIUM' | 'HIGH';
+}
+
+export interface CareerDashboardMonthlyData {
+  activities: number;
+  cvStrength: number;
+  month: string;
+  monthFull: string;
+  skillsMatch: number;
+  year: number;
+}
+
+export interface CareerDashboardScoreProgress {
+  currentActivities: number;
+  currentCvStrength: number;
+  currentSkillsMatch: number;
+  dataPointsCount: number;
+  timeframe: 'WEEKLY' | 'MONTHLY';
+  monthlyData: CareerDashboardMonthlyData[];
+}
+
+export interface CareerDashboardQuickStat {
+  change: string | null;
+  changeIsPositive: boolean | null;
+  label: string;
+  value: string;
+}
+
+export interface CareerDashboardFull {
+  currentLevel: string;
+  currentLevelDisplay: string;
+  daysOnPlatform: number;
+  nextMilestone: string;
+  pointsToNextLevel: number;
+  primaryRecommendation: string;
+  totalCrsScore: number;
+  userName: string;
+  wellbeing: CareerDashboardWellbeing;
+  scoreProgress: CareerDashboardScoreProgress;
+  quickStats: CareerDashboardQuickStat[];
+}
+
+export interface CareerDashboardFullResponse {
+  careerDashboardFull: CareerDashboardFull | null;
+}
+
+export interface CareerDashboardFullInput {
+  months?: number;
+  timeframe?: 'WEEKLY' | 'MONTHLY';
+}
+
+// Recent Activity types
+export interface RecentActivityItem {
+  id: string;
+  activityType: 'CV_UPLOAD' | 'PRACTICE_SESSION' | 'JOB_MATCH' | 'MISSION_COMPLETED' | 'APPLICATION_SUBMITTED';
+  title: string;
+  description: string;
+  timestamp: string;
+  relativeTime: string;
+  actionUrl?: string;
+  actionLabel: string;
+  metadata?: Record<string, any>;
+}
+
+export interface RecentActivityData {
+  activities: RecentActivityItem[];
+  totalCount: number;
+  hasMore: boolean;
+}
+
+export interface RecentActivityResponse {
+  recentActivity: RecentActivityData;
+}
+
+export interface RecentActivityInput {
+  limit?: number;
+  offset?: number;
+}
+
+// Feature Gating types
+export interface FeatureInfo {
+  featureId: string;
+  featureName: string;
+  featureDescription: string;
+}
+
+export interface LockedFeature {
+  featureId: string;
+  featureName: string;
+  requiredLevel: string;
+  requiredLevelDisplay: string;
+}
+
+export interface NextFeature {
+  featureId: string;
+  featureName: string;
+  requiredLevel: string;
+}
+
+export interface FeatureGates {
+  availableFeatures: FeatureInfo[];
+  lockedFeatures: LockedFeature[];
+  nextFeatures: NextFeature[];
+  totalAvailable: number;
+  totalLocked: number;
+  currentLevel: string;
+  currentLevelDisplay: string;
+}
+
+export interface FeatureGatesResponse {
+  featureGates: FeatureGates;
+}
+
+export interface HasFeatureAccessResponse {
+  hasFeatureAccess: boolean;
+}
+
+export interface Mission {
+  id: string;
+  title: string;
+  description: string;
+  missionType: string;
+  missionTypeDisplay: string;
+  difficulty: string;
+  difficultyDisplay: string;
+  status: string;
+  statusDisplay: string;
+  progressPercentage: number;
+  crsPointsReward: number;
+  badgeReward: string | null;
+  aiReasoning: string | null;
+  targetComponent: string | null;
+  estimatedTimeMinutes: number | null;
+  successCriteria: string | null;
+  assignedAt: string;
+  dueDate: string;
+  completedAt: string | null;
+  daysRemaining: number | null;
+  isOverdue: boolean;
+}
+
+export interface MyMissionsResponse {
+  myMissions: {
+    missions: Mission[];
+    totalCount: number;
+    activeCount: number;
+    completedCount: number;
+    hasMore: boolean;
+  };
+}
+
+export interface ActiveMissionsResponse {
+  activeMissions: Mission[];
+}
+
+// Notification types
+export interface NotificationType {
+  id: string;
+  type: 'success' | 'warning' | 'error' | 'info';
+  category: string;
+  title: string;
+  message: string;
+  isRead: boolean;
+  readAt?: string;
+  actionUrl?: string;
+  relatedJobId?: string;
+  relatedApplicationId?: string;
+  relatedMissionId?: string;
+  relatedSubscriptionId?: string;
+  relatedCrsId?: string;
+  createdAt: string;
+}
+
+export interface MyNotificationsInput {
+  page?: number;
+  pageSize?: number;
+  category?: string;
+  isRead?: boolean;
+}
+
+export interface MyNotificationsResponse {
+  myNotifications: {
+    notifications: NotificationType[];
+    totalCount: number;
+    unreadCount: number;
+  };
+}
+
+export interface UnreadNotificationCountResponse {
+  unreadNotificationCount: number;
+}
+
+// =============================================
+// AI Features Types - Missions, Chatbot, Cover Letter
+// =============================================
+
+// Mission Mutation Types
+export interface GenerateWeeklyMissionsResponse {
+  generateWeeklyMissions: {
+    __typename: 'MissionSuccessType' | 'ErrorType';
+    success: boolean;
+    message: string;
+    mission?: Mission;
+  };
+}
+
+export interface CompleteMissionInput {
+  missionId: string;
+  evidenceDescription?: string;
+  rating?: number;
+  feedback?: string;
+}
+
+export interface CompleteMissionResponse {
+  completeMission: {
+    __typename: 'MissionCompletionSuccessType' | 'ErrorType';
+    success: boolean;
+    message: string;
+    mission?: {
+      id: string;
+      status: string;
+      completedAt?: string;
+    };
+    crsPointsAwarded?: number;
+    newCrsScore?: number;
+  };
+}
+
+export interface SkipMissionInput {
+  missionId: string;
+  reason?: string;
+}
+
+export interface SkipMissionResponse {
+  skipMission: {
+    __typename: 'MissionSuccessType' | 'ErrorType';
+    success: boolean;
+    message: string;
+    mission?: Mission;
+  };
+}
+
+export interface UpdateMissionProgressInput {
+  missionId: string;
+  progressPercentage: number;
+}
+
+export interface UpdateMissionProgressResponse {
+  updateMissionProgress: {
+    __typename: 'MissionSuccessType' | 'ErrorType';
+    success: boolean;
+    message: string;
+    mission?: Mission;
+  };
+}
+
+export interface RateMissionInput {
+  missionId: string;
+  rating: number;
+  feedback?: string;
+}
+
+export interface RateMissionResponse {
+  rateMission: {
+    __typename: 'SuccessType' | 'ErrorType';
+    success: boolean;
+    message: string;
+  };
+}
+
+export interface WeeklyMissionsInput {
+  weekNumber?: number;
+  year?: number;
+}
+
+export interface MissionCompletion {
+  id: string;
+  completionMethod?: string;
+  crsPointsAwarded?: number;
+  badgeAwarded?: string;
+  aiFeedback?: string;
+  userRating?: number;
+  userFeedback?: string;
+  completedAt?: string;
+}
+
+export interface WeeklyMission extends Mission {
+  aiReasoning?: string;
+  targetComponent?: string;
+  estimatedTimeMinutes?: number;
+  successCriteria?: string;
+  completedAt?: string;
+  completion?: MissionCompletion;
+}
+
+export interface WeeklyMissionsData {
+  weekNumber: number;
+  year: number;
+  missions: WeeklyMission[];
+  totalPointsAvailable: number;
+  pointsEarned: number;
+  completionRate: number;
+}
+
+export interface WeeklyMissionsResponse {
+  weeklyMissions: WeeklyMissionsData;
+}
+
+export interface MissionStatsResponse {
+  missionStats: {
+    totalCompleted: number;
+    totalPointsEarned: number;
+    currentStreak: number;
+    bestStreak: number;
+  };
+}
+
+export interface MissionDetailsResponse {
+  missionDetails: WeeklyMission;
+}
+
+export interface MyMissionsInput {
+  status?: string;
+  limit?: number;
+  offset?: number;
+}
+
+// RAY AI Chatbot Types
+export interface ChatMessage {
+  id: string;
+  content: string;
+  role: 'user' | 'assistant';
+  timestamp: string;
+  conversationId: string;
+  metadata?: {
+    tokens?: number;
+    processingTime?: number;
+  };
+}
+
+export interface Conversation {
+  id: string;
+  title: string;
+  status?: string;
+  createdAt: string;
+  updatedAt?: string;
+  lastMessageAt?: string | null;
+  messageCount?: number;
+}
+
+export interface SendTextMessageInput {
+  conversationId?: string;
+  content: string;
+}
+
+export interface ChatMessageData {
+  id: string;
+  content: string;
+  role: 'user' | 'assistant';
+  createdAt: string;
+  audioUrl?: string;      // For voice messages - user's audio
+  ttsAudioUrl?: string;   // For voice messages - AI's TTS response
+}
+
+export interface SendTextMessageResponse {
+  sendTextMessage: {
+    __typename: 'SendMessageSuccessType' | 'ErrorType';
+    success?: boolean;
+    message?: string;
+    conversationId?: string;
+    userMessage?: ChatMessageData;
+    assistantMessage?: ChatMessageData;
+  };
+}
+
+export interface SendVoiceMessageInput {
+  conversationId?: string;
+  audioBase64: string;
+}
+
+export interface SendVoiceMessageResponse {
+  sendVoiceMessage: {
+    __typename: 'SendMessageSuccessType' | 'ErrorType';
+    success?: boolean;
+    message?: string;
+    conversationId?: string;
+    userMessage?: ChatMessageData;
+    assistantMessage?: ChatMessageData;
+  };
+}
+
+export interface CreateConversationInput {
+  title?: string;
+}
+
+export interface CreateConversationResponse {
+  createConversation: {
+    __typename: 'ConversationSuccessType' | 'ErrorType';
+    success?: boolean;
+    message?: string;
+    conversation?: Conversation;
+  };
+}
+
+export interface UpdateConversationInput {
+  conversationId: string;
+  title: string;
+}
+
+export interface UpdateConversationResponse {
+  updateConversation: {
+    __typename: 'ConversationSuccessType' | 'ErrorType';
+    success?: boolean;
+    message?: string;
+    conversation?: Conversation;
+  };
+}
+
+export interface ArchiveConversationInput {
+  conversationId: string;
+}
+
+export interface ArchiveConversationResponse {
+  archiveConversation: {
+    __typename: 'ConversationSuccessType' | 'ErrorType';
+    success?: boolean;
+    message?: string;
+    conversation?: Conversation;
+  };
+}
+
+export interface DeleteConversationInput {
+  conversationId: string;
+}
+
+export interface DeleteConversationResponse {
+  deleteConversation: {
+    __typename: 'ConversationSuccessType' | 'ErrorType';
+    success?: boolean;
+    message?: string;
+  };
+}
+
+// Updated conversation queries to match new backend schema
+export interface GetConversationsInput {
+  status?: 'active' | 'archived' | null;
+  limit?: number;
+  offset?: number;
+}
+
+export interface GetConversationsResponse {
+  myConversations: {
+    __typename: 'ConversationListType' | 'ErrorType';
+    conversations?: Conversation[];
+    totalCount?: number;
+    hasNext?: boolean;
+    message?: string;
+  };
+}
+
+export interface GetConversationInput {
+  conversationId: string;
+}
+
+export interface GetConversationResponse {
+  conversation: {
+    __typename: 'ConversationSuccessType' | 'ErrorType';
+    success?: boolean;
+    conversation?: Conversation;
+    message?: string;
+  };
+}
+
+export interface GetConversationMessagesInput {
+  conversationId: string;
+  limit?: number;
+  beforeId?: string | null;
+}
+
+export interface GetConversationMessagesResponse {
+  conversationMessages: {
+    __typename: 'MessageListType' | 'ErrorType';
+    messages?: ChatMessageData[];
+    hasMore?: boolean;
+    message?: string;
+  };
+}
+
+// Chat document types
+export interface ChatDocument {
+  id: string;
+  fileName: string;
+  documentType: string;
+  status: string;
+  createdAt: string;
+}
+
+export interface GetChatDocumentsInput {
+  conversationId: string;
+  limit?: number;
+}
+
+export interface GetChatDocumentsResponse {
+  chatDocuments: ChatDocument[];
+}
+
+export interface DocumentUploadInput {
+  conversationId: string;
+  documentBase64: string;
+  fileName: string;
+  fileType: string;
+}
+
+export interface DocumentUploadResponse {
+  uploadDocument: {
+    __typename: 'DocumentType' | 'ErrorType';
+    success?: boolean;
+    message?: string;
+    id?: string;
+    fileName?: string;
+    processedAt?: string;
+  };
+}
+
+// Cover Letter Generator Types
+export interface GenerateCoverLetterInput {
+  // Resume (optional - backend auto-fetches from user profile if not provided)
+  resumeFileName?: string;
+  resumeFileData?: string; // Base64 encoded file
+
+  // Job description (at least one required)
+  jobDescriptionFileName?: string;
+  jobDescriptionFileData?: string; // Base64 encoded file
+  jobDescriptionText?: string; // Plain text - use this for job description
+}
+
+export interface CoverLetterGeneration {
+  id: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  generatedCoverLetter?: string;
+  coverLetterPdfUrl?: string;
+  errorMessage?: string;
+}
+
+export interface GenerateCoverLetterResponse {
+  generateCoverLetter: {
+    __typename: 'CoverLetterGenerationSuccessType' | 'ErrorType';
+    success?: boolean;
+    message?: string;
+    generation?: CoverLetterGeneration;
+  };
+}
+
+export interface GetCoverLetterGenerationResponse {
+  coverLetterGeneration: CoverLetterGeneration | null;
+}
+
+export interface NotificationResponse {
+  notification: NotificationType;
+}
+
+export interface MarkNotificationAsReadResponse {
+  markNotificationAsRead: {
+    success: boolean;
+    message: string;
+    notification?: {
+      id: string;
+      isRead: boolean;
+      readAt?: string;
+    };
+  };
+}
+
+export interface MarkAllNotificationsAsReadResponse {
+  markAllNotificationsAsRead: {
+    success: boolean;
+    message: string;
+  };
+}
+
+export interface DeleteNotificationResponse {
+  deleteNotification: {
+    success: boolean;
+    message: string;
+  };
+}
+
+// Default timeout for API requests (30 seconds)
+const DEFAULT_TIMEOUT = 30000;
+
+// Extended timeout for long-running operations like AI generation (3 minutes)
+const EXTENDED_TIMEOUT = 180000;
+
+// Endpoints that require extended timeout
+const EXTENDED_TIMEOUT_ENDPOINTS = [
+  'startInterviewSession',
+  'generateCoverLetter',
+  'generateWeeklyMissions',
+  'analyzeResume',
+];
+
+// Custom fetch with timeout for large payloads (like voice messages)
+const fetchWithTimeout = async (input: RequestInfo, init?: RequestInit) => {
+  const timeout = 60000; // 60 seconds timeout for large payloads
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const response = await fetch(input, {
+      ...init,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    throw error;
+  }
+};
+
+// Base fetch query with headers
+const baseQuery = fetchBaseQuery({
+  baseUrl: API_URL,
+  fetchFn: fetchWithTimeout,
+  prepareHeaders: async (headers, { getState, endpoint }) => {
+    headers.set('Content-Type', 'application/json');
+
+    // Get tokens from Redux state first
+    const state = (getState() as any).auth;
+    let token = state.token;
+    let refreshToken = state.refreshToken;
+
+    console.log('PrepareHeaders - Endpoint:', endpoint);
+    console.log('PrepareHeaders - Redux token exists:', !!token);
+
+    // Fallback to SecureStore if Redux token is not available
+    // This handles the case where tokens are stored during profile setup but Redux isn't set yet
+    if (!token) {
+      console.log('PrepareHeaders - Checking SecureStore for token...');
+      token = await getAccessToken();
+      refreshToken = await getRefreshToken();
+      console.log('PrepareHeaders - SecureStore token exists:', !!token);
+    }
+
+    if (token) {
+      // Check token format
+      const tokenPreview = token.substring(0, 20) + '...';
+      console.log('PrepareHeaders - Token preview:', tokenPreview);
+      console.log('PrepareHeaders - Token length:', token.length);
+
+      headers.set('Authorization', `Bearer ${token}`);
+      console.log('PrepareHeaders - Authorization header set with Bearer token');
+    } else {
+      console.warn('PrepareHeaders - No token found in Redux state or SecureStore!');
+    }
+
+    // For logout, also send refresh token in custom header
+    if (endpoint === 'logout' && refreshToken) {
+      headers.set('X-Refresh-Token', refreshToken);
+    }
+
+    return headers;
+  },
+});
+
+// Custom baseQuery with automatic token refresh and timeout support
+const baseQueryWithReauth: typeof baseQuery = async (args, api, extraOptions) => {
+  // Check if this endpoint needs extended timeout
+  const endpoint = api.endpoint;
+  const needsExtendedTimeout = EXTENDED_TIMEOUT_ENDPOINTS.includes(endpoint);
+  const timeout = needsExtendedTimeout ? EXTENDED_TIMEOUT : DEFAULT_TIMEOUT;
+
+  // Create abort controller for timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, timeout);
+
+  // Merge signal with existing args
+  const argsWithSignal = typeof args === 'string'
+    ? { url: args, signal: controller.signal }
+    : { ...args, signal: controller.signal };
+
+  try {
+    let result = await baseQuery(argsWithSignal, api, extraOptions);
+
+    // Check for authentication errors in GraphQL response
+    const data = result.data as any;
+
+    // Only check for explicit auth-related error messages, not just null data
+    const hasAuthError = data?.errors?.some((e: any) => {
+      const msg = e.message?.toLowerCase() || '';
+      const isAuthError = msg.includes('authentication') ||
+        msg.includes('not authenticated') ||
+        msg.includes('invalid token') ||
+        msg.includes('token expired') ||
+        msg.includes('please log in');
+      if (isAuthError) {
+        console.log('🔐 [baseQueryWithReauth] Auth error detected:', e.message);
+      }
+      return isAuthError;
+    });
+
+    // Log all GraphQL errors for debugging
+    if (data?.errors) {
+      console.log('⚠️ [baseQueryWithReauth] GraphQL errors:', JSON.stringify(data.errors, null, 2));
+    }
+
+    if (hasAuthError || result.error?.status === 401) {
+      console.log('Auth error detected, attempting token refresh...');
+
+      // Try to refresh the token
+      const state = api.getState() as any;
+      const refreshTokenValue = state.auth?.refreshToken;
+
+      if (refreshTokenValue) {
+        console.log('Attempting token refresh with refresh token');
+
+        const refreshResult = await baseQuery(
+          {
+            url: '/graphql/',
+            method: 'POST',
+            body: {
+              query: `
+                mutation RefreshToken($input: RefreshTokenInput!) {
+                  refreshToken(input: $input) {
+                    ... on RefreshTokenSuccessType {
+                      __typename
+                      success
+                      message
+                      accessToken
+                      refreshToken
+                    }
+                    ... on ErrorType {
+                      __typename
+                      success
+                      message
+                    }
+                  }
+                }
+              `,
+              variables: { input: { refreshToken: refreshTokenValue } },
+            },
+          },
+          api,
+          extraOptions
+        );
+
+        const refreshData = (refreshResult.data as any)?.data?.refreshToken;
+
+        if (refreshData?.__typename === 'RefreshTokenSuccessType') {
+          console.log('Token refresh successful, updating tokens');
+
+          // Update tokens in Redux store
+          const { updateTokens } = await import('../store/slices/authSlice');
+          api.dispatch(updateTokens({
+            token: refreshData.accessToken,
+            refreshToken: refreshData.refreshToken,
+          }));
+
+          // Retry the original request with new token
+          console.log('Retrying original request with new token');
+          result = await baseQuery(argsWithSignal, api, extraOptions);
+        } else {
+          console.log('Token refresh failed, logging out');
+          // Refresh failed, logout user
+          const { logout } = await import('../store/slices/authSlice');
+          api.dispatch(logout());
+        }
+      } else {
+        console.log('No refresh token available, logging out');
+        const { logout } = await import('../store/slices/authSlice');
+        api.dispatch(logout());
+      }
+    }
+
+    return result;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
 // Create the API
 export const api = createApi({
   reducerPath: 'api',
-  baseQuery: fetchBaseQuery({
-    baseUrl: API_URL,
-    prepareHeaders: (headers, { getState, endpoint }) => {
-      headers.set('Content-Type', 'application/json');
-
-      // Get tokens from Redux state
-      const state = (getState() as any).auth;
-      const token = state.token;
-      const refreshToken = state.refreshToken;
-
-      console.log('PrepareHeaders - Endpoint:', endpoint);
-      console.log('PrepareHeaders - Token exists:', !!token);
-      console.log('PrepareHeaders - Auth state:', { isAuthenticated: state.isAuthenticated, hasToken: !!token });
-
-      if (token) {
-        // Check token format
-        const tokenPreview = token.substring(0, 20) + '...';
-        console.log('PrepareHeaders - Token preview:', tokenPreview);
-        console.log('PrepareHeaders - Token length:', token.length);
-
-        headers.set('Authorization', `Bearer ${token}`);
-        console.log('PrepareHeaders - Authorization header set with Bearer token');
-      } else {
-        console.warn('PrepareHeaders - No token found in Redux state!');
-      }
-
-      // For logout, also send refresh token in custom header
-      if (endpoint === 'logout' && refreshToken) {
-        headers.set('X-Refresh-Token', refreshToken);
-      }
-
-      return headers;
-    },
-  }),
-  tagTypes: ['Auth', 'Profile', 'Resume', 'Subscription', 'GoogleCalendar', 'Interviews', 'Jobs', 'JobMatches', 'Applications', 'SavedJobs', 'InterviewCoach'],
+  baseQuery: baseQueryWithReauth,
+  tagTypes: ['Auth', 'Profile', 'Resume', 'Subscription', 'GoogleCalendar', 'Interviews', 'Jobs', 'JobMatches', 'Applications', 'SavedJobs', 'InterviewCoach', 'Onboarding', 'User', 'CRS', 'Missions', 'Notifications'],
   endpoints: (builder) => ({
     registerCandidate: builder.mutation<RegisterCandidateResponse, RegisterCandidateInput>({
       query: (input) => {
@@ -2517,10 +3605,16 @@ export const api = createApi({
                   linkedinUrl
                   lookingForJob
                   portfolioUrl
-                  preferredLocations
+                  preferredLocations {
+                    city
+                    country
+                    workTypes
+                    employmentType
+                  }
                   resumeUrl
                   skills
                   title
+                  workplace
                   updatedAt
                   profilePicture
                   certifications
@@ -2572,8 +3666,9 @@ export const api = createApi({
           if (typeof profile.hobbies === 'string') {
             profile.hobbies = profile.hobbies.trim() ? JSON.parse(profile.hobbies) : [];
           }
-          if (typeof profile.preferredLocations === 'string') {
-            profile.preferredLocations = profile.preferredLocations.trim() ? JSON.parse(profile.preferredLocations) : [];
+          // preferredLocations now comes as nested objects from GraphQL, no parsing needed
+          if (!Array.isArray(profile.preferredLocations)) {
+            profile.preferredLocations = [];
           }
           if (typeof profile.certifications === 'string') {
             profile.certifications = profile.certifications.trim() ? JSON.parse(profile.certifications) : [];
@@ -2667,6 +3762,41 @@ export const api = createApi({
         return response.data;
       },
       providesTags: ['Profile'],
+    }),
+    // Update candidate profile (for URLs, title, salary, etc.)
+    updateCandidateProfile: builder.mutation<UpdateCandidateProfileResponse, UpdateCandidateProfileInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation UpdateCandidateProfile($input: UpdateCandidateInput!) {
+              updateCandidateProfile(input: $input) {
+                ... on SuccessType {
+                  __typename
+                  success
+                  message
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        console.log('Making updateCandidateProfile request');
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => {
+        console.log('UpdateCandidateProfile response:', response);
+        return response.data;
+      },
+      invalidatesTags: ['Profile'],
     }),
     // Skills mutations
     addSkill: builder.mutation<AddSkillResponse, AddSkillInput>({
@@ -4126,12 +5256,18 @@ export const api = createApi({
       ],
     }),
     // CV Builder queries
-    getMyResumes: builder.query<MyResumesResponse, void>({
-      query: () => {
+    getMyResumes: builder.query<MyResumesResponse, MyResumesInput | void>({
+      query: (input) => {
+        const { limit, offset } = input || {};
+        const hasParams = limit !== undefined || offset !== undefined;
+        const paramsStr = hasParams
+          ? `(${limit !== undefined ? `limit: ${limit}` : ''}${limit !== undefined && offset !== undefined ? ', ' : ''}${offset !== undefined ? `offset: ${offset}` : ''})`
+          : '';
+
         const body = {
           query: `
             query MyResumes {
-              myResumes {
+              myResumes${paramsStr} {
                 id
                 fullName
                 email
@@ -4695,6 +5831,90 @@ export const api = createApi({
       transformResponse: (response: any) => response.data,
       invalidatesTags: ['Subscription'],
     }),
+
+    // ===== PAYPAL PAYMENT MUTATIONS =====
+
+    // Create Paypal Subscription
+    createPaypalSubscription: builder.mutation<CreatePaypalSubscriptionResponse, CreatePaypalSubscriptionInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation CreatePaypalSubscription($input: CreatePayPalSubscriptionInput!) {
+              createPaypalSubscription(input: $input) {
+                success
+                message
+                subscriptionId
+                approvalUrl
+              }
+            }
+          `,
+          variables: { input },
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+    }),
+
+    // Capture Paypal Subscription (after user approval)
+    capturePaypalSubscription: builder.mutation<CapturePaypalSubscriptionResponse, CapturePaypalSubscriptionInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation CapturePaypalSubscription($input: CapturePayPalSubscriptionInput!) {
+              capturePaypalSubscription(input: $input) {
+                success
+                message
+                subscription {
+                  id
+                  status
+                  plan
+                  currentPeriodEnd
+                }
+              }
+            }
+          `,
+          variables: { input },
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      invalidatesTags: ['Subscription'],
+    }),
+
+    // Cancel Paypal Subscription
+    cancelPaypalSubscription: builder.mutation<CancelPaypalSubscriptionResponse, CancelPaypalSubscriptionInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation CancelPaypalSubscription($input: CancelPayPalSubscriptionInput) {
+              cancelPaypalSubscription(input: $input) {
+                success
+                message
+                canceledAt
+                accessEndsAt
+              }
+            }
+          `,
+          variables: { input },
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      invalidatesTags: ['Subscription'],
+    }),
+
     // Google OAuth Mutations
     getGoogleOAuthUrl: builder.mutation<GetGoogleOAuthUrlResponse, string>({
       query: (redirectUri) => {
@@ -4749,6 +5969,52 @@ export const api = createApi({
                     googleId
                   }
                   role
+                }
+                ... on ErrorType {
+                  success
+                  message
+                  errors {
+                    field
+                    message
+                  }
+                }
+              }
+            }
+          `,
+          variables: input,
+        };
+        return {
+          url: '/graphql/',
+          method: 'POST',
+          body,
+        };
+      },
+      transformResponse: (response: any) => response.data,
+      invalidatesTags: ['User'],
+    }),
+    // LinkedIn OAuth Login
+    linkedinOAuthLogin: builder.mutation<LinkedInOAuthLoginResponse, LinkedInOAuthLoginInput>({
+      query: (input) => {
+        const body = {
+          query: `
+            mutation LinkedInOAuthLogin($code: String!, $redirectUri: String!, $role: String) {
+              linkedinOauthLogin(code: $code, redirectUri: $redirectUri, role: $role) {
+                ... on LoginSuccessType {
+                  success
+                  message
+                  accessToken
+                  refreshToken
+                  user {
+                    id
+                    email
+                    firstName
+                    lastName
+                    role
+                    authProvider
+                    linkedinId
+                  }
+                  role
+                  profileSetupRequired
                 }
                 ... on ErrorType {
                   success
@@ -4987,26 +6253,36 @@ export const api = createApi({
     }),
 
     // Select interview slot (Candidate)
-    selectInterviewSlot: builder.mutation<SelectInterviewSlotResponse, SelectInterviewSlotInput>({
+    selectInterviewSlot: builder.mutation<SelectInterviewSlotResponse, { slotId: string }>({
       query: (input) => {
         const body = {
           query: `
             mutation SelectInterviewSlot($input: SelectInterviewSlotInput!) {
               selectInterviewSlot(input: $input) {
                 ... on InterviewSuccessType {
+                  __typename
                   success
                   message
+                  interview {
+                    id
+                    startTime
+                    endTime
+                    durationMinutes
+                    status
+                    videoCallLink
+                  }
                 }
                 ... on ErrorType {
+                  __typename
                   success
                   message
                 }
               }
             }
           `,
-          variables: { input },
+          variables: { input: { slotId: input.slotId } },
         };
-        console.log('Selecting interview slot:', input);
+        console.log('Selecting interview slot:', input.slotId);
         return {
           url: '/graphql/',
           method: 'POST',
@@ -5015,9 +6291,12 @@ export const api = createApi({
       },
       transformResponse: (response: any) => {
         console.log('Select interview slot response:', response);
-        return response.data;
+        if (response.errors) {
+          console.error('Select interview slot errors:', response.errors);
+        }
+        return response.data || { selectInterviewSlot: { __typename: 'ErrorType', success: false, message: response.errors?.[0]?.message || 'Unknown error' } };
       },
-      invalidatesTags: ['Interviews'],
+      invalidatesTags: ['Interviews', 'Applications'],
     }),
 
     // Cancel interview
@@ -5122,14 +6401,12 @@ export const api = createApi({
                 endTime
                 durationMinutes
                 status
-                createdAt
-                updatedAt
               }
             }
           `,
           variables: { applicationId },
         };
-        console.log('Fetching interview slots for applicationId:', applicationId);
+        console.log('🎰 [interviewSlots] Fetching for applicationId:', applicationId);
         return {
           url: '/graphql/',
           method: 'POST',
@@ -5137,7 +6414,10 @@ export const api = createApi({
         };
       },
       transformResponse: (response: any) => {
-        console.log('Interview slots response:', response);
+        console.log('🎰 [interviewSlots] Full response:', JSON.stringify(response, null, 2));
+        if (response.errors) {
+          console.error('🎰 [interviewSlots] GraphQL errors:', response.errors);
+        }
         return response.data;
       },
       providesTags: ['Interviews'],
@@ -5241,33 +6521,43 @@ export const api = createApi({
       query: (applicationId) => {
         const body = {
           query: `
-            query ApplicationInterview($applicationId: ID!) {
+            query ApplicationInterview($applicationId: String!) {
               applicationInterview(applicationId: $applicationId) {
                 id
                 startTime
                 endTime
                 durationMinutes
                 interviewType
-                location
-                videoCallLink
-                additionalNotes
                 status
-                recruiterCalendarEventId
-                candidateCalendarEventId
-                createdAt
-                updatedAt
+                videoCallLink
+                location
+                confirmedAt
+                selectedSlot {
+                  id
+                  startTime
+                  endTime
+                  durationMinutes
+                  status
+                }
               }
             }
           `,
           variables: { applicationId },
         };
+        console.log('📅 [applicationInterview] Fetching for applicationId:', applicationId);
         return {
           url: '/graphql/',
           method: 'POST',
           body,
         };
       },
-      transformResponse: (response: any) => response.data,
+      transformResponse: (response: any) => {
+        console.log('📅 [applicationInterview] Full response:', JSON.stringify(response, null, 2));
+        if (response.errors) {
+          console.error('📅 [applicationInterview] GraphQL errors:', response.errors);
+        }
+        return response.data;
+      },
       providesTags: ['Interviews'],
     }),
 
@@ -6158,26 +7448,15 @@ export const api = createApi({
                     id
                     questionText
                     questionType
-                    questionCategory
-                    difficulty
                     orderIndex
-                    idealResponsePoints
+                    audioUrl
                   }
                   session {
                     id
                     interviewType
-                    jobRole
-                    industry
-                    difficulty
                     mode
-                    status
+                    difficulty
                     totalQuestions
-                    completedQuestions
-                    overallScore
-                    startedAt
-                    completedAt
-                    createdAt
-                    updatedAt
                   }
                 }
                 ... on ErrorType {
@@ -6207,6 +7486,9 @@ export const api = createApi({
                   __typename
                   success
                   message
+                  responseId
+                  analysisPending
+                  analysisStatus
                 }
                 ... on ErrorType {
                   __typename
@@ -6224,25 +7506,27 @@ export const api = createApi({
     }),
 
     submitVoiceResponse: builder.mutation<SubmitVoiceResponseResponse, SubmitVoiceResponseInput>({
-      query: ({ sessionId, questionId, audioBase64 }) => ({
+      query: (input) => ({
         url: '/graphql/',
         method: 'POST',
         body: {
           query: `
-            mutation SubmitVoiceResponse($sessionId: String!, $questionId: String!, $audioBase64: String!) {
-              submitVoiceResponse(input: {sessionId: $sessionId, questionId: $questionId, audioBase64: $audioBase64}) {
-                __typename
+            mutation SubmitVoiceResponse($input: SubmitVoiceResponseInput!) {
+              submitVoiceResponse(input: $input) {
                 ... on SubmitResponseSuccessType {
                   __typename
                   success
                   message
+                  responseId
+                  analysisPending
+                  analysisStatus
                   voiceMetrics {
-                    fillerAssessment
+                    speakingPaceWpm
                     fillerWordCount
                     fillerWordsDetected
-                    paceAssessment
-                    speakingPaceWpm
                     voiceConfidenceScore
+                    paceAssessment
+                    fillerAssessment
                   }
                 }
                 ... on ErrorType {
@@ -6253,7 +7537,7 @@ export const api = createApi({
               }
             }
           `,
-          variables: { sessionId, questionId, audioBase64 },
+          variables: { input },
         },
       }),
       transformResponse: (response: any) => response.data,
@@ -6352,6 +7636,46 @@ export const api = createApi({
                   targetVoiceName
                 }
                 ... on ErrorType {
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input },
+        },
+      }),
+      transformResponse: (response: any) => response.data,
+    }),
+
+    convertVoiceWithAnalysis: builder.mutation<ConvertVoiceWithAnalysisResponse, SpeechToSpeechWithAnalysisInput>({
+      query: (input) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation ConvertVoiceWithAnalysis($input: SpeechToSpeechWithAnalysisInput!) {
+              convertVoiceWithAnalysis(input: $input) {
+                __typename
+                ... on SpeechToSpeechWithAnalysisType {
+                  success
+                  message
+                  originalAudioSize
+                  convertedAudioSize
+                  convertedAudioBase64
+                  targetVoiceId
+                  targetVoiceName
+                  transcribedText
+                  voiceMetrics {
+                    speakingPaceWpm
+                    fillerWordCount
+                    fillerWordsDetected
+                    voiceConfidenceScore
+                    paceAssessment
+                    fillerAssessment
+                  }
+                }
+                ... on ErrorType {
+                  success
                   message
                 }
               }
@@ -6727,6 +8051,1521 @@ export const api = createApi({
         return response.data;
       },
     }),
+
+    // ===== ONBOARDING ENDPOINTS =====
+
+    // Get Onboarding Status
+    getOnboardingStatus: builder.query<OnboardingStatusResponse, void>({
+      query: () => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            query GetOnboardingStatus {
+              onboardingStatus {
+                subscriptionComplete
+                profileSetupComplete
+                cvUploadComplete
+                currentStep
+              }
+            }
+          `,
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('GetOnboardingStatus response:', response);
+        return response.data;
+      },
+      providesTags: ['Onboarding'],
+    }),
+
+    // Update Onboarding Step
+    updateOnboardingStep: builder.mutation<UpdateOnboardingStepResponse, UpdateOnboardingStepInput>({
+      query: (input) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation UpdateOnboardingStep($input: UpdateOnboardingStepInput!) {
+              updateOnboardingStep(input: $input) {
+                success
+                message
+                currentStep
+              }
+            }
+          `,
+          variables: { input },
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('UpdateOnboardingStep response:', response);
+        return response.data;
+      },
+      invalidatesTags: ['Onboarding'],
+    }),
+
+    // Get Profile Progress
+    getProfileProgress: builder.query<ProfileProgressResponse, void>({
+      query: () => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            query GetProfileProgress {
+              profileProgress {
+                totalPoints
+                maxPoints
+                completionPercentage
+                sections {
+                  name
+                  displayName
+                  points
+                  completed
+                  required
+                }
+              }
+            }
+          `,
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('GetProfileProgress response:', response);
+        return response.data;
+      },
+      providesTags: ['Onboarding', 'Profile'],
+    }),
+
+    // Update Personal Info
+    updatePersonalInfo: builder.mutation<UpdatePersonalInfoResponse, UpdatePersonalInfoInput>({
+      query: (input) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation UpdatePersonalInfo($input: UpdatePersonalInfoInput!) {
+              updatePersonalInfo(input: $input) {
+                ... on SuccessType {
+                  __typename
+                  success
+                  message
+                }
+                ... on ErrorType {
+                  __typename
+                  message
+                  success
+                }
+              }
+            }
+          `,
+          variables: { input },
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('UpdatePersonalInfo response:', response);
+        return response.data;
+      },
+      invalidatesTags: ['Profile'],
+    }),
+
+    // Award Profile Points
+    awardProfilePoints: builder.mutation<AwardProfilePointsResponse, AwardProfilePointsInput>({
+      query: (input) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation AwardProfilePoints($input: AwardProfilePointsInput!) {
+              awardProfilePoints(input: $input) {
+                success
+                message
+                pointsAwarded
+                totalPoints
+                badge
+              }
+            }
+          `,
+          variables: { input },
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('AwardProfilePoints response:', response);
+        return response.data;
+      },
+      invalidatesTags: ['Onboarding', 'Profile'],
+    }),
+
+    // CRS (Career Readiness Score) Queries
+    getMyCRS: builder.query<MyCRSResponse, void>({
+      query: () => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            query GetMyCRS {
+              myCrs {
+                id
+                totalScore
+                level
+                levelDisplay
+                cvQualityScore
+                skillsEvidenceScore
+                interviewReadinessScore
+                marketAlignmentScore
+                engagementConsistencyScore
+                wellbeingStabilityScore
+                pointsToNextLevel
+                nextLevel
+                statusMessage
+                lastCalculatedAt
+              }
+            }
+          `,
+        },
+      }),
+      transformResponse: (response: any) => {
+        return response.data;
+      },
+      providesTags: ['CRS'],
+    }),
+
+    getCRSDashboard: builder.query<CRSDashboardResponse, void>({
+      query: () => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            query GetCRSDashboard {
+              crsDashboard {
+                crs {
+                  totalScore
+                  level
+                  levelDisplay
+                }
+                trend
+                trendDescription
+                primaryRecommendation
+                secondaryRecommendations
+                daysOnPlatform
+                totalImprovements
+              }
+            }
+          `,
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('GetCRSDashboard response:', response);
+        return response.data;
+      },
+      providesTags: ['CRS'],
+    }),
+
+    // Career Dashboard Full Query
+    getCareerDashboardFull: builder.query<CareerDashboardFullResponse, CareerDashboardFullInput | void>({
+      query: (args) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            query CareerDashboardFull($months: Int, $timeframe: TimeframeEnum) {
+              careerDashboardFull(months: $months, timeframe: $timeframe) {
+                currentLevel
+                currentLevelDisplay
+                daysOnPlatform
+                nextMilestone
+                pointsToNextLevel
+                primaryRecommendation
+                totalCrsScore
+                userName
+                wellbeing {
+                  consistencyDescription
+                  consistencyDisplay
+                  consistencyLevel
+                  moodDescription
+                  moodDisplay
+                  moodLevel
+                  overallScore
+                  productivityDescription
+                  productivityDisplay
+                  productivityLevel
+                }
+                scoreProgress {
+                  currentActivities
+                  currentCvStrength
+                  currentSkillsMatch
+                  dataPointsCount
+                  timeframe
+                  monthlyData {
+                    activities
+                    cvStrength
+                    month
+                    monthFull
+                    skillsMatch
+                    year
+                  }
+                }
+                quickStats {
+                  change
+                  changeIsPositive
+                  label
+                  value
+                }
+              }
+            }
+          `,
+          variables: {
+            months: args?.months || 10,
+            timeframe: args?.timeframe || 'MONTHLY',
+          },
+        },
+      }),
+      transformResponse: (response: any) => {
+        return response.data;
+      },
+      providesTags: ['CRS'],
+    }),
+
+    // Recent Activity Query
+    getRecentActivity: builder.query<RecentActivityResponse, RecentActivityInput | void>({
+      query: (args) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            query RecentActivity($limit: Int, $offset: Int) {
+              recentActivity(limit: $limit, offset: $offset) {
+                activities {
+                  id
+                  activityType
+                  title
+                  description
+                  timestamp
+                  relativeTime
+                  actionUrl
+                  actionLabel
+                  metadata
+                }
+                totalCount
+                hasMore
+              }
+            }
+          `,
+          variables: {
+            limit: args?.limit ?? 3,
+            offset: args?.offset ?? 0,
+          },
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('GetRecentActivity response:', response);
+        return response.data;
+      },
+    }),
+
+    // Feature Gating Queries
+    getFeatureGates: builder.query<FeatureGatesResponse, void>({
+      query: () => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            query GetFeatureGates {
+              featureGates {
+                availableFeatures {
+                  featureId
+                  featureName
+                  featureDescription
+                }
+                lockedFeatures {
+                  featureId
+                  featureName
+                  requiredLevel
+                  requiredLevelDisplay
+                }
+                nextFeatures {
+                  featureId
+                  featureName
+                  requiredLevel
+                }
+                totalAvailable
+                totalLocked
+                currentLevel
+                currentLevelDisplay
+              }
+            }
+          `,
+        },
+      }),
+      transformResponse: (response: any) => {
+        // If there's no data, return a fallback structure to prevent undefined
+        if (!response.data || !response.data.featureGates) {
+          return {
+            featureGates: {
+              availableFeatures: [],
+              lockedFeatures: [],
+              nextFeatures: [],
+              totalAvailable: 0,
+              totalLocked: 0,
+              currentLevel: '',
+              currentLevelDisplay: 'Bronze',
+            }
+          };
+        }
+        return response.data;
+      },
+      providesTags: ['CRS'],
+    }),
+
+    hasFeatureAccess: builder.query<HasFeatureAccessResponse, string>({
+      query: (feature) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            query HasFeatureAccess($feature: String!) {
+              hasFeatureAccess(feature: $feature)
+            }
+          `,
+          variables: { feature },
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('HasFeatureAccess response:', response);
+        return response.data;
+      },
+      providesTags: ['CRS'],
+    }),
+
+    getActiveMissions: builder.query<ActiveMissionsResponse, void>({
+      query: () => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            query GetActiveMissions {
+              activeMissions {
+                aiReasoning
+                assignedAt
+                badgeReward
+                completedAt
+                crsPointsReward
+                daysRemaining
+                description
+                difficulty
+                difficultyDisplay
+                dueDate
+                estimatedTimeMinutes
+                id
+                isOverdue
+                missionType
+                missionTypeDisplay
+                progressPercentage
+                status
+                statusDisplay
+                successCriteria
+                targetComponent
+                title
+              }
+            }
+          `,
+        },
+      }),
+      transformResponse: (response: any) => {
+        return response.data;
+      },
+      providesTags: ['Missions'],
+    }),
+
+    // Complete Recruiter Profile (for Google OAuth users who need to complete profile setup)
+    completeRecruiterProfile: builder.mutation<CompleteRecruiterProfileResponse, CompleteRecruiterProfileInput>({
+      query: (input) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation CompleteRecruiterProfile($input: CompleteRecruiterProfileInput!) {
+              completeRecruiterProfile(input: $input) {
+                ... on CompleteRecruiterProfileSuccessType {
+                  success
+                  message
+                  recruiter {
+                    id
+                    organizationName
+                    organizationType
+                    subRole
+                    position
+                    linkedinUrl
+                    profileSetupComplete
+                    user {
+                      id
+                      email
+                      firstName
+                      lastName
+                    }
+                  }
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input },
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('CompleteRecruiterProfile response:', response);
+        // Check for GraphQL errors
+        if (response.errors && response.errors.length > 0) {
+          console.error('GraphQL errors:', response.errors);
+          return {
+            completeRecruiterProfile: {
+              __typename: 'ErrorType',
+              success: false,
+              message: response.errors[0]?.message || 'An error occurred',
+            }
+          };
+        }
+        // Check if data is null
+        if (!response.data || !response.data.completeRecruiterProfile) {
+          console.error('Null response from completeRecruiterProfile');
+          return {
+            completeRecruiterProfile: {
+              __typename: 'ErrorType',
+              success: false,
+              message: 'Failed to complete profile. Please try again.',
+            }
+          };
+        }
+        return response.data;
+      },
+      invalidatesTags: ['Auth', 'Profile'],
+    }),
+
+    recalculateCRS: builder.mutation<{ recalculateCrs: { success: boolean; message: string; crs?: CRSData } }, void>({
+      query: () => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation RecalculateCRS {
+              recalculateCrs {
+                ... on CRSSuccessType {
+                  success
+                  message
+                  crs {
+                    totalScore
+                    level
+                    levelDisplay
+                  }
+                }
+                ... on ErrorType {
+                  success
+                  message
+                }
+              }
+            }
+          `,
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('RecalculateCRS response:', response);
+        return response.data;
+      },
+      invalidatesTags: ['CRS'],
+    }),
+
+    // Notification Queries and Mutations
+    getMyNotifications: builder.query<MyNotificationsResponse, MyNotificationsInput | void>({
+      query: () => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            query MyNotifications {
+              myNotifications {
+                notifications {
+                  id
+                  type
+                  category
+                  title
+                  message
+                  isRead
+                  readAt
+                  relatedJobId
+                  relatedApplicationId
+                  relatedMissionId
+                  relatedSubscriptionId
+                  relatedCrsId
+                  actionUrl
+                  createdAt
+                }
+                totalCount
+                unreadCount
+              }
+            }
+          `,
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('GetMyNotifications response:', response);
+        return response.data;
+      },
+      providesTags: ['Notifications'],
+    }),
+
+    getUnreadNotificationCount: builder.query<UnreadNotificationCountResponse, void>({
+      query: () => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            query UnreadCount {
+              unreadNotificationCount
+            }
+          `,
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('GetUnreadNotificationCount response:', response);
+        return response.data;
+      },
+      providesTags: ['Notifications'],
+    }),
+
+    getNotification: builder.query<NotificationResponse, string>({
+      query: (id) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            query Notification($id: ID!) {
+              notification(id: $id) {
+                id
+                type
+                category
+                title
+                message
+                isRead
+                readAt
+                relatedJobId
+                relatedApplicationId
+                relatedMissionId
+                relatedSubscriptionId
+                relatedCrsId
+                actionUrl
+                createdAt
+              }
+            }
+          `,
+          variables: { id },
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('GetNotification response:', response);
+        return response.data;
+      },
+      providesTags: ['Notifications'],
+    }),
+
+    markNotificationAsRead: builder.mutation<MarkNotificationAsReadResponse, { notificationId: string }>({
+      query: ({ notificationId }) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation MarkAsRead($notificationId: ID!) {
+              markNotificationAsRead(notificationId: $notificationId) {
+                success
+                message
+                notification {
+                  id
+                  isRead
+                  readAt
+                }
+              }
+            }
+          `,
+          variables: { notificationId },
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('MarkNotificationAsRead response:', response);
+        return response.data;
+      },
+      invalidatesTags: ['Notifications'],
+    }),
+
+    markAllNotificationsAsRead: builder.mutation<MarkAllNotificationsAsReadResponse, void>({
+      query: () => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation MarkAllAsRead {
+              markAllNotificationsAsRead {
+                success
+                message
+              }
+            }
+          `,
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('MarkAllNotificationsAsRead response:', response);
+        return response.data;
+      },
+      invalidatesTags: ['Notifications'],
+    }),
+
+    deleteNotification: builder.mutation<DeleteNotificationResponse, { notificationId: string }>({
+      query: ({ notificationId }) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation DeleteNotification($notificationId: ID!) {
+              deleteNotification(notificationId: $notificationId) {
+                success
+                message
+              }
+            }
+          `,
+          variables: { notificationId },
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('DeleteNotification response:', response);
+        return response.data;
+      },
+      invalidatesTags: ['Notifications'],
+    }),
+
+    // =============================================
+    // AI Features - Mission Mutations
+    // =============================================
+
+    generateWeeklyMissions: builder.mutation<GenerateWeeklyMissionsResponse, void>({
+      query: () => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation GenerateWeeklyMissions {
+              generateWeeklyMissions {
+                ... on MissionSuccessType {
+                  __typename
+                  success
+                  message
+                  mission {
+                    id
+                    title
+                    description
+                    missionType
+                    missionTypeDisplay
+                    difficulty
+                    difficultyDisplay
+                    status
+                    statusDisplay
+                    progressPercentage
+                    crsPointsReward
+                    badgeReward
+                    assignedAt
+                    dueDate
+                    daysRemaining
+                    isOverdue
+                  }
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                }
+              }
+            }
+          `,
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('GenerateWeeklyMissions response:', response);
+        return response.data;
+      },
+      invalidatesTags: ['Missions', 'CRS'],
+    }),
+
+    completeMission: builder.mutation<CompleteMissionResponse, CompleteMissionInput>({
+      query: (input) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation CompleteMission($input: CompleteMissionInput!) {
+              completeMission(input: $input) {
+                ... on MissionCompletionSuccessType {
+                  __typename
+                  success
+                  message
+                  mission {
+                    id
+                    status
+                    completedAt
+                  }
+                  crsPointsAwarded
+                  newCrsScore
+                }
+                ... on ErrorType {
+                  __typename
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input },
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('CompleteMission response:', response);
+        return response.data;
+      },
+      invalidatesTags: ['Missions', 'CRS'],
+    }),
+
+    skipMission: builder.mutation<SkipMissionResponse, SkipMissionInput>({
+      query: (input) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation SkipMission($input: SkipMissionInput!) {
+              skipMission(input: $input) {
+                ... on MissionSuccessType {
+                  __typename
+                  success
+                  message
+                  mission {
+                    id
+                    title
+                    status
+                    statusDisplay
+                  }
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input },
+        },
+      }),
+      transformResponse: (response: any) => {
+        return response.data;
+      },
+      invalidatesTags: ['Missions'],
+    }),
+
+    updateMissionProgress: builder.mutation<UpdateMissionProgressResponse, UpdateMissionProgressInput>({
+      query: ({ missionId, progressPercentage }) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation UpdateProgress($missionId: String!, $progressPercentage: Int!) {
+              updateMissionProgress(missionId: $missionId, progressPercentage: $progressPercentage) {
+                ... on MissionSuccessType {
+                  __typename
+                  success
+                  message
+                  mission {
+                    id
+                    progressPercentage
+                  }
+                }
+                ... on ErrorType {
+                  __typename
+                  message
+                }
+              }
+            }
+          `,
+          variables: { missionId, progressPercentage },
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('UpdateMissionProgress response:', response);
+        return response.data;
+      },
+      invalidatesTags: ['Missions'],
+    }),
+
+    rateMission: builder.mutation<RateMissionResponse, RateMissionInput>({
+      query: ({ missionId, rating, feedback }) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation RateMission($missionId: String!, $rating: Int!, $feedback: String) {
+              rateMission(missionId: $missionId, rating: $rating, feedback: $feedback) {
+                ... on SuccessType {
+                  __typename
+                  success
+                  message
+                }
+                ... on ErrorType {
+                  __typename
+                  message
+                }
+              }
+            }
+          `,
+          variables: { missionId, rating, feedback },
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('RateMission response:', response);
+        return response.data;
+      },
+    }),
+
+    getMyMissions: builder.query<MyMissionsResponse, MyMissionsInput | void>({
+      query: (input) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            query MyMissions($status: MissionStatusEnum, $limit: Int, $offset: Int) {
+              myMissions(status: $status, limit: $limit, offset: $offset) {
+                activeCount
+                completedCount
+                hasMore
+                missions {
+                  aiReasoning
+                  assignedAt
+                  badgeReward
+                  completedAt
+                  crsPointsReward
+                  daysRemaining
+                  description
+                  difficulty
+                  difficultyDisplay
+                  dueDate
+                  estimatedTimeMinutes
+                  id
+                  isOverdue
+                  missionType
+                  missionTypeDisplay
+                  progressPercentage
+                  status
+                  statusDisplay
+                  successCriteria
+                  targetComponent
+                  title
+                }
+                totalCount
+              }
+            }
+          `,
+          variables: input || {},
+        },
+      }),
+      transformResponse: (response: any) => {
+        return response.data;
+      },
+      providesTags: ['Missions'],
+    }),
+
+    getWeeklyMissions: builder.query<WeeklyMissionsResponse, WeeklyMissionsInput | void>({
+      query: (input) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            query WeeklyMissions($weekNumber: Int, $year: Int) {
+              weeklyMissions(weekNumber: $weekNumber, year: $year) {
+                weekNumber
+                year
+                missions {
+                  id
+                  title
+                  description
+                  missionType
+                  missionTypeDisplay
+                  difficulty
+                  difficultyDisplay
+                  status
+                  statusDisplay
+                  progressPercentage
+                  crsPointsReward
+                  badgeReward
+                  aiReasoning
+                  targetComponent
+                  estimatedTimeMinutes
+                  successCriteria
+                  assignedAt
+                  dueDate
+                  completedAt
+                  daysRemaining
+                  isOverdue
+                  completion {
+                    id
+                    completionMethod
+                    crsPointsAwarded
+                    badgeAwarded
+                    aiFeedback
+                    userRating
+                    userFeedback
+                    completedAt
+                  }
+                }
+                totalPointsAvailable
+                pointsEarned
+                completionRate
+              }
+            }
+          `,
+          variables: input || {},
+        },
+      }),
+      transformResponse: (response: any) => {
+        return response.data;
+      },
+      providesTags: ['Missions'],
+    }),
+
+    getMissionStats: builder.query<MissionStatsResponse, void>({
+      query: () => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            query MissionStats {
+              missionStats {
+                totalCompleted
+                totalPointsEarned
+                currentStreak
+                bestStreak
+              }
+            }
+          `,
+        },
+      }),
+      transformResponse: (response: any) => {
+        return response.data;
+      },
+      providesTags: ['Missions'],
+    }),
+
+    getMissionDetails: builder.query<MissionDetailsResponse, { missionId: string }>({
+      query: ({ missionId }) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            query MissionDetails($missionId: String!) {
+              missionDetails(missionId: $missionId) {
+                id
+                title
+                description
+                missionType
+                missionTypeDisplay
+                difficulty
+                difficultyDisplay
+                status
+                statusDisplay
+                progressPercentage
+                crsPointsReward
+                badgeReward
+                aiReasoning
+                targetComponent
+                estimatedTimeMinutes
+                successCriteria
+                assignedAt
+                dueDate
+                completedAt
+                daysRemaining
+                isOverdue
+                completion {
+                  id
+                  completionMethod
+                  crsPointsAwarded
+                  badgeAwarded
+                  aiFeedback
+                  userRating
+                  userFeedback
+                  completedAt
+                }
+              }
+            }
+          `,
+          variables: { missionId },
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('GetMissionDetails response:', response);
+        return response.data;
+      },
+      providesTags: ['Missions'],
+    }),
+
+    // =============================================
+    // AI Features - RAY Chatbot Mutations
+    // =============================================
+
+    createConversation: builder.mutation<CreateConversationResponse, CreateConversationInput>({
+      query: (input) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation CreateConversation($input: CreateConversationInput) {
+              createConversation(input: $input) {
+                ... on ConversationSuccessType {
+                  __typename
+                  success
+                  message
+                  conversation {
+                    id
+                    title
+                    status
+                    createdAt
+                  }
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input },
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('CreateConversation response:', response);
+        return response.data;
+      },
+    }),
+
+    sendTextMessage: builder.mutation<SendTextMessageResponse, SendTextMessageInput>({
+      query: (input) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation SendTextMessage($input: SendTextMessageInput!) {
+              sendTextMessage(input: $input) {
+                ... on SendMessageSuccessType {
+                  __typename
+                  success
+                  message
+                  conversationId
+                  userMessage {
+                    id
+                    content
+                    role
+                    createdAt
+                  }
+                  assistantMessage {
+                    id
+                    content
+                    role
+                    createdAt
+                  }
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input },
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('SendTextMessage response:', response);
+        return response.data;
+      },
+    }),
+
+    sendVoiceMessage: builder.mutation<SendVoiceMessageResponse, SendVoiceMessageInput>({
+      query: (input) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation SendVoiceMessage($input: SendVoiceMessageInput!) {
+              sendVoiceMessage(input: $input) {
+                ... on SendMessageSuccessType {
+                  __typename
+                  success
+                  message
+                  conversationId
+                  userMessage {
+                    id
+                    content
+                    role
+                    createdAt
+                    audioUrl
+                  }
+                  assistantMessage {
+                    id
+                    content
+                    role
+                    createdAt
+                    ttsAudioUrl
+                  }
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input },
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('SendVoiceMessage response:', response);
+        return response.data;
+      },
+    }),
+
+    uploadChatDocument: builder.mutation<DocumentUploadResponse, DocumentUploadInput>({
+      query: (input) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation UploadDocument($input: DocumentUploadInput!) {
+              uploadDocument(input: $input) {
+                ... on DocumentType {
+                  __typename
+                  id
+                  fileName
+                  processedAt
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input },
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('UploadChatDocument response:', response);
+        return response.data;
+      },
+    }),
+
+    updateConversation: builder.mutation<UpdateConversationResponse, UpdateConversationInput>({
+      query: (input) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation UpdateConversation($input: UpdateConversationInput!) {
+              updateConversation(input: $input) {
+                ... on ConversationSuccessType {
+                  __typename
+                  success
+                  message
+                  conversation {
+                    id
+                    title
+                  }
+                }
+                ... on ErrorType {
+                  __typename
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input },
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('UpdateConversation response:', response);
+        return response.data;
+      },
+    }),
+
+    archiveConversation: builder.mutation<ArchiveConversationResponse, ArchiveConversationInput>({
+      query: (input) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation ArchiveConversation($input: ArchiveConversationInput!) {
+              archiveConversation(input: $input) {
+                ... on ConversationSuccessType {
+                  __typename
+                  success
+                  message
+                }
+                ... on ErrorType {
+                  __typename
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input },
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('ArchiveConversation response:', response);
+        return response.data;
+      },
+    }),
+
+    deleteConversation: builder.mutation<DeleteConversationResponse, DeleteConversationInput>({
+      query: (input) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation DeleteConversation($input: DeleteConversationInput!) {
+              deleteConversation(input: $input) {
+                ... on ConversationSuccessType {
+                  __typename
+                  success
+                  message
+                }
+                ... on ErrorType {
+                  __typename
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input },
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('DeleteConversation response:', response);
+        return response.data;
+      },
+    }),
+
+    getMyConversations: builder.query<GetConversationsResponse, GetConversationsInput | void>({
+      query: (input) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            query MyConversations($status: String, $limit: Int, $offset: Int) {
+              myConversations(status: $status, limit: $limit, offset: $offset) {
+                ... on ConversationListType {
+                  __typename
+                  conversations {
+                    id
+                    title
+                    status
+                    messageCount
+                    lastMessageAt
+                    createdAt
+                  }
+                  totalCount
+                  hasNext
+                }
+                ... on ErrorType {
+                  __typename
+                  message
+                }
+              }
+            }
+          `,
+          variables: input || {},
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('GetMyConversations response:', response);
+        return response.data;
+      },
+    }),
+
+    getConversation: builder.query<GetConversationResponse, GetConversationInput>({
+      query: (input) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            query GetConversation($conversationId: ID!) {
+              conversation(conversationId: $conversationId) {
+                ... on ConversationSuccessType {
+                  __typename
+                  success
+                  conversation {
+                    id
+                    title
+                    status
+                    createdAt
+                    updatedAt
+                  }
+                }
+                ... on ErrorType {
+                  __typename
+                  message
+                }
+              }
+            }
+          `,
+          variables: { conversationId: input.conversationId },
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('GetConversation response:', response);
+        return response.data;
+      },
+    }),
+
+    getConversationMessages: builder.query<GetConversationMessagesResponse, GetConversationMessagesInput>({
+      query: (input) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            query ConversationMessages($conversationId: ID!, $limit: Int, $beforeId: ID) {
+              conversationMessages(conversationId: $conversationId, limit: $limit, beforeId: $beforeId) {
+                ... on MessageListType {
+                  __typename
+                  messages {
+                    id
+                    content
+                    role
+                    audioUrl
+                    ttsAudioUrl
+                    createdAt
+                  }
+                  hasMore
+                }
+                ... on ErrorType {
+                  __typename
+                  message
+                }
+              }
+            }
+          `,
+          variables: {
+            conversationId: input.conversationId,
+            limit: input.limit,
+            beforeId: input.beforeId,
+          },
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('GetConversationMessages response:', response);
+        return response.data;
+      },
+    }),
+
+    getChatDocuments: builder.query<GetChatDocumentsResponse, GetChatDocumentsInput>({
+      query: (input) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            query ChatDocuments($conversationId: ID!, $limit: Int) {
+              chatDocuments(conversationId: $conversationId, limit: $limit) {
+                id
+                fileName
+                documentType
+                status
+                createdAt
+              }
+            }
+          `,
+          variables: {
+            conversationId: input.conversationId,
+            limit: input.limit,
+          },
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('GetChatDocuments response:', response);
+        return response.data;
+      },
+    }),
+
+    // =============================================
+    // AI Features - Cover Letter Generator
+    // =============================================
+
+    generateCoverLetter: builder.mutation<GenerateCoverLetterResponse, GenerateCoverLetterInput>({
+      query: (input) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            mutation GenerateCoverLetter($input: GenerateCoverLetterInput!) {
+              generateCoverLetter(input: $input) {
+                ... on CoverLetterGenerationSuccessType {
+                  __typename
+                  success
+                  message
+                  generation {
+                    id
+                    status
+                    generatedCoverLetter
+                    coverLetterPdfUrl
+                    errorMessage
+                  }
+                }
+                ... on ErrorType {
+                  __typename
+                  success
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input },
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('GenerateCoverLetter response:', response);
+        return response.data;
+      },
+    }),
+
+    getCoverLetterGeneration: builder.query<GetCoverLetterGenerationResponse, { id: string }>({
+      query: ({ id }) => ({
+        url: '/graphql/',
+        method: 'POST',
+        body: {
+          query: `
+            query GetCoverLetterGeneration($id: String!) {
+              coverLetterGeneration(id: $id) {
+                id
+                status
+                generatedCoverLetter
+                coverLetterPdfUrl
+                errorMessage
+                createdAt
+              }
+            }
+          `,
+          variables: { id },
+        },
+      }),
+      transformResponse: (response: any) => {
+        console.log('GetCoverLetterGeneration response:', response);
+        return response.data;
+      },
+    }),
   }),
 });
 
@@ -6745,6 +9584,7 @@ export const {
   useDeleteExperienceMutation,
   useGetCandidateProfileQuery,
   useGetRecruiterProfileQuery,
+  useUpdateCandidateProfileMutation,
   useAddSkillMutation,
   useRemoveSkillMutation,
   useUpdateSkillsMutation,
@@ -6788,6 +9628,7 @@ export const {
   useAddKeywordsMutation,
   useExportResumePdfMutation,
   useGetMyResumesQuery,
+  useLazyGetMyResumesQuery,
   useGetResumeByIdQuery,
   useGetResumeStatsQuery,
   useSearchResumesQuery,
@@ -6805,11 +9646,17 @@ export const {
   useGetBillingHistoryQuery,
   useLazySyncSubscriptionStatusQuery,
   useChangePlanMutation,
+  // Paypal Payment hooks
+  useCreatePaypalSubscriptionMutation,
+  useCapturePaypalSubscriptionMutation,
+  useCancelPaypalSubscriptionMutation,
   // Google OAuth hooks
   useGetGoogleOAuthUrlMutation,
   useGoogleOAuthLoginMutation,
   useLinkGoogleAccountMutation,
   useUnlinkGoogleAccountMutation,
+  // LinkedIn OAuth hooks
+  useLinkedinOAuthLoginMutation,
   // Google Calendar hooks
   useGetGoogleCalendarAuthUrlMutation,
   useConnectGoogleCalendarMutation,
@@ -6855,6 +9702,7 @@ export const {
   useCompleteInterviewSessionMutation,
   useAbandonInterviewSessionMutation,
   useConvertVoiceMutation,
+  useConvertVoiceWithAnalysisMutation,
   useGetInterviewCoachSessionsQuery,
   useGetInterviewCoachSessionQuery,
   useGetNextInterviewQuestionQuery,
@@ -6873,4 +9721,76 @@ export const {
   // GDPR Data Export & Deletion hooks
   useExportMyDataMutation,
   useDeleteAccountMutation,
+  // Onboarding hooks
+  useGetOnboardingStatusQuery,
+  useLazyGetOnboardingStatusQuery,
+  useUpdateOnboardingStepMutation,
+  useGetProfileProgressQuery,
+  useLazyGetProfileProgressQuery,
+  useAwardProfilePointsMutation,
+  useUpdatePersonalInfoMutation,
+  // CRS (Career Readiness Score) hooks
+  useGetMyCRSQuery,
+  useLazyGetMyCRSQuery,
+  useGetCRSDashboardQuery,
+  useLazyGetCRSDashboardQuery,
+  useGetCareerDashboardFullQuery,
+  useLazyGetCareerDashboardFullQuery,
+  // Recent Activity hooks
+  useGetRecentActivityQuery,
+  useLazyGetRecentActivityQuery,
+  // Feature Gating hooks
+  useGetFeatureGatesQuery,
+  useLazyGetFeatureGatesQuery,
+  useHasFeatureAccessQuery,
+  useLazyHasFeatureAccessQuery,
+  // Mission hooks
+  useGetActiveMissionsQuery,
+  useLazyGetActiveMissionsQuery,
+  useRecalculateCRSMutation,
+  // Recruiter Profile Setup hooks
+  useCompleteRecruiterProfileMutation,
+  // Notification hooks
+  useGetMyNotificationsQuery,
+  useLazyGetMyNotificationsQuery,
+  useGetUnreadNotificationCountQuery,
+  useLazyGetUnreadNotificationCountQuery,
+  useGetNotificationQuery,
+  useLazyGetNotificationQuery,
+  useMarkNotificationAsReadMutation,
+  useMarkAllNotificationsAsReadMutation,
+  useDeleteNotificationMutation,
+  // AI Features - Mission Mutations hooks
+  useGenerateWeeklyMissionsMutation,
+  useCompleteMissionMutation,
+  useSkipMissionMutation,
+  useUpdateMissionProgressMutation,
+  useRateMissionMutation,
+  useGetMyMissionsQuery,
+  useLazyGetMyMissionsQuery,
+  useGetWeeklyMissionsQuery,
+  useLazyGetWeeklyMissionsQuery,
+  useGetMissionStatsQuery,
+  useLazyGetMissionStatsQuery,
+  useGetMissionDetailsQuery,
+  useLazyGetMissionDetailsQuery,
+  // AI Features - RAY Chatbot hooks
+  useCreateConversationMutation,
+  useSendTextMessageMutation,
+  useSendVoiceMessageMutation,
+  useUploadChatDocumentMutation,
+  useUpdateConversationMutation,
+  useArchiveConversationMutation,
+  useDeleteConversationMutation,
+  useGetMyConversationsQuery,
+  useLazyGetMyConversationsQuery,
+  useGetConversationQuery,
+  useLazyGetConversationQuery,
+  useGetConversationMessagesQuery,
+  useLazyGetConversationMessagesQuery,
+  useGetChatDocumentsQuery,
+  useLazyGetChatDocumentsQuery,
+  // AI Features - Cover Letter hooks
+  useGenerateCoverLetterMutation,
+  useLazyGetCoverLetterGenerationQuery,
 } = api;

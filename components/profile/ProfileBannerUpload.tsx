@@ -9,6 +9,7 @@ import {
   StyleSheet,
   Platform,
   Dimensions,
+  Pressable,
 } from 'react-native';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../store/store';
@@ -267,13 +268,20 @@ export default function ProfileBannerUpload({
 
   const bannerUrl = getBannerUrl();
 
+  const openImagePicker = () => {
+    setShowModal(true);
+  };
+
   return (
     <View style={[styles.container, { height }]}>
-      <TouchableOpacity
-        onPress={() => editable && setShowModal(true)}
-        activeOpacity={editable ? 0.8 : 1}
+      {/* Banner image or placeholder - tappable area */}
+      <Pressable
+        onPress={() => editable && openImagePicker()}
+        style={({ pressed }) => [
+          styles.bannerContainer,
+          pressed && editable && { opacity: 0.8 },
+        ]}
         disabled={!editable}
-        style={styles.bannerContainer}
       >
         {bannerUrl ? (
           <Image
@@ -298,16 +306,26 @@ export default function ProfileBannerUpload({
             </View>
           </View>
         )}
+      </Pressable>
 
-        {editable && !uploading && (
-          <View style={styles.editButton}>
-            <EditIcon size={16} />
-            <Text style={styles.editButtonText}>
-              {bannerUrl ? 'Change' : 'Add'} Cover
-            </Text>
-          </View>
-        )}
-      </TouchableOpacity>
+      {/* Edit button - uses Pressable with proper touch handling */}
+      {editable && !uploading && (
+        <Pressable
+          style={({ pressed }) => [
+            styles.editButtonWrapper,
+            styles.editButton,
+            pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] },
+          ]}
+          onPress={openImagePicker}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          android_ripple={{ color: 'rgba(255, 255, 255, 0.3)', borderless: false }}
+        >
+          <EditIcon size={16} />
+          <Text style={styles.editButtonText}>
+            {bannerUrl ? 'Change' : 'Add'} Cover
+          </Text>
+        </Pressable>
+      )}
 
       <Modal
         visible={showModal}
@@ -452,10 +470,14 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '600',
   },
-  editButton: {
+  editButtonWrapper: {
     position: 'absolute',
     bottom: 12,
     right: 12,
+    zIndex: 100,
+    elevation: 100,
+  },
+  editButton: {
     backgroundColor: 'rgba(67, 126, 244, 0.95)',
     flexDirection: 'row',
     alignItems: 'center',
@@ -466,7 +488,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
-    elevation: 5,
+    elevation: 10,
   },
   editButtonText: {
     marginLeft: 6,

@@ -1,29 +1,31 @@
+import React from 'react';
 import { useRouter } from 'expo-router';
+import { useGetMyProfileQuery } from '../../../../services/api';
 import CVUploadScreen from '../../../../screens/candidate/dashboard/CVUploadScreen';
 
 export default function CVUploadRoute() {
   const router = useRouter();
+  const { data: profileData } = useGetMyProfileQuery();
+
+  // Get profile picture URL
+  const profileImageUrl = profileData?.myProfile?.profilePicture || undefined;
 
   return (
     <CVUploadScreen
-      activeTab="jobs"
-      onTabChange={(tabId) => {
-        const routes: Record<string, string> = {
-          home: '/(candidate)/(tabs)/home',
-          jobs: '/(candidate)/(tabs)/jobs',
-          aiCoach: '/(candidate)/(tabs)/ai-coach',
-          profile: '/(candidate)/(tabs)/profile',
-        };
-        // Use replace for tab changes to avoid stacking
-        router.replace(routes[tabId] as any);
-      }}
       onBack={() => router.back()}
-      onCreateCV={() => router.push('/(candidate)/(tabs)/jobs/cv-builder' as any)}
+      onCreateCV={() => router.push('/(candidate)/cv-builder?source=jobs' as any)}
       onEditCV={(resumeId) => router.push({
-        pathname: '/(candidate)/(tabs)/jobs/cv-builder',
-        params: { resumeId },
+        pathname: '/(candidate)/cv-builder',
+        params: { resumeId, source: 'jobs' },
       } as any)}
       onViewPricing={() => router.push('/(candidate)/subscription/pricing' as any)}
+      onNavigateToProfile={() => router.push('/(candidate)/(tabs)/profile/full-profile' as any)}
+      onViewAllResumes={() => router.push('/(candidate)/resumes' as any)}
+      onSearch={() => {
+        // Navigate to search or open search modal
+      }}
+      onNotifications={() => router.push('/(candidate)/notifications' as any)}
+      profileImageUrl={profileImageUrl}
     />
   );
 }

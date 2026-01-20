@@ -144,64 +144,108 @@ class NativeGoogleSignInService {
 
   /**
    * Send Google ID token to your backend
+   * @param idToken - Google ID token
+   * @param role - Optional role ('candidate' or 'recruiter'). Defaults to 'candidate'.
    */
-  async authenticateWithBackend(idToken: string) {
+  async authenticateWithBackend(idToken: string, role?: 'candidate' | 'recruiter') {
     try {
       const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://13.61.193.190:8000/';
       const graphqlUrl = `${apiUrl}/graphql/`.replace(/\/+/g, '/').replace(':/', '://');
 
-      console.log('Sending Google ID token to backend...');
+      console.log('Sending Google ID token to backend...', { role: role || 'candidate' });
 
-      const response = await fetch(graphqlUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          query: `
-            mutation GoogleCognitoLogin($googleIdToken: String!) {
-              googleCognitoLogin(googleIdToken: $googleIdToken) {
-                __typename
-                ... on LoginSuccessType {
-                  success
-                  message
-                  accessToken
-                  refreshToken
-                  user {
-                    id
-                    email
-                    firstName
-                    lastName
-                    role
-                    authProvider
-                    googleId
-                  }
-                  role
-                }
-                ... on ErrorType {
-                  success
-                  message
-                  errors {
-                    field
+      // Add timeout to prevent hanging
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
+      let response: Response;
+      try {
+        response = await fetch(graphqlUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            query: `
+              mutation GoogleCognitoLogin($googleIdToken: String!, $role: String) {
+                googleCognitoLogin(googleIdToken: $googleIdToken, role: $role) {
+                  __typename
+                  ... on LoginSuccessType {
+                    success
                     message
+                    accessToken
+                    refreshToken
+                    user {
+                      id
+                      email
+                      firstName
+                      lastName
+                      role
+                      authProvider
+                      googleId
+                    }
+                    role
+                    profileSetupRequired
+                  }
+                  ... on ErrorType {
+                    success
+                    message
+                    errors {
+                      field
+                      message
+                    }
                   }
                 }
               }
-            }
-          `,
-          variables: {
-            googleIdToken: idToken,
-          },
-        }),
-      });
+            `,
+            variables: {
+              googleIdToken: idToken,
+              role: role || null,
+            },
+          }),
+          signal: controller.signal,
+        });
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId);
+        if (fetchError.name === 'AbortError') {
+          return {
+            success: false,
+            message: 'Request timed out. Please check your internet connection and try again.',
+          };
+        }
+        throw fetchError;
+      }
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        console.error('Backend returned error status:', response.status);
+        return {
+          success: false,
+          message: `Server error (${response.status}). Please try again later.`,
+        };
+      }
 
       const result = await response.json();
       console.log('Backend response:', result);
+      console.log('googleCognitoLogin data:', result.data?.googleCognitoLogin);
+      console.log('profileSetupRequired from backend:', result.data?.googleCognitoLogin?.profileSetupRequired);
+
+      // Check for GraphQL errors
+      if (result.errors && result.errors.length > 0) {
+        console.error('GraphQL errors:', result.errors);
+        return {
+          success: false,
+          message: result.errors[0]?.message || 'Authentication failed',
+        };
+      }
 
       if (result.data?.googleCognitoLogin?.success) {
+        const loginData = result.data.googleCognitoLogin;
+        console.log('Returning login data with profileSetupRequired:', loginData.profileSetupRequired);
         return {
           success: true,
-          ...result.data.googleCognitoLogin,
+          ...loginData,
         };
       } else {
         return {
@@ -214,15 +258,16 @@ class NativeGoogleSignInService {
       console.error('Error authenticating with backend:', error);
       return {
         success: false,
-        message: error instanceof Error ? error.message : 'Authentication failed',
+        message: error instanceof Error ? error.message : 'Authentication failed. Please try again.',
       };
     }
   }
 
   /**
    * Complete sign-in flow: Native popup → Backend authentication
+   * @param role - Optional role ('candidate' or 'recruiter'). Defaults to 'candidate'.
    */
-  async signInAndAuthenticate() {
+  async signInAndAuthenticate(role?: 'candidate' | 'recruiter') {
     // Step 1: Native Google Sign-In
     const signInResult = await this.signIn();
 
@@ -242,8 +287,8 @@ class NativeGoogleSignInService {
     }
 
     // Step 2: Send ID token to backend ONLY if sign-in was successful
-    console.log('Sign-in successful, authenticating with backend...');
-    const authResult = await this.authenticateWithBackend(signInResult.idToken);
+    console.log('Sign-in successful, authenticating with backend...', { role: role || 'candidate' });
+    const authResult = await this.authenticateWithBackend(signInResult.idToken, role);
 
     return {
       ...authResult,

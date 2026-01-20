@@ -16,15 +16,19 @@ import {
   useLazyHasGivenConsentQuery,
 } from '../../services/api';
 import { useAppDispatch } from '../../store/hooks';
-import { setCredentials } from '../../store/slices/authSlice';
+import { setCredentials, logout as logoutAction } from '../../store/slices/authSlice';
 import SuccessPopup from '../../components/SuccessPopup';
 import KeyboardDismissWrapper from '../../components/KeyboardDismissWrapper';
 import GDPRConsentBanner, { ConsentPreferences, POLICY_VERSION } from '../../components/GDPRConsentBanner';
-import { storeTokens } from '../../utils/authUtils';
+import RecruiterProfileSetupModal from '../../components/RecruiterProfileSetupModal';
+import { storeTokens, clearTokens } from '../../utils/authUtils';
 import { useAlert } from '../../contexts/AlertContext';
 
 // Import NATIVE Google Sign-In service
 import nativeGoogleSignIn from '../../services/nativeGoogleSignIn';
+
+// Import LinkedIn OAuth service (backend handles token exchange)
+import { useLinkedInAuth } from '../../services/linkedinAuthService';
 
 // Import icons from assets
 import BackArrowIcon from '../../assets/images/arrowLeft.svg';
@@ -52,15 +56,36 @@ interface LoginScreenProps {
   onSignUp?: () => void;
   onLoginSuccess?: () => void;
   showOAuth?: boolean;
+  role?: 'candidate' | 'recruiter';
 }
 
 type FormData = z.infer<typeof loginSchema>;
 
-export default function LoginScreen({ onBack, onForgotPassword, onSignUp, onLoginSuccess, showOAuth = true }: LoginScreenProps) {
+export default function LoginScreen({ onBack, onForgotPassword, onSignUp, onLoginSuccess, showOAuth = true, role }: LoginScreenProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [showSuccessPopup, setShowSuccessPopup] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isLinkedInLoading, setIsLinkedInLoading] = useState(false);
   const [showConsentBanner, setShowConsentBanner] = useState(false);
+  const [showRecruiterProfileSetup, setShowRecruiterProfileSetup] = useState(false);
+  const [recruiterSetupUserInfo, setRecruiterSetupUserInfo] = useState<{
+    email?: string;
+    name?: string;
+    photoUrl?: string;
+    authData?: {
+      user: {
+        id: string;
+        email: string;
+        firstName: string;
+        lastName: string;
+        phoneNumber: string;
+        role: 'candidate' | 'recruiter';
+        isVerified: boolean;
+      };
+      token: string;
+      refreshToken: string;
+    };
+  } | null>(null);
   const [login, { isLoading }] = useLoginMutation();
   const [checkConsent] = useLazyHasGivenConsentQuery();
   const [acceptAllConsents] = useAcceptAllConsentsMutation();
@@ -68,6 +93,9 @@ export default function LoginScreen({ onBack, onForgotPassword, onSignUp, onLogi
   const [updateAllConsents] = useUpdateAllConsentsMutation();
   const dispatch = useAppDispatch();
   const { showAlert } = useAlert();
+
+  // LinkedIn OAuth hook - backend handles token exchange and returns tokens via deep link
+  const { signIn: linkedInSignIn, result: linkedInResult, isReady: linkedInReady, clearResult: clearLinkedInResult } = useLinkedInAuth();
 
   // Input refs for form navigation
   const emailRef = useRef<TextInput>(null);
@@ -224,17 +252,48 @@ export default function LoginScreen({ onBack, onForgotPassword, onSignUp, onLogi
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setIsGoogleLoading(true);
 
-      const result = await nativeGoogleSignIn.signInAndAuthenticate();
+      // Pass role to backend for proper account creation/login
+      const result = await nativeGoogleSignIn.signInAndAuthenticate(role);
 
       if (result.cancelled) {
         return;
       }
 
       if (result.success && result.accessToken) {
-        const normalizedRole = (result.role?.toLowerCase() || 'candidate') as 'candidate' | 'recruiter';
+        // Use role from result, fallback to prop role, then default to candidate
+        const normalizedRole = (result.role?.toLowerCase() || role || 'candidate') as 'candidate' | 'recruiter';
 
+        // Store tokens first (needed for API calls)
         await storeTokens(result.accessToken, result.refreshToken);
 
+        // Check if recruiter needs to complete profile setup BEFORE setting credentials
+        // This prevents automatic navigation to dashboard
+        if (normalizedRole === 'recruiter' && result.profileSetupRequired) {
+          console.log('Recruiter profile setup required, showing modal BEFORE setting credentials');
+          setRecruiterSetupUserInfo({
+            email: result.user?.email,
+            name: result.user?.firstName || result.googleUser?.name,
+            photoUrl: result.googleUser?.photo,
+            // Store full auth data for use after profile completion
+            authData: {
+              user: {
+                id: result.user.id,
+                email: result.user.email,
+                firstName: result.user.firstName,
+                lastName: result.user.lastName,
+                phoneNumber: result.user.phoneNumber,
+                role: normalizedRole,
+                isVerified: result.user.isVerified,
+              },
+              token: result.accessToken,
+              refreshToken: result.refreshToken,
+            },
+          });
+          setShowRecruiterProfileSetup(true);
+          return;
+        }
+
+        // For non-recruiters or recruiters with complete profiles, set credentials now
         dispatch(setCredentials({
           user: {
             id: result.user.id,
@@ -287,6 +346,157 @@ export default function LoginScreen({ onBack, onForgotPassword, onSignUp, onLogi
   useEffect(() => {
     console.log('Native Google Sign-In initialized');
   }, []);
+
+  // Handle LinkedIn OAuth result from deep link callback
+  useEffect(() => {
+    if (linkedInResult) {
+      handleLinkedInResult(linkedInResult);
+    }
+  }, [linkedInResult]);
+
+  // Process LinkedIn OAuth result (tokens come directly from backend via deep link)
+  const handleLinkedInResult = async (result: typeof linkedInResult) => {
+    if (!result) return;
+
+    setIsLinkedInLoading(false);
+
+    if (result.cancelled) {
+      return;
+    }
+
+    if (!result.success || !result.accessToken) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      showAlert({
+        type: 'error',
+        title: 'LinkedIn Sign-In Failed',
+        message: result.error || 'Failed to sign in with LinkedIn. Please try again.',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
+      clearLinkedInResult();
+      return;
+    }
+
+    try {
+      // Use role from result, fallback to prop role, then default to candidate
+      const normalizedRole = (result.role?.toLowerCase() || role || 'candidate') as 'candidate' | 'recruiter';
+
+      // Store tokens first
+      await storeTokens(result.accessToken, result.refreshToken!);
+
+      // Check if recruiter needs profile setup
+      if (normalizedRole === 'recruiter' && result.profileSetupRequired) {
+        console.log('Recruiter profile setup required (LinkedIn)');
+        setRecruiterSetupUserInfo({
+          email: result.user?.email,
+          name: result.user?.firstName,
+          authData: {
+            user: {
+              id: result.user?.id || '',
+              email: result.user?.email || '',
+              firstName: result.user?.firstName || '',
+              lastName: result.user?.lastName || '',
+              phoneNumber: result.user?.phoneNumber || '',
+              role: normalizedRole,
+              isVerified: result.user?.isVerified || true,
+            },
+            token: result.accessToken,
+            refreshToken: result.refreshToken!,
+          },
+        });
+        setShowRecruiterProfileSetup(true);
+        clearLinkedInResult();
+        return;
+      }
+
+      // Set credentials in Redux
+      dispatch(setCredentials({
+        user: {
+          id: result.user?.id || '',
+          email: result.user?.email || '',
+          firstName: result.user?.firstName || '',
+          lastName: result.user?.lastName || '',
+          phoneNumber: result.user?.phoneNumber || '',
+          role: normalizedRole,
+          isVerified: result.user?.isVerified || true,
+        },
+        token: result.accessToken,
+        refreshToken: result.refreshToken!,
+      }));
+
+      // Check consent
+      try {
+        const consentResult = await checkConsent().unwrap();
+        if (!consentResult?.hasGivenConsent) {
+          setShowConsentBanner(true);
+          clearLinkedInResult();
+          return;
+        }
+      } catch (consentError) {
+        console.log('Consent check failed:', consentError);
+      }
+
+      clearLinkedInResult();
+      setShowSuccessPopup(true);
+    } catch (error: any) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      showAlert({
+        type: 'error',
+        title: 'LinkedIn Sign-In Failed',
+        message: error.message || 'Failed to complete sign in. Please try again.',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
+      clearLinkedInResult();
+    }
+  };
+
+  // Handle LinkedIn sign-in button press
+  const handleLinkedInSignIn = async () => {
+    if (!linkedInReady) {
+      showAlert({
+        type: 'info',
+        title: 'Please Wait',
+        message: 'LinkedIn sign-in is initializing. Please try again in a moment.',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
+      return;
+    }
+
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setIsLinkedInLoading(true);
+
+      // Pass role to backend via state parameter
+      const result = await linkedInSignIn(role);
+
+      // If browser was cancelled, result will have cancelled: true
+      if (result.cancelled) {
+        setIsLinkedInLoading(false);
+        return;
+      }
+
+      // If result has tokens, it will be handled by the useEffect
+      // If there's an immediate error, handle it here
+      if (result.error && result.error !== 'Waiting for callback...') {
+        setIsLinkedInLoading(false);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        showAlert({
+          type: 'error',
+          title: 'LinkedIn Error',
+          message: result.error,
+          buttons: [{ text: 'OK', style: 'default' }],
+        });
+      }
+    } catch (error: any) {
+      setIsLinkedInLoading(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      showAlert({
+        type: 'error',
+        title: 'LinkedIn Error',
+        message: 'Failed to start LinkedIn sign-in. Please try again.',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
+    }
+  };
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top', 'bottom']}>
@@ -463,21 +673,16 @@ export default function LoginScreen({ onBack, onForgotPassword, onSignUp, onLogi
                 {/* LinkedIn Button */}
                 <TouchableOpacity
                   style={[styles.socialButton, styles.socialButtonShadow]}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    showAlert({
-                      type: 'info',
-                      title: 'Available in Milestone 3',
-                      message: 'LinkedIn login will be available in Milestone 3.',
-                      buttons: [{ text: 'OK', style: 'default' }],
-                    });
-                  }}
+                  onPress={handleLinkedInSignIn}
+                  disabled={isLinkedInLoading}
                   activeOpacity={0.8}
                   accessibilityLabel="Sign in with LinkedIn"
                   accessibilityRole="button"
                 >
                   <LinkedInIcon width={20} height={20} />
-                  <Text className="text-gray-800 font-medium ml-2">LinkedIn</Text>
+                  <Text className="text-gray-800 font-medium ml-2">
+                    {isLinkedInLoading ? 'Signing In...' : 'LinkedIn'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             </>
@@ -522,6 +727,46 @@ export default function LoginScreen({ onBack, onForgotPassword, onSignUp, onLogi
         onAcceptAll={handleConsentAcceptAll}
         onRejectAll={handleConsentRejectAll}
         onSavePreferences={handleConsentCustom}
+      />
+
+      {/* Recruiter Profile Setup Modal (for Google OAuth users) */}
+      <RecruiterProfileSetupModal
+        visible={showRecruiterProfileSetup}
+        userEmail={recruiterSetupUserInfo?.email}
+        userName={recruiterSetupUserInfo?.name}
+        userPhotoUrl={recruiterSetupUserInfo?.photoUrl}
+        onComplete={() => {
+          // Now that profile is complete, set Redux credentials to trigger navigation
+          if (recruiterSetupUserInfo?.authData) {
+            console.log('Profile setup complete, setting Redux credentials to trigger navigation');
+            dispatch(setCredentials(recruiterSetupUserInfo.authData));
+          }
+          setShowRecruiterProfileSetup(false);
+          setRecruiterSetupUserInfo(null);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          // Note: Don't show success popup as navigation happens immediately
+        }}
+        onCancel={async () => {
+          // If user cancels, clear all auth state since profile setup is required
+          setShowRecruiterProfileSetup(false);
+          setRecruiterSetupUserInfo(null);
+
+          // Clear tokens from SecureStore
+          await clearTokens();
+
+          // Sign out from Google to clear cached account
+          await nativeGoogleSignIn.signOut();
+
+          // Properly logout to clear Redux state (sets isAuthenticated to false)
+          dispatch(logoutAction());
+
+          showAlert({
+            type: 'info',
+            title: 'Profile Setup Required',
+            message: 'You need to complete your profile setup to use the app as a recruiter.',
+            buttons: [{ text: 'OK', style: 'default' }],
+          });
+        }}
       />
     </SafeAreaView>
   );

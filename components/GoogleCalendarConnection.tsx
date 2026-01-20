@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, Linking, Platform } from 'react-native';
-import { useSelector } from 'react-redux';
-import Svg, { Path } from 'react-native-svg';
-import { 
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Dimensions, AppState, AppStateStatus } from 'react-native';
+import Svg, { Path, Rect } from 'react-native-svg';
+import {
   useGetGoogleCalendarAuthUrlMutation,
   useConnectGoogleCalendarMutation,
   useDisconnectGoogleCalendarMutation,
@@ -12,12 +11,30 @@ import {
 import { useAlert } from '../contexts/AlertContext';
 import * as WebBrowser from 'expo-web-browser';
 
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// Google Calendar Icon
+const GoogleCalendarIcon = ({ size = 40 }) => (
+  <Svg width={size} height={size} viewBox="0 0 48 48" fill="none">
+    <Path d="M36 8H12C9.79086 8 8 9.79086 8 12V36C8 38.2091 9.79086 40 12 40H36C38.2091 40 40 38.2091 40 36V12C40 9.79086 38.2091 8 36 8Z" fill="#4285F4"/>
+    <Path d="M34 6H14C10.6863 6 8 8.68629 8 12V14H40V12C40 8.68629 37.3137 6 34 6Z" fill="#1967D2"/>
+    <Rect x="12" y="18" width="8" height="8" rx="1" fill="white"/>
+    <Rect x="12" y="28" width="8" height="8" rx="1" fill="white"/>
+    <Rect x="22" y="18" width="8" height="8" rx="1" fill="white"/>
+    <Rect x="22" y="28" width="8" height="8" rx="1" fill="white"/>
+    <Rect x="32" y="18" width="4" height="8" rx="1" fill="white"/>
+    <Rect x="32" y="28" width="4" height="8" rx="1" fill="white"/>
+  </Svg>
+);
+
 interface GoogleCalendarConnectionProps {
   onConnectionChange?: (isConnected: boolean) => void;
+  compact?: boolean;
 }
 
 export const GoogleCalendarConnection: React.FC<GoogleCalendarConnectionProps> = ({
-  onConnectionChange
+  onConnectionChange,
+  compact = false
 }) => {
   const { showAlert } = useAlert();
   const [getAuthUrl, { isLoading: isGettingUrl }] = useGetGoogleCalendarAuthUrlMutation();
@@ -25,28 +42,43 @@ export const GoogleCalendarConnection: React.FC<GoogleCalendarConnectionProps> =
   const [disconnectCalendar, { isLoading: isDisconnecting }] = useDisconnectGoogleCalendarMutation();
   const { data: isConnected, isLoading: isCheckingConnection, refetch } = useIsGoogleCalendarConnectedQuery();
 
+  const isLoading = isGettingUrl || isConnecting || isDisconnecting;
+  const appState = useRef(AppState.currentState);
+
+  // Notify parent when connection status changes
   useEffect(() => {
     if (onConnectionChange && isConnected !== undefined) {
       onConnectionChange(isConnected);
     }
   }, [isConnected, onConnectionChange]);
 
+  // Refresh status when app comes back to foreground (in case user completed OAuth externally)
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
+        console.log('🔄 App returned to foreground, refreshing calendar status...');
+        refetch();
+      }
+      appState.current = nextAppState;
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription.remove();
+  }, [refetch]);
+
   const handleConnect = async () => {
     try {
       console.log('🔗 Starting Google Calendar connection flow...');
-      
-      // Get the redirect URI (same as backend callback)
+
       const redirectUri = `${API_URL}/auth/google/callback`;
       console.log('📍 Redirect URI:', redirectUri);
 
-      // Get authorization URL
       const response = await getAuthUrl().unwrap();
       const authData = response.getGoogleCalendarAuthUrl;
-      
+
       if ('authorizationUrl' in authData && authData.authorizationUrl) {
         console.log('✅ Got auth URL:', authData.authorizationUrl);
 
-        // Open browser for OAuth
         const result = await WebBrowser.openAuthSessionAsync(
           authData.authorizationUrl,
           redirectUri
@@ -55,19 +87,17 @@ export const GoogleCalendarConnection: React.FC<GoogleCalendarConnectionProps> =
         console.log('🌐 Browser result:', result);
 
         if (result.type === 'success' && result.url) {
-          // The callback returns JSON with the code, so we need to fetch it
           console.log('📡 Fetching callback response from:', result.url);
-          
+
           try {
             const callbackResponse = await fetch(result.url);
             const callbackData = await callbackResponse.json();
-            
+
             console.log('📦 Callback data:', callbackData);
 
             if (callbackData.success && callbackData.code) {
               console.log('✅ Got authorization code, connecting calendar...');
-              
-              // Connect calendar with the code
+
               const connectResponse = await connectCalendar({ code: callbackData.code }).unwrap();
               const connectData = connectResponse.connectGoogleCalendar;
 
@@ -78,7 +108,6 @@ export const GoogleCalendarConnection: React.FC<GoogleCalendarConnectionProps> =
                   message: 'Google Calendar connected successfully.',
                   buttons: [{ text: 'OK', style: 'default' }],
                 });
-                refetch();
               } else {
                 throw new Error(connectData.message || 'Failed to connect calendar');
               }
@@ -90,11 +119,17 @@ export const GoogleCalendarConnection: React.FC<GoogleCalendarConnectionProps> =
             throw new Error('Failed to retrieve authorization code from callback');
           }
         }
+
+        // Always refresh status after returning from OAuth popup (success, cancel, or dismiss)
+        console.log('🔄 Refreshing calendar connection status...');
+        refetch();
       } else {
         throw new Error('Failed to get authorization URL');
       }
     } catch (error: any) {
       console.error('❌ Google Calendar connection error:', error);
+      // Still refresh status on error in case connection happened but something else failed
+      refetch();
       showAlert({
         type: 'error',
         title: 'Connection Failed',
@@ -117,7 +152,7 @@ export const GoogleCalendarConnection: React.FC<GoogleCalendarConnectionProps> =
           onPress: async () => {
             try {
               const response = await disconnectCalendar().unwrap();
-              
+
               if (response.disconnectGoogleCalendar.success) {
                 showAlert({
                   type: 'success',
@@ -146,63 +181,172 @@ export const GoogleCalendarConnection: React.FC<GoogleCalendarConnectionProps> =
 
   if (isCheckingConnection) {
     return (
-      <View className="bg-white rounded-xl p-4 border border-gray-100">
+      <View style={styles.container}>
         <ActivityIndicator size="small" color="#437EF4" />
-        <Text className="text-gray-500 text-xs text-center mt-2">Checking connection...</Text>
+        <Text style={styles.loadingText}>Checking connection...</Text>
       </View>
     );
   }
 
   return (
-    <View className="bg-white rounded-xl p-4 border border-gray-100">
-      <View className="flex-row items-center mb-3">
-        <View className="bg-blue-50 rounded-full p-2 mr-3">
-          <Svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <Path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V9h14v10zM7 11h5v5H7z" fill="#437EF4"/>
-          </Svg>
+    <View style={styles.container}>
+      {/* Calendar Status Row */}
+      <View style={styles.statusRow}>
+        <View style={styles.iconContainer}>
+          <GoogleCalendarIcon size={36} />
         </View>
-        <View className="flex-1">
-          <Text className="text-gray-900 text-base font-semibold">Google Calendar</Text>
-          <Text className="text-gray-500 text-xs mt-0.5">
-            {isConnected ? 'Connected' : 'Not connected'}
+        <View style={styles.statusContent}>
+          <Text style={styles.title} numberOfLines={1}>Google Calendar</Text>
+          <Text style={styles.subtitle} numberOfLines={1}>
+            {isConnected ? 'Syncing interviews' : 'Sync your interviews'}
           </Text>
         </View>
-        <View className={`px-2 py-1 rounded-full ${isConnected ? 'bg-green-100' : 'bg-gray-100'}`}>
-          <Text className={`text-xs font-medium ${isConnected ? 'text-green-700' : 'text-gray-500'}`}>
-            {isConnected ? '● Connected' : '○ Not connected'}
+        <View style={[styles.badge, isConnected ? styles.badgeConnected : styles.badgeDisconnected]}>
+          <Text
+            style={[styles.badgeText, isConnected ? styles.badgeTextConnected : styles.badgeTextDisconnected]}
+            numberOfLines={1}
+          >
+            {isConnected ? '● Connected' : '○ Disconnected'}
           </Text>
         </View>
       </View>
 
+      {/* Info Box - Only show when not connected */}
       {!isConnected && (
-        <View className="bg-blue-50 rounded-lg p-3 mb-3">
-          <Text className="text-blue-800 text-xs">
+        <View style={styles.infoBox}>
+          <Text style={styles.infoText}>
             📅 Connect your Google Calendar to automatically sync interview schedules.
           </Text>
         </View>
       )}
 
+      {/* Action Button */}
       <TouchableOpacity
-        className={`rounded-lg py-3 items-center ${
-          isConnected ? 'bg-red-500' : 'bg-blue-500'
-        } ${(isGettingUrl || isConnecting || isDisconnecting) ? 'opacity-50' : ''}`}
+        style={[
+          styles.button,
+          isConnected ? styles.buttonDisconnect : styles.buttonConnect,
+          isLoading && styles.buttonDisabled
+        ]}
         onPress={isConnected ? handleDisconnect : handleConnect}
-        disabled={isGettingUrl || isConnecting || isDisconnecting}
+        disabled={isLoading}
+        activeOpacity={0.8}
       >
-        {(isGettingUrl || isConnecting || isDisconnecting) ? (
+        {isLoading ? (
           <ActivityIndicator size="small" color="#FFFFFF" />
         ) : (
-          <Text className="text-white text-sm font-semibold">
+          <Text style={styles.buttonText}>
             {isConnected ? 'Disconnect Calendar' : 'Connect Google Calendar'}
           </Text>
         )}
       </TouchableOpacity>
 
+      {/* Connected Info */}
       {isConnected && (
-        <Text className="text-gray-400 text-xs text-center mt-2">
+        <Text style={styles.connectedInfo}>
           Your interviews will be automatically synced to your calendar
         </Text>
       )}
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 0,
+  },
+  loadingText: {
+    fontSize: 12,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  iconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#EFF6FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  statusContent: {
+    flex: 1,
+    marginRight: 8,
+  },
+  title: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  subtitle: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  badge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    flexShrink: 0,
+  },
+  badgeConnected: {
+    backgroundColor: '#D1FAE5',
+  },
+  badgeDisconnected: {
+    backgroundColor: '#F3F4F6',
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  badgeTextConnected: {
+    color: '#059669',
+  },
+  badgeTextDisconnected: {
+    color: '#6B7280',
+  },
+  infoBox: {
+    backgroundColor: '#EFF6FF',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  infoText: {
+    fontSize: 13,
+    color: '#1D4ED8',
+    lineHeight: 18,
+  },
+  button: {
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonConnect: {
+    backgroundColor: '#437EF4',
+  },
+  buttonDisconnect: {
+    backgroundColor: '#EF4444',
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  buttonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  connectedInfo: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    marginTop: 10,
+  },
+});

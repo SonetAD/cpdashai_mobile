@@ -10,7 +10,10 @@ export default function RegisterRoute() {
   const dispatch = useDispatch();
   const { role } = useLocalSearchParams<{ role?: string }>();
 
-  const selectedRole: UserRole = (role as UserRole) || 'candidate';
+  // Ensure role is properly typed - useLocalSearchParams can return string | string[]
+  const roleParam = Array.isArray(role) ? role[0] : role;
+  const selectedRole: UserRole = (roleParam === 'recruiter' ? 'recruiter' : roleParam === 'candidate' ? 'candidate' : null) || 'candidate';
+  console.log('RegisterRoute: role param =', role, ', selectedRole =', selectedRole);
 
   const handleBack = () => {
     router.back();

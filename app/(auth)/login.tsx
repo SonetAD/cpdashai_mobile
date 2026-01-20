@@ -35,7 +35,8 @@ export default function LoginRoute() {
       onSignUp={handleSignUp}
       onForgotPassword={handleForgotPassword}
       onLoginSuccess={handleLoginSuccess}
-      showOAuth={role !== 'recruiter'}
+      showOAuth={true}
+      role={(role as 'candidate' | 'recruiter') || undefined}
     />
   );
 }

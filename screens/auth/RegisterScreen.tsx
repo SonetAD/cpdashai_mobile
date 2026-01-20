@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, TextInput, LayoutAnimation, Platform, UIManager } from 'react-native';
 
 // Enable LayoutAnimation on Android
@@ -17,6 +17,7 @@ import { Select } from '../../components/ui/Select';
 import SuccessPopup from '../../components/SuccessPopup';
 import KeyboardDismissWrapper from '../../components/KeyboardDismissWrapper';
 import GDPRConsentBanner, { ConsentPreferences, POLICY_VERSION } from '../../components/GDPRConsentBanner';
+import RecruiterProfileSetupModal from '../../components/RecruiterProfileSetupModal';
 import {
   useRegisterCandidateMutation,
   useRegisterRecruiterMutation,
@@ -25,12 +26,15 @@ import {
   useUpdateAllConsentsMutation,
 } from '../../services/api';
 import { useAppDispatch } from '../../store/hooks';
-import { setCredentials } from '../../store/slices/authSlice';
-import { storeTokens } from '../../utils/authUtils';
+import { setCredentials, logout as logoutAction } from '../../store/slices/authSlice';
+import { storeTokens, clearTokens } from '../../utils/authUtils';
 import { useAlert } from '../../contexts/AlertContext';
 
 // Import NATIVE Google Sign-In service
 import nativeGoogleSignIn from '../../services/nativeGoogleSignIn';
+
+// Import LinkedIn OAuth service (backend handles token exchange)
+import { useLinkedInAuth, LinkedInAuthResult } from '../../services/linkedinAuthService';
 
 // Import icons from assets
 import BackArrowIcon from '../../assets/images/arrowLeft.svg';
@@ -161,14 +165,43 @@ export default function RegisterScreen({ role, onBack, onLogin, onRegisterSucces
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [showSuccessPopup, setShowSuccessPopup] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isLinkedInLoading, setIsLinkedInLoading] = useState(false);
   const [showConsentBanner, setShowConsentBanner] = useState(false);
   const [pendingFormData, setPendingFormData] = useState<FormData | null>(null);
   const [pendingGoogleAuth, setPendingGoogleAuth] = useState(false);
+  const [pendingLinkedInAuth, setPendingLinkedInAuth] = useState(false);
+  const [linkedInConsentAction, setLinkedInConsentAction] = useState<'acceptAll' | 'rejectAll' | 'custom' | null>(null);
+  const [linkedInConsentPreferences, setLinkedInConsentPreferences] = useState<ConsentPreferences | null>(null);
+  const [showRecruiterProfileSetup, setShowRecruiterProfileSetup] = useState(false);
+  const [recruiterSetupUserInfo, setRecruiterSetupUserInfo] = useState<{
+    email?: string;
+    name?: string;
+    photoUrl?: string;
+    authData?: {
+      user: {
+        id: string;
+        email: string;
+        firstName: string;
+        lastName: string;
+        phoneNumber: string;
+        role: 'candidate' | 'recruiter';
+        isVerified: boolean;
+      };
+      token: string;
+      refreshToken: string;
+    };
+  } | null>(null);
+  const [pendingGoogleIdToken, setPendingGoogleIdToken] = useState<string | null>(null);
+  const [pendingGoogleUser, setPendingGoogleUser] = useState<any>(null);
   const [registerCandidate, { isLoading: isCandidateLoading }] = useRegisterCandidateMutation();
   const [registerRecruiter, { isLoading: isRecruiterLoading }] = useRegisterRecruiterMutation();
   const [acceptAllConsents] = useAcceptAllConsentsMutation();
   const [rejectOptionalConsents] = useRejectOptionalConsentsMutation();
   const [updateAllConsents] = useUpdateAllConsentsMutation();
+
+  // LinkedIn OAuth hook - backend handles token exchange and returns tokens via deep link
+  const { signIn: linkedInSignIn, result: linkedInResult, isReady: linkedInReady, clearResult: clearLinkedInResult } = useLinkedInAuth();
+
   const dispatch = useAppDispatch();
   const { showAlert } = useAlert();
 
@@ -217,9 +250,11 @@ export default function RegisterScreen({ role, onBack, onLogin, onRegisterSucces
   // Process consent and then register
   const processConsentAndRegister = async (consentAction: 'acceptAll' | 'rejectAll' | 'custom', customPreferences?: ConsentPreferences) => {
     try {
-      // First, proceed with registration
+      // First, proceed with registration based on auth method
       if (pendingGoogleAuth) {
         await handleGoogleAuthWithConsent(consentAction, customPreferences);
+      } else if (pendingLinkedInAuth) {
+        await handleLinkedInAuthWithConsent(consentAction, customPreferences);
       } else if (pendingFormData) {
         await performRegistration(pendingFormData, consentAction, customPreferences);
       }
@@ -229,6 +264,7 @@ export default function RegisterScreen({ role, onBack, onLogin, onRegisterSucces
       setShowConsentBanner(false);
       setPendingFormData(null);
       setPendingGoogleAuth(false);
+      // Note: Don't clear pendingLinkedInAuth here - it's cleared after OAuth callback
     }
   };
 
@@ -245,6 +281,9 @@ export default function RegisterScreen({ role, onBack, onLogin, onRegisterSucces
     setShowConsentBanner(false);
     setPendingFormData(null);
     setPendingGoogleAuth(false);
+    setPendingLinkedInAuth(false);
+    setLinkedInConsentAction(null);
+    setLinkedInConsentPreferences(null);
     showAlert({
       type: 'info',
       title: 'Consent Required',
@@ -261,6 +300,9 @@ export default function RegisterScreen({ role, onBack, onLogin, onRegisterSucces
       setShowConsentBanner(false);
       setPendingFormData(null);
       setPendingGoogleAuth(false);
+      setPendingLinkedInAuth(false);
+      setLinkedInConsentAction(null);
+      setLinkedInConsentPreferences(null);
       showAlert({
         type: 'info',
         title: 'Consent Required',
@@ -437,35 +479,128 @@ export default function RegisterScreen({ role, onBack, onLogin, onRegisterSucces
   };
 
   /**
-   * Show consent banner before Google Sign-In
+   * Step 1: Do native Google Sign-In first, then show consent banner
    */
-  const handleGoogleSignIn = () => {
-    setPendingGoogleAuth(true);
-    setShowConsentBanner(true);
+  const handleGoogleSignIn = async () => {
+    try {
+      setIsGoogleLoading(true);
+      console.log('Starting NATIVE Google Sign-In (popup, no browser)...', { role });
+
+      // First, do the native Google sign-in to get the ID token
+      const signInResult = await nativeGoogleSignIn.signIn();
+
+      if (signInResult.cancelled) {
+        console.log('User cancelled Google Sign-In');
+        return;
+      }
+
+      if (!signInResult.success || !signInResult.idToken) {
+        showAlert({
+          type: 'error',
+          title: 'Google Sign-In Failed',
+          message: signInResult.message || 'Failed to sign in with Google. Please try again.',
+          buttons: [{ text: 'OK', style: 'default' }],
+        });
+        return;
+      }
+
+      console.log('Google Sign-In successful, showing consent banner...');
+
+      // Store the Google sign-in result for later use after consent
+      setPendingGoogleIdToken(signInResult.idToken);
+      setPendingGoogleUser(signInResult.user);
+      setPendingGoogleAuth(true);
+
+      // Now show the consent banner
+      setShowConsentBanner(true);
+    } catch (error: any) {
+      console.error('Google Sign-In error:', error);
+      showAlert({
+        type: 'error',
+        title: 'Sign-In Error',
+        message: 'An error occurred during Google sign-in. Please try again.',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
+    } finally {
+      setIsGoogleLoading(false);
+    }
   };
 
   /**
-   * NATIVE Google Sign-In Handler with consent
-   * This shows the native account selector popup - NO BROWSER!
+   * Step 2: After consent, authenticate with backend using stored Google ID token
    */
   const handleGoogleAuthWithConsent = async (consentAction: 'acceptAll' | 'rejectAll' | 'custom', customPreferences?: ConsentPreferences) => {
     try {
-      setIsGoogleLoading(true);
-      console.log('Starting NATIVE Google Sign-In for registration (popup, no browser)...');
+      if (!pendingGoogleIdToken) {
+        console.error('No pending Google ID token');
+        return;
+      }
 
-      // Use the native Google Sign-In service
-      const result = await nativeGoogleSignIn.signInAndAuthenticate();
+      setIsGoogleLoading(true);
+      console.log('Authenticating with backend after consent...', { role, roleType: typeof role });
+
+      // Now authenticate with the backend using the stored ID token
+      // Pass the role to ensure correct account type is created
+      const roleToSend = role === 'recruiter' ? 'recruiter' : role === 'candidate' ? 'candidate' : undefined;
+      console.log('Sending role to backend:', roleToSend);
+      const result = await nativeGoogleSignIn.authenticateWithBackend(pendingGoogleIdToken, roleToSend);
+
+      // Clear pending Google data
+      setPendingGoogleIdToken(null);
+      setPendingGoogleUser(null);
 
       if (result.success) {
-        console.log('Native Google Sign-In successful for registration!');
+        console.log('Backend authentication successful!');
+        console.log('Backend result:', JSON.stringify(result, null, 2));
+        console.log('result.role:', result.role);
+        console.log('result.profileSetupRequired:', result.profileSetupRequired);
 
         // Normalize role to lowercase
         const normalizedRole = (result.role?.toLowerCase() || (role || 'candidate')) as 'candidate' | 'recruiter';
+        console.log('normalizedRole:', normalizedRole);
 
+        // Check if recruiter needs to complete profile setup BEFORE setting credentials
+        // This prevents automatic navigation to dashboard
+        console.log('Checking profile setup:', { normalizedRole, profileSetupRequired: result.profileSetupRequired });
+        if (normalizedRole === 'recruiter' && result.profileSetupRequired) {
+          console.log('Recruiter profile setup required, showing modal BEFORE setting credentials');
+
+          // Save consent first
+          await saveConsent(consentAction, customPreferences);
+
+          // Store tokens securely but DON'T set Redux credentials yet
+          // This prevents navigation to dashboard
+          await storeTokens(result.accessToken, result.refreshToken);
+
+          // Store the auth data for later use after profile setup
+          setRecruiterSetupUserInfo({
+            email: result.user?.email,
+            name: result.user?.firstName || pendingGoogleUser?.name,
+            photoUrl: pendingGoogleUser?.photo,
+            // Store full auth data for use after profile completion
+            authData: {
+              user: {
+                id: result.user.id,
+                email: result.user.email,
+                firstName: result.user.firstName,
+                lastName: result.user.lastName,
+                phoneNumber: result.user.phoneNumber,
+                role: normalizedRole,
+                isVerified: result.user.isVerified,
+              },
+              token: result.accessToken,
+              refreshToken: result.refreshToken,
+            },
+          });
+          setShowRecruiterProfileSetup(true);
+          return;
+        }
+
+        // For non-recruiters or recruiters with complete profiles, proceed normally
         // Store tokens securely
         await storeTokens(result.accessToken, result.refreshToken);
 
-        // Store credentials in Redux
+        // Store credentials in Redux (this triggers navigation)
         dispatch(setCredentials({
           user: {
             id: result.user.id,
@@ -480,33 +615,215 @@ export default function RegisterScreen({ role, onBack, onLogin, onRegisterSucces
           refreshToken: result.refreshToken,
         }));
 
-        // Save consent preferences after successful Google sign-in
+        // Save consent preferences after successful authentication
         await saveConsent(consentAction, customPreferences);
 
-        console.log('Google registration complete');
+        console.log('Google registration complete - no profile setup needed');
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setShowSuccessPopup(true);
-      } else if (result.cancelled) {
-        console.log('User cancelled Google Sign-In');
-        // Don't show error for cancellation
       } else {
         showAlert({
           type: 'error',
-          title: 'Google Sign-In Failed',
-          message: result.message || 'Failed to sign in with Google. Please try again.',
+          title: 'Authentication Failed',
+          message: result.message || 'Failed to authenticate with server. Please try again.',
           buttons: [{ text: 'OK', style: 'default' }],
         });
       }
     } catch (error: any) {
-      console.error('Google Sign-In error:', error);
+      console.error('Backend authentication error:', error);
       showAlert({
         type: 'error',
-        title: 'Sign-In Error',
-        message: 'An error occurred during Google sign-in. Please try again.',
+        title: 'Authentication Error',
+        message: 'An error occurred during authentication. Please try again.',
         buttons: [{ text: 'OK', style: 'default' }],
       });
     } finally {
       setIsGoogleLoading(false);
+    }
+  };
+
+  /**
+   * Handle LinkedIn OAuth result from deep link callback
+   * Backend handles token exchange and returns tokens via deep link
+   */
+  useEffect(() => {
+    if (linkedInResult && pendingLinkedInAuth && linkedInConsentAction) {
+      handleLinkedInResult(linkedInResult, linkedInConsentAction, linkedInConsentPreferences || undefined);
+    }
+  }, [linkedInResult]);
+
+  /**
+   * Step 1: Show consent banner first, then trigger LinkedIn OAuth
+   */
+  const handleLinkedInSignUp = async () => {
+    if (!linkedInReady) {
+      showAlert({
+        type: 'error',
+        title: 'LinkedIn Not Ready',
+        message: 'LinkedIn sign-in is not ready yet. Please try again in a moment.',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
+      return;
+    }
+
+    // Show consent banner first
+    setPendingLinkedInAuth(true);
+    setShowConsentBanner(true);
+  };
+
+  /**
+   * Step 2: After consent, trigger LinkedIn OAuth
+   */
+  const handleLinkedInAuthWithConsent = async (consentAction: 'acceptAll' | 'rejectAll' | 'custom', customPreferences?: ConsentPreferences) => {
+    try {
+      setIsLinkedInLoading(true);
+
+      // Store consent action and preferences for use after OAuth callback
+      setLinkedInConsentAction(consentAction);
+      setLinkedInConsentPreferences(customPreferences || null);
+
+      console.log('Starting LinkedIn OAuth after consent...', { role });
+
+      // Trigger LinkedIn OAuth - pass role to backend via state parameter
+      const roleToSend = role === 'recruiter' ? 'recruiter' : role === 'candidate' ? 'candidate' : undefined;
+      const result = await linkedInSignIn(roleToSend);
+
+      if (result.cancelled) {
+        console.log('User cancelled LinkedIn Sign-In');
+        setIsLinkedInLoading(false);
+        setPendingLinkedInAuth(false);
+        setLinkedInConsentAction(null);
+        setLinkedInConsentPreferences(null);
+        return;
+      }
+
+      // If result has tokens directly (from deep link), handle immediately
+      if (result.success && result.accessToken) {
+        await handleLinkedInResult(result, consentAction, customPreferences);
+        return;
+      }
+
+      // If there's an error (not waiting for callback), show it
+      if (result.error && result.error !== 'Waiting for callback...') {
+        showAlert({
+          type: 'error',
+          title: 'LinkedIn Sign-In Failed',
+          message: result.error || 'Failed to sign in with LinkedIn. Please try again.',
+          buttons: [{ text: 'OK', style: 'default' }],
+        });
+        setIsLinkedInLoading(false);
+        setPendingLinkedInAuth(false);
+        setLinkedInConsentAction(null);
+        setLinkedInConsentPreferences(null);
+      }
+      // Otherwise, waiting for deep link callback - useEffect will handle it
+    } catch (error: any) {
+      console.error('LinkedIn Sign-In error:', error);
+      showAlert({
+        type: 'error',
+        title: 'Sign-In Error',
+        message: 'An error occurred during LinkedIn sign-in. Please try again.',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
+      setIsLinkedInLoading(false);
+      setPendingLinkedInAuth(false);
+      setLinkedInConsentAction(null);
+      setLinkedInConsentPreferences(null);
+    }
+  };
+
+  /**
+   * Step 3: Process LinkedIn OAuth result - tokens come directly from backend via deep link
+   */
+  const handleLinkedInResult = async (
+    result: LinkedInAuthResult,
+    consentAction: 'acceptAll' | 'rejectAll' | 'custom',
+    customPreferences?: ConsentPreferences
+  ) => {
+    try {
+      if (!result.success || !result.accessToken) {
+        showAlert({
+          type: 'error',
+          title: 'Authentication Failed',
+          message: result.error || 'Failed to authenticate with LinkedIn. Please try again.',
+          buttons: [{ text: 'OK', style: 'default' }],
+        });
+        return;
+      }
+
+      console.log('LinkedIn authentication successful!');
+
+      // Normalize role to lowercase
+      const normalizedRole = (result.role?.toLowerCase() || (role || 'candidate')) as 'candidate' | 'recruiter';
+
+      // Check if recruiter needs to complete profile setup
+      if (normalizedRole === 'recruiter' && result.profileSetupRequired) {
+        console.log('Recruiter profile setup required, showing modal');
+
+        // Save consent first
+        await saveConsent(consentAction, customPreferences);
+
+        // Store tokens securely but DON'T set Redux credentials yet
+        await storeTokens(result.accessToken, result.refreshToken!);
+
+        // Store the auth data for later use after profile setup
+        setRecruiterSetupUserInfo({
+          email: result.user?.email,
+          name: result.user?.firstName,
+          authData: {
+            user: {
+              id: result.user?.id || '',
+              email: result.user?.email || '',
+              firstName: result.user?.firstName || '',
+              lastName: result.user?.lastName || '',
+              phoneNumber: result.user?.phoneNumber || '',
+              role: normalizedRole,
+              isVerified: result.user?.isVerified || true,
+            },
+            token: result.accessToken,
+            refreshToken: result.refreshToken!,
+          },
+        });
+        setShowRecruiterProfileSetup(true);
+      } else {
+        // For non-recruiters or recruiters with complete profiles
+        await storeTokens(result.accessToken, result.refreshToken!);
+
+        dispatch(setCredentials({
+          user: {
+            id: result.user?.id || '',
+            email: result.user?.email || '',
+            firstName: result.user?.firstName || '',
+            lastName: result.user?.lastName || '',
+            phoneNumber: result.user?.phoneNumber || '',
+            role: normalizedRole,
+            isVerified: result.user?.isVerified || true,
+          },
+          token: result.accessToken,
+          refreshToken: result.refreshToken!,
+        }));
+
+        // Save consent preferences after successful authentication
+        await saveConsent(consentAction, customPreferences);
+
+        console.log('LinkedIn registration complete');
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setShowSuccessPopup(true);
+      }
+    } catch (error: any) {
+      console.error('LinkedIn authentication error:', error);
+      showAlert({
+        type: 'error',
+        title: 'Authentication Error',
+        message: 'An error occurred during authentication. Please try again.',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
+    } finally {
+      setIsLinkedInLoading(false);
+      setPendingLinkedInAuth(false);
+      setLinkedInConsentAction(null);
+      setLinkedInConsentPreferences(null);
+      clearLinkedInResult();
     }
   };
 
@@ -914,59 +1231,52 @@ export default function RegisterScreen({ role, onBack, onLogin, onRegisterSucces
             </TouchableOpacity>
           </View>
 
-          {/* OAuth Social Sign Up - Only for candidates */}
-          {role === 'candidate' && (
-            <>
-              {/* Divider */}
-              <View className="flex-row items-center mx-4 my-4">
-                <View className="flex-1 h-px bg-gray-300" />
-                <Text className="text-gray-400 mx-4 text-sm">OR</Text>
-                <View className="flex-1 h-px bg-gray-300" />
-              </View>
+          {/* OAuth Social Sign Up */}
+          {/* Divider */}
+          <View className="flex-row items-center mx-4 my-4">
+            <View className="flex-1 h-px bg-gray-300" />
+            <Text className="text-gray-400 mx-4 text-sm">OR</Text>
+            <View className="flex-1 h-px bg-gray-300" />
+          </View>
 
-              {/* Social Sign Up Buttons - Side by Side */}
-              <View className="mx-4 flex-row mb-4" style={{ gap: 12 }}>
-                {/* Google Button */}
-                <TouchableOpacity
-                  style={[styles.socialButton, styles.socialButtonShadow]}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                    handleGoogleSignIn();
-                  }}
-                  disabled={isGoogleLoading || isLoading || showConsentBanner}
-                  activeOpacity={0.8}
-                  accessibilityLabel="Sign up with Google"
-                  accessibilityRole="button"
-                >
-                  <GoogleIcon width={20} height={20} />
-                  <Text className="text-gray-800 font-medium ml-2">
-                    {isGoogleLoading ? 'Loading...' : 'Google'}
-                  </Text>
-                </TouchableOpacity>
+          {/* Social Sign Up Buttons - Side by Side */}
+          <View className="mx-4 flex-row mb-4" style={{ gap: 12 }}>
+            {/* Google Button */}
+            <TouchableOpacity
+              style={[styles.socialButton, styles.socialButtonShadow]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                handleGoogleSignIn();
+              }}
+              disabled={isGoogleLoading || isLoading || showConsentBanner}
+              activeOpacity={0.8}
+              accessibilityLabel="Sign up with Google"
+              accessibilityRole="button"
+            >
+              <GoogleIcon width={20} height={20} />
+              <Text className="text-gray-800 font-medium ml-2">
+                {isGoogleLoading ? 'Loading...' : 'Google'}
+              </Text>
+            </TouchableOpacity>
 
-                {/* LinkedIn Button */}
-                <TouchableOpacity
-                  style={[styles.socialButton, styles.socialButtonShadow]}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    showAlert({
-                      type: 'info',
-                      title: 'Available in Milestone 3',
-                      message: 'LinkedIn sign up will be available in Milestone 3.',
-                      buttons: [{ text: 'OK', style: 'default' }],
-                    });
-                  }}
-                  disabled={isLoading || showConsentBanner}
-                  activeOpacity={0.8}
-                  accessibilityLabel="Sign up with LinkedIn"
-                  accessibilityRole="button"
-                >
-                  <LinkedInIcon width={20} height={20} />
-                  <Text className="text-gray-800 font-medium ml-2">LinkedIn</Text>
-                </TouchableOpacity>
-              </View>
-            </>
-          )}
+            {/* LinkedIn Button */}
+            <TouchableOpacity
+              style={[styles.socialButton, styles.socialButtonShadow]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                handleLinkedInSignUp();
+              }}
+              disabled={isLinkedInLoading || isLoading || showConsentBanner || !linkedInReady}
+              activeOpacity={0.8}
+              accessibilityLabel="Sign up with LinkedIn"
+              accessibilityRole="button"
+            >
+              <LinkedInIcon width={20} height={20} />
+              <Text className="text-gray-800 font-medium ml-2">
+                {isLinkedInLoading ? 'Loading...' : 'LinkedIn'}
+              </Text>
+            </TouchableOpacity>
+          </View>
 
           {/* Already have account */}
           <View className="flex-row justify-center mb-8">
@@ -1003,6 +1313,46 @@ export default function RegisterScreen({ role, onBack, onLogin, onRegisterSucces
         onAcceptAll={handleConsentAcceptAll}
         onRejectAll={handleConsentRejectAll}
         onSavePreferences={handleConsentCustom}
+      />
+
+      {/* Recruiter Profile Setup Modal (for Google OAuth users) */}
+      <RecruiterProfileSetupModal
+        visible={showRecruiterProfileSetup}
+        userEmail={recruiterSetupUserInfo?.email}
+        userName={recruiterSetupUserInfo?.name}
+        userPhotoUrl={recruiterSetupUserInfo?.photoUrl}
+        onComplete={() => {
+          // Now that profile is complete, set Redux credentials to trigger navigation
+          if (recruiterSetupUserInfo?.authData) {
+            console.log('Profile setup complete, setting Redux credentials to trigger navigation');
+            dispatch(setCredentials(recruiterSetupUserInfo.authData));
+          }
+          setShowRecruiterProfileSetup(false);
+          setRecruiterSetupUserInfo(null);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          // Note: Don't show success popup as navigation happens immediately
+        }}
+        onCancel={async () => {
+          // If user cancels, clear all auth state since profile setup is required
+          setShowRecruiterProfileSetup(false);
+          setRecruiterSetupUserInfo(null);
+
+          // Clear tokens from SecureStore
+          await clearTokens();
+
+          // Sign out from Google to clear cached account
+          await nativeGoogleSignIn.signOut();
+
+          // Properly logout to clear Redux state (sets isAuthenticated to false)
+          dispatch(logoutAction());
+
+          showAlert({
+            type: 'info',
+            title: 'Profile Setup Required',
+            message: 'You need to complete your profile setup to use the app as a recruiter.',
+            buttons: [{ text: 'OK', style: 'default' }],
+          });
+        }}
       />
     </SafeAreaView>
   );

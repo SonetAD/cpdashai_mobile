@@ -308,7 +308,11 @@ export default function ResumeDetailScreen({ resumeId, onBack, onEdit }: ResumeD
       </View>
 
       {/* Resume Content */}
-      <ScrollView className="flex-1 px-4" showsVerticalScrollIndicator={false}>
+      <ScrollView
+        className="flex-1 px-4"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 120 }}
+      >
         {/* Header Section */}
         <View className="bg-white rounded-2xl p-6 mt-4 mb-4 shadow-sm border border-gray-100">
           <Text className="text-gray-900 text-2xl font-bold mb-2">{resume.fullName}</Text>
@@ -547,7 +551,7 @@ export default function ResumeDetailScreen({ resumeId, onBack, onEdit }: ResumeD
         )}
 
         {/* Metadata */}
-        <View className="bg-gray-100 rounded-xl p-4 mb-6">
+        <View className="bg-gray-100 rounded-xl p-4 mb-4">
           <View className="flex-row justify-between mb-2">
             <Text className="text-gray-500 text-xs">Created</Text>
             <Text className="text-gray-700 text-xs font-medium">{formatFullDate(resume.createdAt)}</Text>
